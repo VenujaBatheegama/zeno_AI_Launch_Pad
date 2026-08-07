@@ -1,12 +1,16 @@
 import Link from "next/link";
 
-import { CareerEvidenceWorkspace } from "@/modules/career-evidence/presentation/career-evidence-workspace";
-import { getCareerEvidenceApplication } from "@/server/composition-root";
+import { JobDiscoveryWorkspace } from "@/modules/job-discovery/presentation/job-discovery-workspace";
+import { getJobDiscoveryApplication } from "@/server/composition-root";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const evidenceSet = await getCareerEvidenceApplication().getCurrent();
+export default async function JobsPage() {
+  const application = getJobDiscoveryApplication();
+  const [profile, jobs] = await Promise.all([
+    application.getProfile(),
+    application.listJobs(),
+  ]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6">
@@ -17,21 +21,21 @@ export default async function Home() {
               Zeno
             </p>
             <Link
-              href="/jobs"
+              href="/"
               className="text-sm font-semibold text-slate-600 hover:text-slate-950"
             >
-              Job discovery
+              Career evidence
             </Link>
           </div>
           <h1 className="mt-1 max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-            Build your verified career evidence.
+            Discover real job opportunities.
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Zeno extracts facts from your CV, then asks you to review every
-            detail before it can become trusted evidence.
+            Set your preferences, search live listings, and keep the jobs you
+            want to revisit.
           </p>
         </header>
-        <CareerEvidenceWorkspace initialEvidenceSet={evidenceSet} />
+        <JobDiscoveryWorkspace initialProfile={profile} initialJobs={jobs} />
       </div>
     </main>
   );
