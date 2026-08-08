@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { CareerEvidenceError } from "@/modules/career-evidence/domain/errors";
+import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { JobDiscoveryError } from "@/modules/job-discovery/domain/errors";
 
 export function errorResponse(error: unknown): NextResponse {
@@ -9,6 +10,27 @@ export function errorResponse(error: unknown): NextResponse {
     return NextResponse.json(
       { error: "The submitted data is invalid." },
       { status: 400 },
+    );
+  }
+
+  if (error instanceof CareerIntelligenceError) {
+    const statusByCode = {
+      EVIDENCE_REQUIRED: 400,
+      PREFERENCES_REQUIRED: 400,
+      JOB_NOT_FOUND: 404,
+      JOB_NOT_ANALYSABLE: 422,
+      ANALYSIS_REQUIRED: 409,
+      STALE_ANALYSIS: 409,
+      INVALID_AI_OUTPUT: 502,
+      AI_UNAVAILABLE: 502,
+      SEARCH_FAILED: 502,
+      PERSISTENCE_FAILED: 503,
+      NOT_FOUND: 404,
+      INVALID_INPUT: 400,
+    } as const;
+    return NextResponse.json(
+      { error: error.message },
+      { status: statusByCode[error.code] },
     );
   }
 

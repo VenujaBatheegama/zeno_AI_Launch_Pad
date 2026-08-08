@@ -20,12 +20,14 @@ export default async function JobsPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
               Zeno
             </p>
-            <Link
-              href="/"
-              className="text-sm font-semibold text-slate-600 hover:text-slate-950"
-            >
-              Career evidence
-            </Link>
+            <div className="flex gap-4 text-sm font-semibold text-slate-600">
+              <Link href="/" className="hover:text-slate-950">
+                Career evidence
+              </Link>
+              <Link href="/matching" className="hover:text-slate-950">
+                Matching
+              </Link>
+            </div>
           </div>
           <h1 className="mt-1 max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Discover real job opportunities.

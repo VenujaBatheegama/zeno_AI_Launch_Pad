@@ -208,6 +208,24 @@ export class SupabaseJobDiscoveryRepository
     return this.getUserJob(input.userId, input.listingId);
   }
 
+  async clearDiscoveredJobs(input: {
+    userId: string;
+    includeSaved: boolean;
+  }): Promise<number> {
+    let query = this.client
+      .from("user_jobs")
+      .delete({ count: "exact" })
+      .eq("user_id", input.userId);
+    if (!input.includeSaved) {
+      query = query.neq("state", "saved");
+    }
+    const { error, count } = await query;
+    if (error) {
+      throw persistenceError("Searched jobs could not be cleared.", error);
+    }
+    return count ?? 0;
+  }
+
   private async getUserJob(userId: string, listingId: string) {
     const { data, error } = await this.client
       .from("user_jobs")

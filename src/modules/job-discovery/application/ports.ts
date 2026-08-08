@@ -44,6 +44,10 @@ export interface JobDiscoveryRepository {
     state: UserJobState;
     updatedAt: string;
   }): Promise<DiscoveredJob>;
+  clearDiscoveredJobs(input: {
+    userId: string;
+    includeSaved: boolean;
+  }): Promise<number>;
 }
 
 export type IdGenerator = () => string;

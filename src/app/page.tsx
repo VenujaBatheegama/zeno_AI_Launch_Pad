@@ -16,12 +16,14 @@ export default async function Home() {
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
               Zeno
             </p>
-            <Link
-              href="/jobs"
-              className="text-sm font-semibold text-slate-600 hover:text-slate-950"
-            >
-              Job discovery
-            </Link>
+            <div className="flex gap-4 text-sm font-semibold text-slate-600">
+              <Link href="/jobs" className="hover:text-slate-950">
+                Job discovery
+              </Link>
+              <Link href="/matching" className="hover:text-slate-950">
+                Matching
+              </Link>
+            </div>
           </div>
           <h1 className="mt-1 max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Build your verified career evidence.

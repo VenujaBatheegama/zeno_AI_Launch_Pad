@@ -4,7 +4,11 @@ import {
   jobSearchCriteriaSchema,
   type JobSearchCriteria,
 } from "../domain/job";
-import { JSearchJobSource } from "./jsearch-job-source";
+import {
+  buildSearchUrl,
+  JSearchJobSource,
+  resolveLocation,
+} from "./jsearch-job-source";
 
 describe("JSearchJobSource", () => {
   it("builds a doc-aligned JSearch request for title, country, and filters", async () => {
@@ -66,6 +70,7 @@ describe("JSearchJobSource", () => {
       "Software Engineer jobs in Colombo",
     );
     expect(requestedUrl.searchParams.get("country")).toBe("lk");
+    expect(requestedUrl.searchParams.get("language")).toBe("en");
     expect(requestedUrl.searchParams.get("work_from_home")).toBe("true");
     expect(requestedUrl.searchParams.get("employment_types")).toBe("FULLTIME");
     expect(requestedUrl.searchParams.get("num_pages")).toBe("1");
@@ -200,6 +205,39 @@ describe("JSearchJobSource", () => {
     );
 
     await expect(source.search(criteria())).rejects.toMatchObject({ code });
+  });
+
+  it("maps Sri Lanka aliases and ISO codes without defaulting country to us", () => {
+    expect(resolveLocation(["lk"])).toEqual({
+      country: "lk",
+      queryPlace: "Sri Lanka",
+      language: "en",
+    });
+    expect(resolveLocation(["srilanka"])).toEqual({
+      country: "lk",
+      queryPlace: "Sri Lanka",
+      language: "en",
+    });
+    expect(resolveLocation(["Sri Lanka"])).toEqual({
+      country: "lk",
+      queryPlace: "Sri Lanka",
+      language: "en",
+    });
+    expect(resolveLocation(["Colombo"])).toEqual({
+      country: "lk",
+      queryPlace: "Colombo",
+      language: "en",
+    });
+
+    const url = buildSearchUrl("https://jsearch.p.rapidapi.com", {
+      ...criteria(),
+      locations: ["lk"],
+      work_modes: [],
+      employment_types: [],
+    });
+    expect(url.toString()).toBe(
+      "https://jsearch.p.rapidapi.com/search-v2?query=Software+Engineer+jobs+in+Sri+Lanka&num_pages=1&date_posted=all&country=lk&language=en",
+    );
   });
 
   it("maps fetch timeouts to a clear unavailable error", async () => {

@@ -3,17 +3,32 @@ import { z } from "zod";
 import {
   jobSearchCriteriaSchema,
   normalizedExternalJobSchema,
-  titleMatchesExcludedKeyword,
+  isJobTitleIncompatibleWithPreferences,
   type DiscoveryPage,
   type JobSearchCriteria,
   type JobSearchPreferences,
 } from "../domain/job";
+import { jobMatchesLocationPreferences } from "../domain/location-match";
+import { rankJobsByRelevance } from "../domain/relevance";
 import { JobDiscoveryError } from "../domain/errors";
+import {
+  buildSearchUrl,
+  describeJSearchParams,
+  type JSearchRequestPreview,
+} from "../infrastructure/jsearch-job-source";
 import type {
   Clock,
   JobDiscoveryRepository,
   JobSource,
 } from "./ports";
+
+export type JobSearchRequestPreview = {
+  method: "GET";
+  /** Absolute URL including query string — paste into Postman. */
+  url: string;
+  headers: Record<string, string>;
+  params: JSearchRequestPreview;
+};
 
 const discoverJobsCommandSchema = z.object({
   userId: z.uuid(),
@@ -33,6 +48,7 @@ export async function discoverJobs(
     maxRequests: number;
     maxPages: number;
     pageSize: number;
+    batchTitles?: boolean;
   },
 ): Promise<DiscoveryPage> {
   const parsed = discoverJobsCommandSchema.parse(command);
@@ -54,6 +70,7 @@ export async function discoverJobs(
     maxRequests: dependencies.maxRequests,
     pageSize: dependencies.pageSize,
     cursors: decodeCursorState(parsed.cursor),
+    batchTitles: dependencies.batchTitles ?? false,
   });
   const outcomes: Array<PromiseSettledResult<Awaited<ReturnType<JobSource["search"]>>>> =
     [];
@@ -94,10 +111,11 @@ export async function discoverJobs(
         .flatMap(({ result }) => result.jobs)
         .filter(
           (job) =>
-            !titleMatchesExcludedKeyword(
+            !isJobTitleIncompatibleWithPreferences(
               job.title,
-              profile.preferences.excluded_keywords,
-            ),
+              profile.preferences,
+            ) &&
+            jobMatchesLocationPreferences(job, profile.preferences.locations),
         )
         .map((job) => {
           const parsedJob = normalizedExternalJobSchema.parse(job);
@@ -105,15 +123,35 @@ export async function discoverJobs(
         }),
     ).values(),
   ];
+  const rankedJobs = rankJobsByRelevance(uniqueJobs, {
+    role_titles: profile.preferences.roles.slice(0, 5),
+    locations: profile.preferences.locations.slice(0, 3),
+    work_modes: profile.preferences.work_modes,
+    employment_types: profile.preferences.employment_types,
+    experience_levels: profile.preferences.experience_levels,
+  });
   const jobs =
-    uniqueJobs.length === 0
+    rankedJobs.length === 0
       ? []
       : await dependencies.repository.upsertDiscoveredJobs({
           userId: parsed.userId,
           source: dependencies.source.identity,
-          jobs: uniqueJobs,
+          jobs: rankedJobs,
           seenAt: dependencies.now().toISOString(),
         });
+
+  const providerStatuses = Object.assign(
+    {},
+    ...successful.map(({ result }) => result.providers ?? {}),
+  );
+  const rawCount = successful.reduce(
+    (sum, { result }) => sum + (result.rawCount ?? result.jobs.length),
+    0,
+  );
+  const dedupedCount = successful.reduce(
+    (sum, { result }) => sum + (result.dedupedCount ?? result.jobs.length),
+    0,
+  );
 
   return {
     jobs,
@@ -131,6 +169,10 @@ export async function discoverJobs(
           )
         : null,
     requestsMade: outcomes.length,
+    providers:
+      Object.keys(providerStatuses).length > 0 ? providerStatuses : undefined,
+    rawCount: rawCount || undefined,
+    dedupedCount: dedupedCount || undefined,
   };
 }
 
@@ -140,6 +182,7 @@ export function buildSearchCriteria(
     maxRequests: number;
     pageSize: number;
     cursors?: Array<string | null>;
+    batchTitles?: boolean;
   },
 ): JobSearchCriteria[] {
   const parsed = z
@@ -153,8 +196,9 @@ export function buildSearchCriteria(
         excluded_keywords: z.array(z.string()),
       }),
       maxRequests: z.number().int().min(1).max(5),
-      pageSize: z.number().int().min(1).max(20),
+      pageSize: z.number().int().min(1).max(25),
       cursors: cursorStateSchema.optional(),
+      batchTitles: z.boolean().optional(),
     })
     .parse({
       preferences,
@@ -162,8 +206,23 @@ export function buildSearchCriteria(
     });
   const roles = [...new Set(parsed.preferences.roles)].slice(
     0,
-    parsed.maxRequests,
+    parsed.batchTitles && parsed.maxRequests === 1 ? 5 : parsed.maxRequests,
   );
+
+  if (parsed.batchTitles) {
+    return [
+      jobSearchCriteriaSchema.parse({
+        role_titles: roles,
+        locations: [...new Set(preferences.locations)].slice(0, 3),
+        work_modes: preferences.work_modes,
+        employment_types: preferences.employment_types,
+        experience_levels: preferences.experience_levels,
+        excluded_keywords: preferences.excluded_keywords,
+        page_size: parsed.pageSize,
+        cursor: parsed.cursors?.[0] ?? null,
+      }),
+    ];
+  }
 
   return roles.map((role, index) =>
     jobSearchCriteriaSchema.parse({
@@ -177,6 +236,44 @@ export function buildSearchCriteria(
       cursor: parsed.cursors?.[index] ?? null,
     }),
   );
+}
+
+/**
+ * Preview of the JSearch request(s) Find jobs would make from saved preferences.
+ * Defaults match server config (1 role request / page).
+ */
+export function previewJobSearchQueries(
+  preferences: JobSearchPreferences,
+  options: {
+    maxRequests?: number;
+    pageSize?: number;
+    baseUrl: string;
+  },
+): JobSearchRequestPreview[] {
+  if (preferences.roles.length === 0) return [];
+  const criteria = buildSearchCriteria(preferences, {
+    maxRequests: options.maxRequests ?? 1,
+    pageSize: options.pageSize ?? 10,
+  });
+  return criteria.map((item) => {
+    const params = describeJSearchParams(item);
+    const url = buildSearchUrl(options.baseUrl, item);
+    const hostname = url.hostname;
+    const headers: Record<string, string> = hostname.includes("rapidapi.com")
+      ? {
+          "x-rapidapi-key": "<YOUR_RAPIDAPI_KEY>",
+          "x-rapidapi-host": hostname,
+        }
+      : {
+          "x-api-key": "<YOUR_JSEARCH_API_KEY>",
+        };
+    return {
+      method: "GET" as const,
+      url: url.toString(),
+      headers,
+      params,
+    };
+  });
 }
 
 function decodeCursorState(cursor: string | null): Array<string | null> {

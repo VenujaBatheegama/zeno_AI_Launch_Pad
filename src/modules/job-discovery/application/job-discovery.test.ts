@@ -8,7 +8,11 @@ import {
   type UserJobState,
 } from "../domain/job";
 import { buildSearchCriteria, discoverJobs } from "./discover-jobs";
-import { listDiscoveredJobs, setUserJobState } from "./jobs";
+import {
+  clearDiscoveredJobsForUser,
+  listDiscoveredJobs,
+  setUserJobState,
+} from "./jobs";
 import type {
   JobDiscoveryRepository,
   JobSource,
@@ -235,6 +239,37 @@ describe("job discovery application", () => {
     ).toMatchObject([{ user_state: "dismissed" }]);
   });
 
+  it("clears searched jobs while keeping saved ones", async () => {
+    const repository = await repositoryWithProfile(["Software Engineer"]);
+    const [discovered, saved] = await repository.upsertDiscoveredJobs({
+      userId: USER_ID,
+      source: { key: "fixture", name: "Fixture Jobs" },
+      jobs: [
+        externalJob(),
+        { ...externalJob(), external_id: "keep-saved", title: "Backend Engineer" },
+      ],
+      seenAt: NOW,
+    });
+    await setUserJobState(
+      { userId: USER_ID, listingId: saved.listing_id, state: "saved" },
+      { repository, now: () => new Date(NOW) },
+    );
+
+    const result = await clearDiscoveredJobsForUser(
+      { userId: USER_ID },
+      repository,
+    );
+
+    expect(result.removed).toBe(1);
+    const remaining = await listDiscoveredJobs({ userId: USER_ID }, repository);
+    expect(remaining).toMatchObject([
+      { listing_id: saved.listing_id, user_state: "saved" },
+    ]);
+    expect(remaining.some((job) => job.listing_id === discovered.listing_id)).toBe(
+      false,
+    );
+  });
+
   it("hides previously discovered titles that match current excluded keywords", async () => {
     const repository = await repositoryWithProfile(["Software Engineer"]);
     await repository.upsertDiscoveredJobs({
@@ -423,5 +458,19 @@ class MemoryJobRepository implements JobDiscoveryRepository {
     const updated = { ...entry[1], user_state: input.state };
     this.jobs.set(entry[0], updated);
     return updated;
+  }
+
+  async clearDiscoveredJobs(input: {
+    userId: string;
+    includeSaved: boolean;
+  }) {
+    void input.userId;
+    let removed = 0;
+    for (const [key, job] of this.jobs) {
+      if (!input.includeSaved && job.user_state === "saved") continue;
+      this.jobs.delete(key);
+      removed += 1;
+    }
+    return removed;
   }
 }

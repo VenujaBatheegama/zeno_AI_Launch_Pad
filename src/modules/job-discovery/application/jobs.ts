@@ -1,10 +1,12 @@
 import { z } from "zod";
 
 import {
-  titleMatchesExcludedKeyword,
+  emptyJobSearchPreferences,
+  isJobTitleIncompatibleWithPreferences,
   userJobStateSchema,
   type DiscoveredJob,
 } from "../domain/job";
+import { rankJobsByRelevance } from "../domain/relevance";
 import type { Clock, JobDiscoveryRepository } from "./ports";
 
 const listJobsCommandSchema = z.object({
@@ -20,8 +22,15 @@ const setJobStateCommandSchema = z.object({
   state: userJobStateSchema,
 });
 
+const clearJobsCommandSchema = z.object({
+  userId: z.uuid(),
+  /** When true, also removes saved jobs. Default keeps saved jobs. */
+  includeSaved: z.boolean().default(false),
+});
+
 export type ListJobsCommand = z.input<typeof listJobsCommandSchema>;
 export type SetJobStateCommand = z.input<typeof setJobStateCommandSchema>;
+export type ClearDiscoveredJobsCommand = z.input<typeof clearJobsCommandSchema>;
 
 export async function listDiscoveredJobs(
   command: ListJobsCommand,
@@ -32,10 +41,30 @@ export async function listDiscoveredJobs(
     repository.listJobs(parsed),
     repository.getSearchProfile(parsed.userId),
   ]);
-  const excluded = profile?.preferences.excluded_keywords ?? [];
-  return jobs.filter(
-    (job) => !titleMatchesExcludedKeyword(job.title, excluded),
+  const preferences = profile?.preferences ?? emptyJobSearchPreferences;
+  const filtered = jobs.filter(
+    (job) => !isJobTitleIncompatibleWithPreferences(job.title, preferences),
   );
+  // Display order is relevance to preferences — never provider/source order.
+  return rankJobsByRelevance(filtered, {
+    role_titles: preferences.roles.slice(0, 5),
+    locations: preferences.locations.slice(0, 3),
+    work_modes: preferences.work_modes,
+    employment_types: preferences.employment_types,
+    experience_levels: preferences.experience_levels,
+  });
+}
+
+export async function clearDiscoveredJobsForUser(
+  command: ClearDiscoveredJobsCommand,
+  repository: JobDiscoveryRepository,
+): Promise<{ removed: number }> {
+  const parsed = clearJobsCommandSchema.parse(command);
+  const removed = await repository.clearDiscoveredJobs({
+    userId: parsed.userId,
+    includeSaved: parsed.includeSaved,
+  });
+  return { removed };
 }
 
 export async function setUserJobState(

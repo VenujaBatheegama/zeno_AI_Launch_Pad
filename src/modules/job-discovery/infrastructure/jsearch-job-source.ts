@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { JobSource } from "../application/ports";
 import {
   normalizedExternalJobSchema,
-  titleMatchesExcludedKeyword,
+  isJobTitleIncompatibleWithPreferences,
   type EmploymentType,
   type ExperienceLevel,
   type JobSearchCriteria,
@@ -61,21 +61,112 @@ const providerResponseSchema = z
   })
   .passthrough();
 
-const COUNTRY_HINTS: Array<{ pattern: RegExp; code: string }> = [
-  { pattern: /\bsri\s*lanka\b|\bcolombo\b|\bkandy\b|\bgalle\b/iu, code: "lk" },
-  { pattern: /\bunited\s*kingdom\b|\bengland\b|\blondon\b|\buk\b/iu, code: "gb" },
+/**
+ * JSearch wants:
+ * - `country`: ISO 3166-1 alpha-2 (defaults to `us` if omitted — a common footgun)
+ * - `query`: free text that includes a *readable* place name, not a bare ISO code
+ *
+ * So "lk" must become country=lk + "… in Sri Lanka", never "… in lk" with country=us.
+ */
+type LocationResolution = {
+  country: string;
+  /** Human place for the query string; null means country-only search. */
+  queryPlace: string | null;
+  language: string;
+};
+
+type LocationHint = {
+  /** Compact form without spaces/punctuation, e.g. srilanka. */
+  compactAliases: string[];
+  pattern: RegExp;
+  country: string;
+  /** Canonical country/region name when the user typed a country or ISO code. */
+  countryName: string;
+  language: string;
+  /** City/region aliases that should appear in the query as-is (canonical casing). */
+  places: Record<string, string>;
+};
+
+const LOCATION_HINTS: LocationHint[] = [
   {
-    pattern: /\bindia\b|\bbangalore\b|\bmumbai\b|\bdelhi\b|\bhyderabad\b/iu,
-    code: "in",
+    compactAliases: ["srilanka", "lk"],
+    pattern: /\bsri\s*lanka\b|\bcolombo\b|\bkandy\b|\bgalle\b/iu,
+    country: "lk",
+    countryName: "Sri Lanka",
+    language: "en",
+    places: {
+      colombo: "Colombo",
+      kandy: "Kandy",
+      galle: "Galle",
+    },
   },
-  { pattern: /\bsingapore\b/iu, code: "sg" },
-  { pattern: /\baustralia\b|\bsydney\b|\bmelbourne\b/iu, code: "au" },
-  { pattern: /\bcanada\b|\btoronto\b|\bvancouver\b/iu, code: "ca" },
-  { pattern: /\bgermany\b|\bberlin\b|\bmunich\b/iu, code: "de" },
   {
+    compactAliases: ["unitedkingdom", "uk", "gb", "england"],
+    pattern: /\bunited\s*kingdom\b|\bengland\b|\blondon\b/iu,
+    country: "gb",
+    countryName: "United Kingdom",
+    language: "en",
+    places: { london: "London", england: "England" },
+  },
+  {
+    compactAliases: ["india", "in"],
+    pattern:
+      /\bindia\b|\bbangalore\b|\bbengaluru\b|\bmumbai\b|\bdelhi\b|\bhyderabad\b/iu,
+    country: "in",
+    countryName: "India",
+    language: "en",
+    places: {
+      bangalore: "Bangalore",
+      bengaluru: "Bengaluru",
+      mumbai: "Mumbai",
+      delhi: "Delhi",
+      hyderabad: "Hyderabad",
+    },
+  },
+  {
+    compactAliases: ["singapore", "sg"],
+    pattern: /\bsingapore\b/iu,
+    country: "sg",
+    countryName: "Singapore",
+    language: "en",
+    places: { singapore: "Singapore" },
+  },
+  {
+    compactAliases: ["australia", "au"],
+    pattern: /\baustralia\b|\bsydney\b|\bmelbourne\b/iu,
+    country: "au",
+    countryName: "Australia",
+    language: "en",
+    places: { sydney: "Sydney", melbourne: "Melbourne" },
+  },
+  {
+    compactAliases: ["canada", "ca"],
+    pattern: /\bcanada\b|\btoronto\b|\bvancouver\b/iu,
+    country: "ca",
+    countryName: "Canada",
+    language: "en",
+    places: { toronto: "Toronto", vancouver: "Vancouver" },
+  },
+  {
+    compactAliases: ["germany", "de"],
+    pattern: /\bgermany\b|\bberlin\b|\bmunich\b/iu,
+    country: "de",
+    countryName: "Germany",
+    language: "en",
+    places: { berlin: "Berlin", munich: "Munich" },
+  },
+  {
+    compactAliases: ["unitedstates", "usa", "us"],
     pattern:
       /\bunited\s*states\b|\busa\b|\bnew\s*york\b|\bsan\s*francisco\b|\bchicago\b/iu,
-    code: "us",
+    country: "us",
+    countryName: "United States",
+    language: "en",
+    places: {
+      "new york": "New York",
+      "san francisco": "San Francisco",
+      chicago: "Chicago",
+    },
   },
 ];
 
@@ -163,7 +254,10 @@ export class JSearchJobSource implements JobSource {
       const filtered = jobs
         .filter(
           (job) =>
-            !titleMatchesExcludedKeyword(job.title, criteria.excluded_keywords),
+            !isJobTitleIncompatibleWithPreferences(job.title, {
+              excluded_keywords: criteria.excluded_keywords,
+              experience_levels: criteria.experience_levels,
+            }),
         )
         .slice(0, criteria.page_size);
 
@@ -182,47 +276,120 @@ export class JSearchJobSource implements JobSource {
   }
 }
 
+export type JSearchRequestPreview = {
+  query: string;
+  country: string;
+  language: string;
+  num_pages: string;
+  date_posted: string;
+  work_from_home: string | null;
+  employment_types: string | null;
+  job_requirements: string | null;
+};
+
+/** Same params Find jobs sends to JSearch (without auth / base URL). */
+export function describeJSearchParams(
+  criteria: JobSearchCriteria,
+): JSearchRequestPreview {
+  const role = criteria.role_titles[0];
+  const resolved = resolveLocation(criteria.locations);
+  const query = resolved.queryPlace
+    ? `${role} jobs in ${resolved.queryPlace}`
+    : `${role} jobs`;
+
+  const employmentTypes = criteria.employment_types
+    .map(toProviderEmploymentType)
+    .filter((value): value is string => Boolean(value));
+  const requirements = [
+    ...new Set(
+      criteria.experience_levels
+        .map(toProviderRequirement)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+
+  return {
+    query,
+    country: resolved.country,
+    language: resolved.language,
+    num_pages: "1",
+    date_posted: "all",
+    work_from_home: shouldRequestRemoteOnly(criteria) ? "true" : null,
+    employment_types:
+      employmentTypes.length > 0 ? employmentTypes.join(",") : null,
+    job_requirements: requirements.length > 0 ? requirements.join(",") : null,
+  };
+}
+
 export function buildSearchUrl(
   baseUrl: string,
   criteria: JobSearchCriteria,
 ): URL {
   const normalizedBase = baseUrl.replace(/\/+$/u, "");
   const url = new URL(`${normalizedBase}/search-v2`);
-  const role = criteria.role_titles[0];
-  const place = primaryPlace(criteria.locations);
-  const query = place ? `${role} jobs in ${place}` : `${role} jobs`;
+  const params = describeJSearchParams(criteria);
 
-  url.searchParams.set("query", query);
-  url.searchParams.set("num_pages", "1");
-  url.searchParams.set("date_posted", "all");
-  url.searchParams.set("country", inferCountry(criteria.locations));
+  url.searchParams.set("query", params.query);
+  url.searchParams.set("num_pages", params.num_pages);
+  url.searchParams.set("date_posted", params.date_posted);
+  url.searchParams.set("country", params.country);
+  url.searchParams.set("language", params.language);
 
   if (criteria.cursor) {
     url.searchParams.set("cursor", criteria.cursor);
   }
-
-  if (shouldRequestRemoteOnly(criteria)) {
-    url.searchParams.set("work_from_home", "true");
+  if (params.work_from_home) {
+    url.searchParams.set("work_from_home", params.work_from_home);
   }
-
-  const employmentTypes = criteria.employment_types
-    .map(toProviderEmploymentType)
-    .filter((value): value is string => Boolean(value));
-  if (employmentTypes.length > 0) {
-    url.searchParams.set("employment_types", employmentTypes.join(","));
+  if (params.employment_types) {
+    url.searchParams.set("employment_types", params.employment_types);
   }
-
-  const requirements = criteria.experience_levels
-    .map(toProviderRequirement)
-    .filter((value): value is string => Boolean(value));
-  if (requirements.length > 0) {
-    url.searchParams.set(
-      "job_requirements",
-      [...new Set(requirements)].join(","),
-    );
+  if (params.job_requirements) {
+    url.searchParams.set("job_requirements", params.job_requirements);
   }
 
   return url;
+}
+
+/** Exported for tests — how Zeno maps preference locations onto JSearch params. */
+export function resolveLocation(locations: string[]): LocationResolution {
+  const raw = primaryPlace(locations);
+  if (!raw) {
+    return { country: "us", queryPlace: null, language: "en" };
+  }
+
+  const normalized = raw.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
+  const compact = normalized.replace(/[\s._-]+/gu, "");
+
+  for (const hint of LOCATION_HINTS) {
+    const matched =
+      hint.compactAliases.includes(compact) || hint.pattern.test(normalized);
+    if (!matched) continue;
+
+    const city = hint.places[normalized] ?? hint.places[compact];
+    return {
+      country: hint.country,
+      // Never put bare ISO codes into the query — Google for Jobs ignores them.
+      queryPlace: city ?? hint.countryName,
+      language: hint.language,
+    };
+  }
+
+  // Unknown free-text place: keep it in the query, but do not silently search the US.
+  // Two-letter tokens are treated as ISO country codes per JSearch docs.
+  if (/^[a-z]{2}$/u.test(normalized)) {
+    return {
+      country: normalized,
+      queryPlace: null,
+      language: "en",
+    };
+  }
+
+  return {
+    country: "us",
+    queryPlace: raw.trim(),
+    language: "en",
+  };
 }
 
 function buildAuthHeaders(
@@ -271,17 +438,6 @@ function shouldRequestRemoteOnly(criteria: JobSearchCriteria): boolean {
 
 function isRemoteLocation(location: string): boolean {
   return /\bremote\b|\bwfh\b|\bwork\s*from\s*home\b/iu.test(location);
-}
-
-function inferCountry(locations: string[]): string {
-  for (const location of locations) {
-    for (const hint of COUNTRY_HINTS) {
-      if (hint.pattern.test(location)) {
-        return hint.code;
-      }
-    }
-  }
-  return "us";
 }
 
 function toProviderEmploymentType(type: EmploymentType): string | null {

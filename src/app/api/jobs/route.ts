@@ -16,3 +16,15 @@ export async function GET(request: Request) {
     return errorResponse(error);
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const includeSaved = url.searchParams.get("includeSaved") === "true";
+    return NextResponse.json(
+      await getJobDiscoveryApplication().clearJobs({ includeSaved }),
+    );
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
