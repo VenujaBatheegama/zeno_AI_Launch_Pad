@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { getCurrentEvidence } from "@/modules/career-evidence/application/get-current-evidence";
+import { ensureConversationDraft } from "@/modules/career-evidence/application/ensure-conversation-draft";
 import {
   ingestCv,
   type IngestCvCommand,
@@ -17,6 +18,7 @@ import {
 } from "@/modules/career-evidence/application/verify-evidence";
 import { GroqEvidenceExtractor } from "@/modules/career-evidence/infrastructure/groq-evidence-extractor";
 import { PdfDocxTextExtractor } from "@/modules/career-evidence/infrastructure/pdf-docx-text-extractor";
+import { GroqOnboardingConversationalist } from "@/modules/onboarding/infrastructure/groq-onboarding-conversationalist";
 import { SupabaseCvStorage } from "@/modules/career-evidence/infrastructure/supabase-cv-storage";
 import { SupabaseEvidenceRepository } from "@/modules/career-evidence/infrastructure/supabase-evidence-repository";
 import {
@@ -68,9 +70,12 @@ import {
 } from "@/modules/career-intelligence/application/list-matches";
 import {
   createCareerAwareSearchPlan,
+  ensureJobSearchPlan,
   executeCareerAwareJobSearch,
+  searchForJobs,
   type CreateCareerAwareSearchPlanCommand,
   type ExecuteCareerAwareJobSearchCommand,
+  type SearchForJobsCommand,
 } from "@/modules/career-intelligence/application/search-plan";
 import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { DEFAULT_ANALYSIS_BATCH_SIZE } from "@/modules/career-intelligence/domain/policy";
@@ -78,42 +83,99 @@ import { GroqCapabilitySignalExtractor } from "@/modules/career-intelligence/inf
 import { GroqJobRequirementExtractor } from "@/modules/career-intelligence/infrastructure/groq-job-analyser";
 import { GroqRequirementMatcher } from "@/modules/career-intelligence/infrastructure/groq-requirement-matcher";
 import { SupabaseCareerIntelligenceRepository } from "@/modules/career-intelligence/infrastructure/supabase-career-intelligence-repository";
+import {
+  createTailoredCvContent,
+  downloadCvVariant,
+  getCvVariant,
+  listCvVariantsForListing,
+  listCvVariantsForUser,
+  recommendModeForListing,
+  renderTailoredCvVariant,
+  type CreateAndGenerateCvCommand,
+} from "@/modules/cv-tailoring/application/tailor-cv";
+import { GroqCvLanguageTailorer } from "@/modules/cv-tailoring/infrastructure/groq-cv-tailorer";
+import { PdfKitCvRenderer } from "@/modules/cv-tailoring/infrastructure/pdfkit-cv-renderer";
+import { ReactPdfCvRenderer } from "@/modules/cv-tailoring/infrastructure/react-pdf-cv-renderer";
+import { SupabaseCvTailoringRepository } from "@/modules/cv-tailoring/infrastructure/supabase-cv-tailoring-repository";
+import { SupabaseTailoredCvStorage } from "@/modules/cv-tailoring/infrastructure/supabase-tailored-cv-storage";
 
 import { getServerConfig } from "./config";
+import { getGroqKeyPool } from "./groq";
 import { createSupabaseClient } from "./supabase-client";
+
+async function refreshPlanAfterEvidenceChange(userId: string): Promise<void> {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const jobRepository = new SupabaseJobDiscoveryRepository(supabase);
+  const profile = await jobRepository.getSearchProfile(userId);
+  if (!profile?.preferences.smart_skill_analyser_enabled) return;
+  if (profile.preferences.roles.length === 0) return;
+  await ensureJobSearchPlan(
+    {
+      userId,
+      force: true,
+      queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
+    },
+    {
+      jobRepository,
+      repository: new SupabaseCareerIntelligenceRepository(supabase),
+      evidenceRepository: new SupabaseEvidenceRepository(supabase),
+      createId: randomUUID,
+      now: () => new Date(),
+    },
+  );
+}
 
 export type CareerEvidenceApplication = ReturnType<
   typeof createCareerEvidenceApplication
 >;
 
-let application: CareerEvidenceApplication | undefined;
-let jobDiscoveryApplication: JobDiscoveryApplication | undefined;
-let careerIntelligenceApplication: CareerIntelligenceApplication | undefined;
+export function getCareerEvidenceApplication(
+  userId: string,
+): CareerEvidenceApplication {
+  return createCareerEvidenceApplication(userId);
+}
 
-export function getCareerEvidenceApplication(): CareerEvidenceApplication {
-  application ??= createCareerEvidenceApplication();
-  return application;
+export function getOnboardingConversationalist() {
+  const config = getServerConfig();
+  return new GroqOnboardingConversationalist(
+    getGroqKeyPool(),
+    config.GROQ_MODEL,
+    config.groqFallbackModels,
+  );
 }
 
 export type JobDiscoveryApplication = ReturnType<
   typeof createJobDiscoveryApplication
 >;
 
-export function getJobDiscoveryApplication(): JobDiscoveryApplication {
-  jobDiscoveryApplication ??= createJobDiscoveryApplication();
-  return jobDiscoveryApplication;
+export type CvTailoringApplication = ReturnType<
+  typeof createCvTailoringApplication
+>;
+
+export function getCvTailoringApplication(
+  userId: string,
+): CvTailoringApplication {
+  return createCvTailoringApplication(userId);
+}
+
+export function getJobDiscoveryApplication(
+  userId: string,
+): JobDiscoveryApplication {
+  return createJobDiscoveryApplication(userId);
 }
 
 export type CareerIntelligenceApplication = ReturnType<
   typeof createCareerIntelligenceApplication
 >;
 
-export function getCareerIntelligenceApplication(): CareerIntelligenceApplication {
-  careerIntelligenceApplication ??= createCareerIntelligenceApplication();
-  return careerIntelligenceApplication;
+export function getCareerIntelligenceApplication(
+  userId: string,
+): CareerIntelligenceApplication {
+  return createCareerIntelligenceApplication(userId);
 }
 
-function createCareerEvidenceApplication() {
+function createCareerEvidenceApplication(userId: string) {
   const config = getServerConfig();
   const supabase = createSupabaseClient(config);
   const repository = new SupabaseEvidenceRepository(supabase);
@@ -122,16 +184,18 @@ function createCareerEvidenceApplication() {
     config.SUPABASE_STORAGE_BUCKET,
   );
   const textExtractor = new PdfDocxTextExtractor();
+  const groqKeys = getGroqKeyPool();
   const evidenceExtractor = new GroqEvidenceExtractor(
-    config.GROQ_API_KEY,
+    groqKeys,
     config.GROQ_MODEL,
+    config.groqFallbackModels,
   );
 
   return {
-    demoUserId: config.DEMO_USER_ID,
+    userId,
     ingest: (command: Omit<IngestCvCommand, "userId">) =>
       ingestCv(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         {
           repository,
           storage,
@@ -141,18 +205,39 @@ function createCareerEvidenceApplication() {
           createId: randomUUID,
         },
       ),
-    saveDraft: (command: Omit<SaveDraftCommand, "userId">) =>
-      saveDraft({ ...command, userId: config.DEMO_USER_ID }, repository),
-    verify: (command: Omit<VerifyEvidenceCommand, "userId">) =>
-      verifyEvidence(
-        { ...command, userId: config.DEMO_USER_ID },
+    saveDraft: async (command: Omit<SaveDraftCommand, "userId">) => {
+      const draft = await saveDraft({ ...command, userId }, repository);
+      void refreshPlanAfterEvidenceChange(userId).catch((error) => {
+        console.error("Plan refresh after evidence draft save failed:", error);
+      });
+      return draft;
+    },
+    verify: async (command: Omit<VerifyEvidenceCommand, "userId">) => {
+      const verified = await verifyEvidence(
+        { ...command, userId },
         { repository, now: () => new Date() },
-      ),
-    getCurrent: () => getCurrentEvidence(config.DEMO_USER_ID, repository),
+      );
+      // When Smart Skill Analyser is on, refresh the internal search plan.
+      void refreshPlanAfterEvidenceChange(userId).catch((error) => {
+        console.error("Plan refresh after evidence verify failed:", error);
+      });
+      return verified;
+    },
+    getCurrent: () => getCurrentEvidence(userId, repository),
+    ensureConversationDraft: (evidence: Parameters<
+      typeof ensureConversationDraft
+    >[0]["evidence"]) =>
+      ensureConversationDraft({
+        userId,
+        evidence,
+        createId: randomUUID,
+        repository,
+        extractionModel: "conversation",
+      }),
   };
 }
 
-function createJobDiscoveryApplication() {
+function createJobDiscoveryApplication(userId: string) {
   const config = getServerConfig();
   const repository = new SupabaseJobDiscoveryRepository(
     createSupabaseClient(config),
@@ -170,11 +255,11 @@ function createJobDiscoveryApplication() {
     });
 
   return {
-    demoUserId: config.DEMO_USER_ID,
+    userId,
     enabledJobSources: enabledKeys,
     getProfile: async () => {
       const profile = await getJobSearchProfile(
-        config.DEMO_USER_ID,
+        userId,
         repository,
       );
       if (!profile) return null;
@@ -187,8 +272,32 @@ function createJobDiscoveryApplication() {
       command: Omit<SavePreferencesCommand, "userId">,
     ) => {
       const profile = await saveJobSearchPreferences(
-        { ...command, userId: config.DEMO_USER_ID },
-        { repository, createId: randomUUID, now },
+        { ...command, userId },
+        {
+          repository,
+          createId: randomUUID,
+          now,
+          onPreferencesChanged: async () => {
+            await ensureJobSearchPlan(
+              {
+                userId,
+                force: true,
+                queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
+              },
+              {
+                jobRepository: repository,
+                repository: new SupabaseCareerIntelligenceRepository(
+                  createSupabaseClient(config),
+                ),
+                evidenceRepository: new SupabaseEvidenceRepository(
+                  createSupabaseClient(config),
+                ),
+                createId: randomUUID,
+                now,
+              },
+            );
+          },
+        },
       );
       return {
         ...profile,
@@ -203,7 +312,7 @@ function createJobDiscoveryApplication() {
         );
       }
       return discoverJobs(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         {
           repository,
           source,
@@ -222,39 +331,43 @@ function createJobDiscoveryApplication() {
     },
     listJobs: (command: Omit<ListJobsCommand, "userId"> = {}) =>
       listDiscoveredJobs(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         repository,
       ),
     setJobState: (command: Omit<SetJobStateCommand, "userId">) =>
       setUserJobState(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         { repository, now },
       ),
     clearJobs: (command: { includeSaved?: boolean } = {}) =>
       clearDiscoveredJobsForUser(
-        { userId: config.DEMO_USER_ID, includeSaved: command.includeSaved },
+        { userId, includeSaved: command.includeSaved },
         repository,
       ),
   };
 }
 
-function createCareerIntelligenceApplication() {
+function createCareerIntelligenceApplication(userId: string) {
   const config = getServerConfig();
   const supabase = createSupabaseClient(config);
   const evidenceRepository = new SupabaseEvidenceRepository(supabase);
   const jobRepository = new SupabaseJobDiscoveryRepository(supabase);
   const repository = new SupabaseCareerIntelligenceRepository(supabase);
   const { source, enabledKeys } = createHybridJobSource(config);
+  const groqKeys = getGroqKeyPool();
   const extractor = new GroqJobRequirementExtractor(
-    config.GROQ_API_KEY,
+    groqKeys,
     config.GROQ_MODEL,
+    config.groqFallbackModels,
+    { maxAttempts: config.CAREER_EXTRACTION_MAX_ATTEMPTS },
   );
   const matcher = new GroqRequirementMatcher(
-    config.GROQ_API_KEY,
+    groqKeys,
     config.GROQ_MODEL,
+    config.groqFallbackModels,
   );
   const capabilityExtractor = new GroqCapabilitySignalExtractor(
-    config.GROQ_API_KEY,
+    groqKeys,
     config.GROQ_MODEL,
   );
   const now = () => new Date();
@@ -270,24 +383,24 @@ function createCareerIntelligenceApplication() {
   };
 
   return {
-    demoUserId: config.DEMO_USER_ID,
+    userId,
     queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
     analysisBatchSize: config.CAREER_ANALYSIS_BATCH_SIZE,
     getAssessment: () =>
-      repository.getLatestCareerStageAssessment(config.DEMO_USER_ID),
-    getPlan: () => repository.getLatestSearchPlan(config.DEMO_USER_ID),
+      repository.getLatestCareerStageAssessment(userId),
+    getPlan: () => repository.getLatestSearchPlan(userId),
     getCapabilityProfile: () =>
-      getCandidateCapabilityProfile(config.DEMO_USER_ID, repository),
+      getCandidateCapabilityProfile(userId, repository),
     refreshCapabilityProfile: (
       command: Omit<RefreshCandidateCapabilityProfileCommand, "userId"> = {},
     ) =>
       refreshCandidateCapabilityProfile(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         { ...deps, extractor: capabilityExtractor },
       ),
     assess: (command: Omit<AssessCareerStageCommand, "userId"> = {}) =>
       assessCareerStageForUser(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         deps,
       ),
     createPlan: (
@@ -296,12 +409,43 @@ function createCareerIntelligenceApplication() {
       createCareerAwareSearchPlan(
         {
           ...command,
-          userId: config.DEMO_USER_ID,
+          userId,
           queryBudget:
             command.queryBudget ?? config.CAREER_SEARCH_QUERY_BUDGET,
         },
         deps,
       ),
+    ensurePlan: (
+      command: Omit<CreateCareerAwareSearchPlanCommand, "userId"> = {},
+    ) =>
+      ensureJobSearchPlan(
+        {
+          ...command,
+          userId,
+          queryBudget:
+            command.queryBudget ?? config.CAREER_SEARCH_QUERY_BUDGET,
+        },
+        deps,
+      ),
+    searchForJobs: (
+      command: Omit<SearchForJobsCommand, "userId"> = {},
+    ) => {
+      if (enabledKeys.length === 0) {
+        throw new CareerIntelligenceError(
+          "SEARCH_FAILED",
+          "No job sources are configured. Check JOB_SOURCES and provider credentials.",
+        );
+      }
+      return searchForJobs(
+        {
+          ...command,
+          userId,
+          pageSize: config.JSEARCH_PAGE_SIZE,
+          queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
+        },
+        deps,
+      );
+    },
     executeSearch: (
       command: Omit<ExecuteCareerAwareJobSearchCommand, "userId"> = {},
     ) => {
@@ -314,7 +458,7 @@ function createCareerIntelligenceApplication() {
       return executeCareerAwareJobSearch(
         {
           ...command,
-          userId: config.DEMO_USER_ID,
+          userId,
           pageSize: config.JSEARCH_PAGE_SIZE,
         },
         deps,
@@ -324,7 +468,7 @@ function createCareerIntelligenceApplication() {
       command: Omit<AnalyseAndMatchJobCommand, "userId">,
     ) =>
       analyseAndMatchJob(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         deps,
       ),
     analyseBatch: (
@@ -335,28 +479,121 @@ function createCareerIntelligenceApplication() {
         config.CAREER_ANALYSIS_BATCH_SIZE || DEFAULT_ANALYSIS_BATCH_SIZE,
       );
       return analyseAndMatchBatch(
-        { ...command, userId: config.DEMO_USER_ID, listingIds },
-        deps,
+        { ...command, userId, listingIds },
+        {
+          ...deps,
+          extractionConcurrency: config.CAREER_EXTRACTION_CONCURRENCY,
+        },
       );
     },
     listMatches: (
       command: Omit<ListRankedJobMatchesCommand, "userId"> = {},
     ) =>
       listRankedJobMatches(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         deps,
       ),
     getMatchDetails: (
       command: Omit<GetJobMatchDetailsCommand, "userId">,
     ) =>
       getJobMatchDetails(
-        { ...command, userId: config.DEMO_USER_ID },
+        { ...command, userId },
         deps,
       ),
     clearMatches: () =>
       clearMatchAnalysesForUser(
-        { userId: config.DEMO_USER_ID },
+        { userId },
         repository,
+      ),
+  };
+}
+
+function createCvTailoringApplication(userId: string) {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const evidenceRepository = new SupabaseEvidenceRepository(supabase);
+  const jobRepository = new SupabaseJobDiscoveryRepository(supabase);
+  const careerRepository = new SupabaseCareerIntelligenceRepository(supabase);
+  const repository = new SupabaseCvTailoringRepository(supabase);
+  const storage = new SupabaseTailoredCvStorage(
+    supabase,
+    config.SUPABASE_STORAGE_BUCKET,
+  );
+  const tailorer = new GroqCvLanguageTailorer(
+    getGroqKeyPool(),
+    config.GROQ_MODEL,
+  );
+  // Production path: React-pdf. PDFKit remains imported for emergency rollback only.
+  const renderer =
+    process.env.CV_PDF_RENDERER === "pdfkit"
+      ? new PdfKitCvRenderer()
+      : new ReactPdfCvRenderer();
+  const now = () => new Date();
+  const deps = {
+    evidenceRepository,
+    jobRepository,
+    careerRepository,
+    repository,
+    tailorer,
+    renderer,
+    storage,
+    createId: randomUUID,
+    now,
+  };
+
+  return {
+    userId,
+    recommend: (command: { listingId: string }) =>
+      recommendModeForListing(
+        { ...command, userId },
+        deps,
+      ),
+    generateContent: (
+      command: Omit<CreateAndGenerateCvCommand, "userId">,
+    ) =>
+      createTailoredCvContent(
+        { ...command, userId },
+        deps,
+      ),
+    render: (command: { variantId: string }) =>
+      renderTailoredCvVariant(
+        { userId, variantId: command.variantId },
+        { ...deps, jobRepository },
+      ),
+    getVariant: (command: { variantId: string }) =>
+      getCvVariant(
+        { userId, variantId: command.variantId },
+        deps,
+      ),
+    listForListing: (command: { listingId: string }) =>
+      listCvVariantsForListing(
+        { userId, listingId: command.listingId },
+        deps,
+      ),
+    listForUser: (command?: {
+      statuses?: Array<
+        | "ready"
+        | "ready_to_render"
+        | "failed"
+        | "planning"
+        | "generating"
+        | "validating"
+        | "rendering"
+      >;
+      limit?: number;
+    }) =>
+      listCvVariantsForUser(
+        {
+          userId,
+          statuses: command?.statuses,
+          limit: command?.limit,
+        },
+        deps,
+      ),
+    download: (command: { variantId: string }) =>
+      downloadCvVariant(
+        { userId, variantId: command.variantId },
+        deps,
       ),
   };
 }

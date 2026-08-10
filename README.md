@@ -12,6 +12,9 @@ normalize/merge/deduplicate → save/dismiss`
 `Verified evidence + preferences → career stage → multi-query plan → analyse →
 deterministic evidence-fit scoring → ranked matches`
 
+`Analysed job + verified evidence → content plan → one LLM tailor call →
+grounding validation → ATS PDF preview/download`
+
 ## Local setup
 
 Requirements: Node.js 22+ and pnpm.
@@ -26,9 +29,11 @@ Requirements: Node.js 22+ and pnpm.
    job analyses/requirements, and match analyses.
 5. Run `supabase/migrations/0004_slice_2_1.sql`. This additively creates
    candidate capability profiles/signals and widens planned-query source values.
-6. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
+6. Run `supabase/migrations/0005_slice_3.sql`. This additively creates
+   `cv_tailoring_variants` for evidence-grounded tailored CV plans/artifacts.
+7. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
-7. Configure hybrid job sources via `JOB_SOURCES` (default
+8. Configure hybrid job sources via `JOB_SOURCES` (default
    `linkedin,jsearch,theirstack,itpro`). All enabled sources are equal peers:
    concurrent fan-out, interleaved merge, no preferred provider. Missing
    optional credentials disable that source rather than failing the whole app:
@@ -41,7 +46,7 @@ Requirements: Node.js 22+ and pnpm.
    - **ITPro.lk**: public `GET /api/v1/jobs`, no API key required
    - Public ATS boards (Greenhouse/Lever) are an extension point only;
      not wired in the current MVP (`ATS_BOARDS` documented in `.env.example`)
-8. Install and run:
+9. Install and run:
 
    ```sh
    pnpm install

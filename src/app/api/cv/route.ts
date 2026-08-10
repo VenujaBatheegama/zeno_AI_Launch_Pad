@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { getCareerEvidenceApplication } from "@/server/composition-root";
 
 import { errorResponse } from "../http";
+import { authErrorResponse, requireUserId } from "@/server/auth";
+import { getCareerEvidenceApplication } from "@/server/composition-root";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const userId = await requireUserId();
     const formData = await request.formData();
     const file = formData.get("cv");
 
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const application = getCareerEvidenceApplication();
+    const application = getCareerEvidenceApplication(userId);
     const evidenceSet = await application.ingest({
       fileName: file.name,
       mimeType: file.type,
@@ -27,6 +29,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(evidenceSet, { status: 201 });
   } catch (error) {
-    return errorResponse(error);
+    return authErrorResponse(error) ?? errorResponse(error);
   }
 }

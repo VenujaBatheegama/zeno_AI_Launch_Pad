@@ -1,6 +1,7 @@
 export const CAREER_STAGE_POLICY_VERSION = "career-stage-v1";
 export const SCORING_POLICY_VERSION = "scoring-v2";
-export const EXTRACTION_POLICY_VERSION = "job-extraction-v1";
+/** Bumped for strict json_schema extraction + shared description-hash cache. */
+export const EXTRACTION_POLICY_VERSION = "job-extraction-v2";
 export const MATCHING_POLICY_VERSION = "matching-v3";
 export const CAPABILITY_EXTRACTION_POLICY_VERSION = "capability-extraction-v1";
 export const CAPABILITY_AGGREGATION_POLICY_VERSION = "capability-aggregation-v1";

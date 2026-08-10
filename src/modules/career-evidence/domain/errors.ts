@@ -2,6 +2,7 @@ export type CareerEvidenceErrorCode =
   | "INVALID_FILE"
   | "TEXT_EXTRACTION_FAILED"
   | "AI_EXTRACTION_FAILED"
+  | "AI_RATE_LIMITED"
   | "NOT_FOUND"
   | "INVALID_STATE"
   | "PERSISTENCE_FAILED";

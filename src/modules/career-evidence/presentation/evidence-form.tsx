@@ -17,7 +17,8 @@ type CollectionKey =
   | "education"
   | "skills"
   | "projects"
-  | "certifications";
+  | "certifications"
+  | "references";
 
 export function EvidenceForm({
   evidenceSet,
@@ -174,6 +175,47 @@ export function EvidenceForm({
               }))
             }
           />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="LinkedIn URL"
+              value={evidence.profile.linkedin_url ?? ""}
+              onChange={(linkedin_url) =>
+                setEvidence((current) => ({
+                  ...current,
+                  profile: {
+                    ...current.profile,
+                    linkedin_url: linkedin_url?.trim() || null,
+                  },
+                }))
+              }
+            />
+            <TextField
+              label="GitHub URL"
+              value={evidence.profile.github_url ?? ""}
+              onChange={(github_url) =>
+                setEvidence((current) => ({
+                  ...current,
+                  profile: {
+                    ...current.profile,
+                    github_url: github_url?.trim() || null,
+                  },
+                }))
+              }
+            />
+            <TextField
+              label="Portfolio URL"
+              value={evidence.profile.portfolio_url ?? ""}
+              onChange={(portfolio_url) =>
+                setEvidence((current) => ({
+                  ...current,
+                  profile: {
+                    ...current.profile,
+                    portfolio_url: portfolio_url?.trim() || null,
+                  },
+                }))
+              }
+            />
+          </div>
         </EvidenceSection>
 
         <EvidenceSection
@@ -569,6 +611,95 @@ export function EvidenceForm({
                     updateCollection("certifications", index, (current) => ({
                       ...current,
                       issued_date,
+                      origin: "user_edited",
+                    }))
+                  }
+                />
+              </div>
+            </ItemCard>
+          ))}
+        </EvidenceSection>
+
+        <EvidenceSection
+          title="References"
+          onAdd={() =>
+            setEvidence((current) => ({
+              ...current,
+              references: [
+                ...(current.references ?? []),
+                {
+                  id: crypto.randomUUID(),
+                  origin: "user_edited",
+                  source_quote: null,
+                  name: "",
+                  title: null,
+                  organization: null,
+                  email: null,
+                  phone: null,
+                },
+              ],
+            }))
+          }
+        >
+          {(evidence.references ?? []).map((item, index) => (
+            <ItemCard
+              key={item.id}
+              sourceQuote={item.source_quote}
+              onRemove={() => removeItem("references", index)}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="Name"
+                  value={item.name}
+                  required
+                  onChange={(name) =>
+                    updateCollection("references", index, (current) => ({
+                      ...current,
+                      name: name ?? "",
+                      origin: "user_edited",
+                    }))
+                  }
+                />
+                <TextField
+                  label="Title / role"
+                  value={item.title}
+                  onChange={(title) =>
+                    updateCollection("references", index, (current) => ({
+                      ...current,
+                      title,
+                      origin: "user_edited",
+                    }))
+                  }
+                />
+                <TextField
+                  label="Organization"
+                  value={item.organization}
+                  onChange={(organization) =>
+                    updateCollection("references", index, (current) => ({
+                      ...current,
+                      organization,
+                      origin: "user_edited",
+                    }))
+                  }
+                />
+                <TextField
+                  label="Email"
+                  value={item.email}
+                  onChange={(email) =>
+                    updateCollection("references", index, (current) => ({
+                      ...current,
+                      email,
+                      origin: "user_edited",
+                    }))
+                  }
+                />
+                <TextField
+                  label="Phone"
+                  value={item.phone}
+                  onChange={(phone) =>
+                    updateCollection("references", index, (current) => ({
+                      ...current,
+                      phone,
                       origin: "user_edited",
                     }))
                   }

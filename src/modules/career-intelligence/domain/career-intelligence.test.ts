@@ -335,6 +335,8 @@ function evidenceWithInternshipMonths(): CareerEvidence {
       },
     ],
     certifications: [],
+    achievements: [],
+    references: [],
     warnings: [],
   };
 }

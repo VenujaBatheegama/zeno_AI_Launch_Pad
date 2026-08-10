@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { errorResponse } from "@/app/api/http";
+import { authErrorResponse, requireUserId } from "@/server/auth";
 import { getJobDiscoveryApplication } from "@/server/composition-root";
 
 export async function PATCH(
@@ -8,17 +9,18 @@ export async function PATCH(
   context: { params: Promise<{ listingId: string }> },
 ) {
   try {
+    const userId = await requireUserId();
     const [{ listingId }, body] = await Promise.all([
       context.params,
       request.json(),
     ]);
     return NextResponse.json(
-      await getJobDiscoveryApplication().setJobState({
+      await getJobDiscoveryApplication(userId).setJobState({
         listingId,
         state: body.state,
       }),
     );
   } catch (error) {
-    return errorResponse(error);
+    return authErrorResponse(error) ?? errorResponse(error);
   }
 }

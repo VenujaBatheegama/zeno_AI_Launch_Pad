@@ -58,6 +58,17 @@ const extractedCertificationSchema = z
   })
   .strip();
 
+const extractedReferenceSchema = z
+  .object({
+    name: z.string().min(1).nullable(),
+    title: z.string().nullable(),
+    organization: z.string().nullable(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    source_quote: z.string().min(1),
+  })
+  .strip();
+
 export const extractedCareerEvidenceSchema = z
   .object({
     profile: z
@@ -67,6 +78,9 @@ export const extractedCareerEvidenceSchema = z
         phone: z.string().nullable(),
         location: z.string().nullable(),
         summary: z.string().nullable(),
+        linkedin_url: z.string().nullable().optional(),
+        github_url: z.string().nullable().optional(),
+        portfolio_url: z.string().nullable().optional(),
       })
       .strip(),
     work_experience: z.array(extractedWorkExperienceSchema),
@@ -74,6 +88,24 @@ export const extractedCareerEvidenceSchema = z
     skills: z.array(extractedSkillSchema),
     projects: z.array(extractedProjectSchema),
     certifications: z.array(extractedCertificationSchema),
+    achievements: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).nullable(),
+            result: z.string().nullable(),
+            issuer: z.string().nullable(),
+            date: extractedDateSchema,
+            source_quote: z.string().min(1),
+          })
+          .strip(),
+      )
+      .optional()
+      .default([]),
+    references: z
+      .array(extractedReferenceSchema)
+      .optional()
+      .default([]),
     warnings: z.array(z.string()),
   })
   .strip();
@@ -86,6 +118,35 @@ export const careerEvidenceToolInputSchema = z
     skills: z.array(extractedSkillSchema.passthrough()),
     projects: z.array(extractedProjectSchema.passthrough()),
     certifications: z.array(extractedCertificationSchema.passthrough()),
+    achievements: z
+      .array(
+        z
+          .object({
+            name: z.string().nullable().optional(),
+            result: z.string().nullable().optional(),
+            issuer: z.string().nullable().optional(),
+            date: extractedDateSchema.optional(),
+            source_quote: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional()
+      .default([]),
+    references: z
+      .array(
+        z
+          .object({
+            name: z.string().nullable().optional(),
+            title: z.string().nullable().optional(),
+            organization: z.string().nullable().optional(),
+            email: z.string().nullable().optional(),
+            phone: z.string().nullable().optional(),
+            source_quote: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional()
+      .default([]),
     warnings: z.array(z.string()),
   })
   .passthrough();
@@ -106,7 +167,18 @@ const editableItem = <T extends z.ZodRawShape>(shape: T) =>
 export const careerEvidenceSchema = z
   .object({
     schema_version: z.literal(1),
-    profile: extractedCareerEvidenceSchema.shape.profile,
+    profile: z
+      .object({
+        full_name: z.string().nullable(),
+        email: z.string().nullable(),
+        phone: z.string().nullable(),
+        location: z.string().nullable(),
+        summary: z.string().nullable(),
+        linkedin_url: z.string().nullable().optional(),
+        github_url: z.string().nullable().optional(),
+        portfolio_url: z.string().nullable().optional(),
+      })
+      .strip(),
     work_experience: z.array(
       editableItem({
         employer: z.string(),
@@ -125,6 +197,7 @@ export const careerEvidenceSchema = z
         field_of_study: z.string().nullable(),
         start_date: partialDateSchema,
         end_date: partialDateSchema,
+        details: z.array(z.string().min(1)).optional(),
       }),
     ),
     skills: z.array(
@@ -149,6 +222,27 @@ export const careerEvidenceSchema = z
         issued_date: partialDateSchema,
       }),
     ),
+    achievements: z
+      .array(
+        editableItem({
+          name: z.string(),
+          result: z.string().nullable(),
+          issuer: z.string().nullable(),
+          date: partialDateSchema,
+        }),
+      )
+      .default([]),
+    references: z
+      .array(
+        editableItem({
+          name: z.string(),
+          title: z.string().nullable(),
+          organization: z.string().nullable(),
+          email: z.string().nullable(),
+          phone: z.string().nullable(),
+        }),
+      )
+      .default([]),
     warnings: z.array(z.string()),
   })
   .strict();
@@ -170,9 +264,17 @@ export const verifiedCareerEvidenceSchema = careerEvidenceSchema.superRefine(
       requireValue(item.employer, ["work_experience", index, "employer"]);
       requireValue(item.role, ["work_experience", index, "role"]);
     });
-    evidence.education.forEach((item, index) =>
-      requireValue(item.institution, ["education", index, "institution"]),
-    );
+    // School exams (A/L, O/L) often omit a school name — qualification alone is enough.
+    evidence.education.forEach((item, index) => {
+      if (!item.institution.trim() && !item.qualification?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["education", index, "institution"],
+          message:
+            "Add a school/institution or qualification before verification.",
+        });
+      }
+    });
     evidence.skills.forEach((item, index) =>
       requireValue(item.name, ["skills", index, "name"]),
     );
@@ -181,6 +283,9 @@ export const verifiedCareerEvidenceSchema = careerEvidenceSchema.superRefine(
     );
     evidence.certifications.forEach((item, index) =>
       requireValue(item.name, ["certifications", index, "name"]),
+    );
+    evidence.references.forEach((item, index) =>
+      requireValue(item.name, ["references", index, "name"]),
     );
   },
 );
@@ -244,9 +349,16 @@ export function addExtractionMetadata(
       ),
   ];
 
+  const profile = {
+    ...extracted.profile,
+    linkedin_url: extracted.profile.linkedin_url ?? null,
+    github_url: extracted.profile.github_url ?? null,
+    portfolio_url: extracted.profile.portfolio_url ?? null,
+  };
+
   return careerEvidenceSchema.parse({
     schema_version: 1,
-    profile: extracted.profile,
+    profile,
     work_experience: extracted.work_experience.map((item) =>
       withMetadata({
         ...item,
@@ -285,6 +397,29 @@ export function addExtractionMetadata(
         issued_date: normalizeExtractedDate(item.issued_date),
       }),
     ),
+    achievements: (extracted.achievements ?? [])
+      .filter((item) => item.name !== null && item.source_quote)
+      .map((item) =>
+        withMetadata({
+          name: item.name ?? "",
+          result: item.result ?? null,
+          issuer: item.issuer ?? null,
+          date: normalizeExtractedDate(item.date ?? null),
+          source_quote: item.source_quote,
+        }),
+      ),
+    references: (extracted.references ?? [])
+      .filter((item) => item.name !== null)
+      .map((item) =>
+        withMetadata({
+          name: item.name ?? "",
+          title: item.title ?? null,
+          organization: item.organization ?? null,
+          email: item.email ?? null,
+          phone: item.phone ?? null,
+          source_quote: item.source_quote || item.name || "",
+        }),
+      ),
     warnings: [...extracted.warnings, ...incompleteWarnings],
   });
 }
@@ -355,7 +490,9 @@ type EvidenceItem =
   | CareerEvidence["education"][number]
   | CareerEvidence["skills"][number]
   | CareerEvidence["projects"][number]
-  | CareerEvidence["certifications"][number];
+  | CareerEvidence["certifications"][number]
+  | CareerEvidence["achievements"][number]
+  | CareerEvidence["references"][number];
 
 export function reconcileUserEdits(
   current: CareerEvidence,
@@ -373,6 +510,14 @@ export function reconcileUserEdits(
     certifications: reconcileItems(
       current.certifications,
       submitted.certifications,
+    ),
+    achievements: reconcileItems(
+      current.achievements ?? [],
+      submitted.achievements ?? [],
+    ),
+    references: reconcileItems(
+      current.references ?? [],
+      submitted.references ?? [],
     ),
   });
 }

@@ -115,6 +115,89 @@ describe("career intelligence application", () => {
     expect(result.plan.status).toBe("partial");
   });
 
+  it("auto-assesses career stage during analyse when none exists", async () => {
+    const repository = new InMemoryCareerIntelligenceRepository();
+    const listingId = "00000000-0000-4000-8000-000000000311";
+    const jobId = "00000000-0000-4000-8000-000000000312";
+    const job: DiscoveredJob = {
+      job_id: jobId,
+      listing_id: listingId,
+      title: "Associate Software Engineer",
+      organization_name: "Acme",
+      organization_logo_url: null,
+      description:
+        "We need Docker and Terraform experience. Communication skills preferred. Build APIs with Node.js and collaborate with the team on delivery. Ideal for early-career engineers with internship experience.",
+      location: "Colombo",
+      city: "Colombo",
+      region: null,
+      country: "LK",
+      employment_type: "full_time",
+      work_mode: "hybrid",
+      experience_level: "entry",
+      salary_min: null,
+      salary_max: null,
+      salary_currency: null,
+      salary_period: null,
+      published_at: null,
+      closing_at: null,
+      publisher: "Acme",
+      source_name: "JSearch",
+      source_url: null,
+      application_url: "https://example.com/apply",
+      application_is_direct: true,
+      first_seen_at: NOW.toISOString(),
+      last_seen_at: NOW.toISOString(),
+      user_state: "discovered",
+    };
+
+    expect(repository.assessments).toHaveLength(0);
+
+    const { match } = await analyseAndMatchJob(
+      { userId: USER, listingId },
+      {
+        evidenceRepository: new FakeEvidenceRepository(verifiedEvidence()),
+        jobRepository: new FakeJobDiscoveryRepository(profile(), [job]),
+        repository,
+        extractor: {
+          async extract({ requirementIds }) {
+            return {
+              opportunity_band: "early_career",
+              opportunity_confidence: "high",
+              opportunity_reasons: ["Entry-level wording."],
+              requirements: [
+                {
+                  id: requirementIds[0]!,
+                  statement: "Docker",
+                  category: "technology",
+                  importance: "required",
+                  explicit: true,
+                  confidence: "high",
+                  source_quote: "Docker and Terraform experience",
+                  quantitative_threshold: null,
+                },
+              ],
+              warnings: [],
+            };
+          },
+        },
+        matcher: {
+          async classify() {
+            return [];
+          },
+        },
+        createId: sequentialIds(400),
+        now: () => NOW,
+      },
+    );
+
+    expect(repository.assessments.length).toBeGreaterThan(0);
+    expect(repository.assessments[0]?.evidenceFingerprint).not.toBe(
+      "preferences-only",
+    );
+    expect(match).not.toBeNull();
+    expect(match?.careerStageAssessmentId).toBe(repository.assessments[0]?.id);
+  });
+
   it("computes deterministic evidence-fit and keeps career level separate", async () => {
     const repository = new InMemoryCareerIntelligenceRepository();
     const listingId = "00000000-0000-4000-8000-000000000301";
@@ -356,7 +439,9 @@ function profile(): JobSearchProfile {
       target_role_families: [],
       capability_intents: [],
       reject_inferred_direction: false,
+      smart_skill_analyser_enabled: false,
     },
+    preferenceRevision: 1,
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
   };
@@ -429,6 +514,8 @@ function verifiedEvidence(): CareerEvidenceSet {
         },
       ],
       certifications: [],
+      achievements: [],
+      references: [],
       warnings: [],
     },
   };

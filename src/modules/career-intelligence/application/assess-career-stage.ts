@@ -67,6 +67,7 @@ export async function assessCareerStageForUser(
   if (
     !parsed.force &&
     existing &&
+    existing.evidenceFingerprint !== "preferences-only" &&
     existing.evidenceFingerprint === evidenceFingerprint &&
     existing.preferencesFingerprint === preferencesFingerprint &&
     existing.policyVersion === CAREER_STAGE_POLICY_VERSION

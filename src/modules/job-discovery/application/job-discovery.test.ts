@@ -376,11 +376,16 @@ class MemoryJobRepository implements JobDiscoveryRepository {
     id: string;
     userId: string;
     preferences: JobSearchProfile["preferences"];
+    preferenceRevision: number;
     updatedAt: string;
   }) {
     this.profile = {
-      ...input,
+      id: input.id,
+      userId: input.userId,
+      preferences: input.preferences,
+      preferenceRevision: input.preferenceRevision,
       createdAt: this.profile?.createdAt ?? input.updatedAt,
+      updatedAt: input.updatedAt,
     };
     return this.profile;
   }

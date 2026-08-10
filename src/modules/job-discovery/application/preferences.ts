@@ -32,15 +32,30 @@ export async function saveJobSearchPreferences(
     repository: JobDiscoveryRepository;
     createId: IdGenerator;
     now: Clock;
+    /** Optional hook: regenerate internal search plan after prefs change. */
+    onPreferencesChanged?: (profile: JobSearchProfile) => Promise<void>;
   },
 ): Promise<JobSearchProfile> {
   const parsed = savePreferencesCommandSchema.parse(command);
   const existing = await dependencies.repository.getSearchProfile(parsed.userId);
+  const preferenceRevision = (existing?.preferenceRevision ?? 0) + 1;
 
-  return dependencies.repository.saveSearchProfile({
+  const profile = await dependencies.repository.saveSearchProfile({
     id: existing?.id ?? dependencies.createId(),
     userId: parsed.userId,
     preferences: parsed.preferences,
+    preferenceRevision,
     updatedAt: dependencies.now().toISOString(),
   });
+
+  if (dependencies.onPreferencesChanged) {
+    try {
+      await dependencies.onPreferencesChanged(profile);
+    } catch (error) {
+      // Preference save must succeed even if background plan refresh fails.
+      console.error("Search plan refresh after preference save failed:", error);
+    }
+  }
+
+  return profile;
 }

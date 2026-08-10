@@ -50,6 +50,21 @@ const ALIASES: Record<string, { key: string; label: string; kind: CapabilityKind
     node: { key: "nodejs", label: "Node.js", kind: "technology" },
     nodejs: { key: "nodejs", label: "Node.js", kind: "technology" },
     "node.js": { key: "nodejs", label: "Node.js", kind: "technology" },
+    "c#": { key: "csharp", label: "C#", kind: "technology" },
+    csharp: { key: "csharp", label: "C#", kind: "technology" },
+    ".net": { key: "dotnet", label: ".NET", kind: "technology" },
+    dotnet: { key: "dotnet", label: ".NET", kind: "technology" },
+    ".net core": { key: "dotnet_core", label: ".NET Core", kind: "technology" },
+    "dotnet core": { key: "dotnet_core", label: ".NET Core", kind: "technology" },
+    "entity framework": {
+      key: "entity_framework",
+      label: "Entity Framework",
+      kind: "technology",
+    },
+    "sql server": { key: "sql_server", label: "SQL Server", kind: "technology" },
+    mssql: { key: "sql_server", label: "SQL Server", kind: "technology" },
+    jwt: { key: "jwt", label: "JWT", kind: "technology" },
+    rbac: { key: "rbac", label: "RBAC", kind: "technology" },
   };
 
 export function normalizeCapabilityLabel(

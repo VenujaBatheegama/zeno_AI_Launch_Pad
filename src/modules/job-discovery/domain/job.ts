@@ -109,6 +109,11 @@ export const jobSearchPreferencesSchema = z
         ),
       ),
     reject_inferred_direction: z.boolean().default(false),
+    /**
+     * When true, internal plan generation may also use eligible Career Evidence
+     * (skills/experience). When false, only explicit preferences drive search.
+     */
+    smart_skill_analyser_enabled: z.boolean().default(false),
   })
   .strict();
 
@@ -118,6 +123,7 @@ export type JobSearchProfile = {
   id: string;
   userId: string;
   preferences: JobSearchPreferences;
+  preferenceRevision: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -246,6 +252,7 @@ export const emptyJobSearchPreferences: JobSearchPreferences = {
   target_role_families: [],
   capability_intents: [],
   reject_inferred_direction: false,
+  smart_skill_analyser_enabled: false,
 };
 
 export function titleMatchesExcludedKeyword(

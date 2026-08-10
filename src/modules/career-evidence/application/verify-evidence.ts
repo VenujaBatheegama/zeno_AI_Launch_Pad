@@ -1,5 +1,9 @@
+import { ZodError } from "zod";
+
 import {
+  careerEvidenceSchema,
   reconcileUserEdits,
+  type CareerEvidence,
   type CareerEvidenceSet,
   verifiedCareerEvidenceSchema,
 } from "../domain/evidence";
@@ -34,7 +38,27 @@ export async function verifyEvidence(
       "This evidence draft no longer exists or has already been verified.",
     );
   }
-  const submitted = verifiedCareerEvidenceSchema.parse(command.evidence);
+
+  let submitted: CareerEvidence;
+  try {
+    submitted = verifiedCareerEvidenceSchema.parse(
+      normalizeEvidenceForVerification(command.evidence),
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const detail = error.issues
+        .slice(0, 3)
+        .map((issue) => issue.message)
+        .join(" ");
+      throw new CareerEvidenceError(
+        "INVALID_STATE",
+        detail ||
+          "Some profile fields still need completing before verification.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 
   return dependencies.repository.verify({
     id: command.id,
@@ -42,4 +66,18 @@ export async function verifyEvidence(
     evidence: reconcileUserEdits(current.evidence, submitted),
     verifiedAt: dependencies.now().toISOString(),
   });
+}
+
+/** Fill blanks that block verification but are common in real CVs. */
+function normalizeEvidenceForVerification(evidence: unknown): unknown {
+  const parsed = careerEvidenceSchema.parse(evidence);
+  return {
+    ...parsed,
+    education: parsed.education.map((item) => ({
+      ...item,
+      institution:
+        item.institution.trim() ||
+        (item.qualification?.trim() ? "Not specified" : item.institution),
+    })),
+  };
 }

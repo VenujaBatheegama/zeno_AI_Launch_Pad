@@ -13,6 +13,7 @@ type ProfileRow = {
   id: string;
   user_id: string;
   preferences: unknown;
+  preference_revision?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -104,21 +105,44 @@ export class SupabaseJobDiscoveryRepository
   async saveSearchProfile(
     input: Parameters<JobDiscoveryRepository["saveSearchProfile"]>[0],
   ): Promise<JobSearchProfile> {
-    const { data, error } = await this.client
+    const payload = {
+      id: input.id,
+      user_id: input.userId,
+      preferences: input.preferences,
+      preference_revision: input.preferenceRevision,
+      updated_at: input.updatedAt,
+    };
+    let { data, error } = await this.client
       .from("job_search_profiles")
-      .upsert(
-        {
-          id: input.id,
-          user_id: input.userId,
-          preferences: input.preferences,
-          updated_at: input.updatedAt,
-        },
-        { onConflict: "user_id" },
-      )
+      .upsert(payload, { onConflict: "user_id" })
       .select()
       .single();
+
+    // Migration 0007 may not be applied yet — fall back without the column.
+    if (error && /preference_revision/i.test(error.message)) {
+      const fallback = await this.client
+        .from("job_search_profiles")
+        .upsert(
+          {
+            id: input.id,
+            user_id: input.userId,
+            preferences: input.preferences,
+            updated_at: input.updatedAt,
+          },
+          { onConflict: "user_id" },
+        )
+        .select()
+        .single();
+      data = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) throw persistenceError("Job preferences could not be saved.", error);
-    return mapProfile(data as ProfileRow);
+    const mapped = mapProfile(data as ProfileRow);
+    return {
+      ...mapped,
+      preferenceRevision: input.preferenceRevision || mapped.preferenceRevision,
+    };
   }
 
   async upsertDiscoveredJobs(
@@ -243,6 +267,7 @@ function mapProfile(row: ProfileRow): JobSearchProfile {
     id: row.id,
     userId: row.user_id,
     preferences: jobSearchPreferencesSchema.parse(row.preferences),
+    preferenceRevision: row.preference_revision ?? 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

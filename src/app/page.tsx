@@ -1,40 +1,30 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { CareerEvidenceWorkspace } from "@/modules/career-evidence/presentation/career-evidence-workspace";
-import { getCareerEvidenceApplication } from "@/server/composition-root";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
+import { getSessionUser } from "@/server/auth";
+import { getProfileRepository } from "@/server/identity";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const evidenceSet = await getCareerEvidenceApplication().getCurrent();
+export default async function RootPage() {
+  // Local recovery path before browser auth env is configured.
+  if (!isSupabaseAuthConfigured()) {
+    redirect("/app/matching");
+  }
 
-  return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-5">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
-              Zeno
-            </p>
-            <div className="flex gap-4 text-sm font-semibold text-slate-600">
-              <Link href="/jobs" className="hover:text-slate-950">
-                Job discovery
-              </Link>
-              <Link href="/matching" className="hover:text-slate-950">
-                Matching
-              </Link>
-            </div>
-          </div>
-          <h1 className="mt-1 max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-            Build your verified career evidence.
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Zeno extracts facts from your CV, then asks you to review every
-            detail before it can become trusted evidence.
-          </p>
-        </header>
-        <CareerEvidenceWorkspace initialEvidenceSet={evidenceSet} />
-      </div>
-    </main>
+  const user = await getSessionUser();
+  if (!user) {
+    redirect("/auth/sign-in");
+  }
+
+  const profile = await getProfileRepository().getOrCreate(
+    user.id,
+    (user.user_metadata?.display_name as string | undefined) ?? null,
   );
+
+  if (profile.onboardingStatus === "completed") {
+    redirect("/app/home");
+  }
+
+  redirect("/onboarding");
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
+  CachedRequirementExtraction,
   CareerIntelligenceRepository,
   JobAnalysis,
   JobMatchAnalysis,
@@ -9,6 +10,7 @@ import type {
   PersistedCareerStageAssessment,
   PlannedJobQuery,
 } from "../application/ports";
+import type { JobRequirement } from "../domain/schemas";
 import type { CareerStageAssessment } from "../domain/career-stage";
 import { capabilitySignalSchema } from "../domain/capability-schemas";
 import { CareerIntelligenceError } from "../domain/errors";
@@ -96,7 +98,19 @@ export class SupabaseCareerIntelligenceRepository
       }
     >;
   }): Promise<JobSearchPlan> {
-    const { error: planError } = await this.client.from("job_search_plans").insert({
+    // Stale-write protection: never let an older generation replace a newer plan.
+    const latest = await this.getLatestSearchPlan(input.plan.userId);
+    if (
+      latest &&
+      (latest.preferenceRevision > input.plan.preferenceRevision ||
+        latest.planRevision > input.plan.planRevision ||
+        (latest.preferenceRevision === input.plan.preferenceRevision &&
+          latest.profileRevision > input.plan.profileRevision))
+    ) {
+      return latest;
+    }
+
+    const planRow = {
       id: input.plan.id,
       user_id: input.plan.userId,
       career_stage_assessment_id: input.plan.careerStageAssessmentId,
@@ -104,10 +118,48 @@ export class SupabaseCareerIntelligenceRepository
       evidence_fingerprint: input.plan.evidenceFingerprint,
       query_budget: input.plan.queryBudget,
       status: input.plan.status,
+      generation_status: input.plan.generationStatus,
+      smart_skill_analyser_enabled: input.plan.smartSkillAnalyserEnabled,
+      preference_revision: input.plan.preferenceRevision,
+      profile_revision: input.plan.profileRevision,
+      plan_revision: input.plan.planRevision,
       reasons: input.plan.reasons,
       created_at: input.plan.createdAt,
       updated_at: input.plan.updatedAt,
-    });
+    };
+    let { error: planError } = await this.client
+      .from("job_search_plans")
+      .insert(planRow);
+
+    // Migration 0007 may not be applied — retry with the pre-migration columns.
+    if (
+      planError &&
+      (/generation_status|smart_skill_analyser|preference_revision|profile_revision|plan_revision|null value in column \"career_stage_assessment_id\"/i.test(
+        planError.message,
+      ) ||
+        planError.code === "23502")
+    ) {
+      const legacy = await this.client.from("job_search_plans").insert({
+        id: input.plan.id,
+        user_id: input.plan.userId,
+        // Legacy schema requires an assessment id; keep null only when migration applied.
+        career_stage_assessment_id: input.plan.careerStageAssessmentId,
+        preferences_fingerprint: input.plan.preferencesFingerprint,
+        evidence_fingerprint: input.plan.evidenceFingerprint,
+        query_budget: input.plan.queryBudget,
+        status: input.plan.status,
+        reasons: [
+          ...input.plan.reasons,
+          `meta:smart=${input.plan.smartSkillAnalyserEnabled}`,
+          `meta:prefRev=${input.plan.preferenceRevision}`,
+          `meta:profileRev=${input.plan.profileRevision}`,
+          `meta:planRev=${input.plan.planRevision}`,
+        ],
+        created_at: input.plan.createdAt,
+        updated_at: input.plan.updatedAt,
+      });
+      planError = legacy.error;
+    }
     if (planError) throw persistence("Search plan could not be saved.", planError);
 
     const { error: queryError } = await this.client.from("planned_job_queries").insert(
@@ -311,6 +363,68 @@ export class SupabaseCareerIntelligenceRepository
     );
     if (!saved) throw persistence("Job analysis disappeared after save.", null);
     return saved;
+  }
+
+  async getRequirementExtraction(input: {
+    descriptionHash: string;
+    schemaVersion: string;
+    extractionPolicyVersion: string;
+  }): Promise<CachedRequirementExtraction | null> {
+    const { data, error } = await this.client
+      .from("job_requirement_extractions")
+      .select()
+      .eq("description_hash", input.descriptionHash)
+      .eq("schema_version", input.schemaVersion)
+      .eq("extraction_policy_version", input.extractionPolicyVersion)
+      .maybeSingle();
+    if (error) {
+      // Migration 0008 may not be applied yet — degrade to no cache.
+      if (/job_requirement_extractions|schema cache/i.test(error.message)) {
+        return null;
+      }
+      throw persistence("Requirement extraction cache could not be loaded.", error);
+    }
+    return data ? mapRequirementExtraction(data) : null;
+  }
+
+  async saveRequirementExtraction(
+    row: CachedRequirementExtraction,
+  ): Promise<CachedRequirementExtraction> {
+    const { data, error } = await this.client
+      .from("job_requirement_extractions")
+      .upsert(
+        {
+          id: row.id,
+          job_id: row.jobId,
+          description_hash: row.descriptionHash,
+          schema_version: row.schemaVersion,
+          extraction_policy_version: row.extractionPolicyVersion,
+          status: row.status,
+          opportunity_band: row.opportunityBand,
+          opportunity_confidence: row.opportunityConfidence,
+          opportunity_reasons: row.opportunityReasons,
+          requirements: row.requirements,
+          warnings: row.warnings,
+          model: row.model,
+          last_error_category: row.lastErrorCategory,
+          extracted_at: row.extractedAt,
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+        },
+        {
+          onConflict:
+            "description_hash,schema_version,extraction_policy_version",
+        },
+      )
+      .select()
+      .single();
+    if (error) {
+      if (/job_requirement_extractions|schema cache/i.test(error.message)) {
+        return row;
+      }
+      throw persistence("Requirement extraction cache could not be saved.", error);
+    }
+    return mapRequirementExtraction(data);
   }
 
   async getMatchAnalysisByListing(
@@ -549,15 +663,29 @@ export class SupabaseCareerIntelligenceRepository
       .order("priority", { ascending: true });
     if (error) throw persistence("Planned queries could not be loaded.", error);
 
+    const reasons = (row.reasons as string[]) ?? [];
+    const meta = parsePlanMeta(reasons);
     return {
       id: row.id as string,
       userId: row.user_id as string,
-      careerStageAssessmentId: row.career_stage_assessment_id as string,
+      careerStageAssessmentId:
+        (row.career_stage_assessment_id as string | null) ?? null,
       preferencesFingerprint: row.preferences_fingerprint as string,
       evidenceFingerprint: row.evidence_fingerprint as string,
       queryBudget: row.query_budget as number,
       status: row.status as JobSearchPlan["status"],
-      reasons: row.reasons as string[],
+      generationStatus:
+        (row.generation_status as JobSearchPlan["generationStatus"] | undefined) ??
+        "ready",
+      smartSkillAnalyserEnabled:
+        row.smart_skill_analyser_enabled !== undefined &&
+        row.smart_skill_analyser_enabled !== null
+          ? Boolean(row.smart_skill_analyser_enabled)
+          : meta.smart,
+      preferenceRevision: Number(row.preference_revision ?? meta.prefRev ?? 1),
+      profileRevision: Number(row.profile_revision ?? meta.profileRev ?? 0),
+      planRevision: Number(row.plan_revision ?? meta.planRev ?? 1),
+      reasons: reasons.filter((reason) => !reason.startsWith("meta:")),
       createdAt: row.created_at as string,
       updatedAt: row.updated_at as string,
       queries: (data ?? []).map((query) => ({
@@ -596,6 +724,45 @@ function mapAssessment(row: Record<string, unknown>): PersistedCareerStageAssess
     assessedAt: row.assessed_at as string,
     evidenceFingerprint: row.evidence_fingerprint as string,
     preferencesFingerprint: row.preferences_fingerprint as string,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function mapRequirementExtraction(
+  row: Record<string, unknown>,
+): CachedRequirementExtraction {
+  const requirements = (
+    (row.requirements as Array<Record<string, unknown>>) ?? []
+  ).map((requirement) =>
+    jobRequirementSchema.parse({
+      id: requirement.id,
+      statement: requirement.statement ?? requirement.normalized_statement,
+      category: requirement.category,
+      importance: requirement.importance,
+      explicit: requirement.explicit,
+      confidence: requirement.confidence,
+      source_quote: requirement.source_quote,
+      quantitative_threshold: requirement.quantitative_threshold ?? null,
+    }),
+  ) as JobRequirement[];
+
+  return {
+    id: row.id as string,
+    jobId: (row.job_id as string | null) ?? null,
+    descriptionHash: row.description_hash as string,
+    schemaVersion: row.schema_version as string,
+    extractionPolicyVersion: row.extraction_policy_version as string,
+    status: row.status as CachedRequirementExtraction["status"],
+    opportunityBand: row.opportunity_band as OpportunityBand,
+    opportunityConfidence:
+      row.opportunity_confidence as CachedRequirementExtraction["opportunityConfidence"],
+    opportunityReasons: (row.opportunity_reasons as string[]) ?? [],
+    requirements,
+    warnings: (row.warnings as string[]) ?? [],
+    model: (row.model as string | null) ?? null,
+    lastErrorCategory: (row.last_error_category as string | null) ?? null,
+    extractedAt: row.extracted_at as string,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -674,6 +841,24 @@ function mapMatchAnalysis(row: Record<string, unknown>): JobMatchAnalysis {
     matches: matches as RequirementMatch[],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+  };
+}
+
+function parsePlanMeta(reasons: string[]): {
+  smart: boolean;
+  prefRev: number;
+  profileRev: number;
+  planRev: number;
+} {
+  const read = (key: string): string | undefined => {
+    const hit = reasons.find((reason) => reason.startsWith(`meta:${key}=`));
+    return hit?.slice(`meta:${key}=`.length);
+  };
+  return {
+    smart: read("smart") === "true",
+    prefRev: Number(read("prefRev") ?? 1),
+    profileRev: Number(read("profileRev") ?? 0),
+    planRev: Number(read("planRev") ?? 1),
   };
 }
 

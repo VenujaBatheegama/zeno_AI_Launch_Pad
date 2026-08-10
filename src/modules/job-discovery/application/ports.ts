@@ -24,6 +24,7 @@ export interface JobDiscoveryRepository {
     id: string;
     userId: string;
     preferences: JobSearchPreferences;
+    preferenceRevision: number;
     updatedAt: string;
   }): Promise<JobSearchProfile>;
   upsertDiscoveredJobs(input: {

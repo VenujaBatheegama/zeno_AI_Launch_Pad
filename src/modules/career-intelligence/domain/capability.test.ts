@@ -465,6 +465,8 @@ function sampleEvidence(): CareerEvidence {
       },
     ],
     certifications: [],
+    achievements: [],
+    references: [],
     warnings: [],
   };
 }

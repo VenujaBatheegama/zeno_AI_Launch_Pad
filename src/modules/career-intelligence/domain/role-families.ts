@@ -33,11 +33,22 @@ export type PlannedTitle = {
  */
 export function expandRoleTitles(input: {
   preferences: JobSearchPreferences;
-  assessment: CareerStageAssessment;
+  assessment?: CareerStageAssessment | null;
   budget: number;
+  /** When true, demonstrated capability may add closely related titles. */
+  smartSkillAnalyserEnabled?: boolean;
   capabilityAggregates?: AggregatedCapability[];
 }): PlannedTitle[] {
-  void input.capabilityAggregates;
+  const smart = Boolean(input.smartSkillAnalyserEnabled);
+  const targetBands =
+    input.assessment?.targetOpportunityBands?.length
+      ? input.assessment.targetOpportunityBands
+      : (["early_career"] as OpportunityBand[]);
+  const stretchBands =
+    input.assessment?.stretchOpportunityBands?.length
+      ? input.assessment.stretchOpportunityBands
+      : targetBands;
+
   const families = resolveFamilies([
     ...input.preferences.target_role_families,
     ...input.preferences.roles,
@@ -69,15 +80,16 @@ export function expandRoleTitles(input: {
       familyKey: families[0]?.key ?? "custom",
       familyLabel: families[0]?.label ?? "Custom",
       title: cleaned,
-      opportunityBand: input.assessment.targetOpportunityBands[0] ?? "unknown",
+      opportunityBand: targetBands[0] ?? "unknown",
       source: "explicit_preference",
       reason: "Explicit desired role from saved preferences.",
       priority: 1,
     });
   }
 
+  // Preference-only mode: stay on explicit roles (+ light family mapping).
   for (const family of families) {
-    for (const band of input.assessment.targetOpportunityBands) {
+    for (const band of targetBands) {
       const mapped =
         ROLE_FAMILY_CATALOG[family.key].titles_by_band[
           band as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
@@ -93,6 +105,37 @@ export function expandRoleTitles(input: {
           priority: 2,
         });
       }
+    }
+  }
+
+  if (smart && input.capabilityAggregates?.length) {
+    for (const aggregate of input.capabilityAggregates.slice(0, 8)) {
+      const label = aggregate.label?.trim();
+      if (
+        !label ||
+        aggregate.band === "not_yet_demonstrated" ||
+        aggregate.band === "unknown" ||
+        aggregate.band === "limited_evidence"
+      ) {
+        continue;
+      }
+      const familyKey = familyForIntent(label, aggregate.key ?? label);
+      if (!familyKey) continue;
+      if (families[0] && familyKey !== families[0].key) continue;
+      const band = targetBands[0] ?? "early_career";
+      const title =
+        ROLE_FAMILY_CATALOG[familyKey].titles_by_band[
+          band as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
+        ]?.[0] ?? label;
+      add({
+        familyKey,
+        familyLabel: ROLE_FAMILY_CATALOG[familyKey].label,
+        title,
+        opportunityBand: band,
+        source: "demonstrated_capability",
+        reason: "Closely related role supported by career profile evidence.",
+        priority: 2,
+      });
     }
   }
 
@@ -115,7 +158,7 @@ export function expandRoleTitles(input: {
     ) {
       continue;
     }
-    const band = input.assessment.targetOpportunityBands[0] ?? "early_career";
+    const band = targetBands[0] ?? "early_career";
     const title =
       ROLE_FAMILY_CATALOG[familyKey].titles_by_band[
         band as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
@@ -140,16 +183,13 @@ export function expandRoleTitles(input: {
     // Stay inside the user's primary family. Do not inject DevOps (or any
     // other catalog family) merely as breadth.
     const primaryFamily = families[0];
-    const stretchBand =
-      input.assessment.stretchOpportunityBands[0] ??
-      input.assessment.targetOpportunityBands[0] ??
-      "early_career";
+    const stretchBand = stretchBands[0] ?? targetBands[0] ?? "early_career";
     const altTitle =
       ROLE_FAMILY_CATALOG[primaryFamily.key].titles_by_band[
         stretchBand as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
       ]?.at(-1) ??
       ROLE_FAMILY_CATALOG[primaryFamily.key].titles_by_band[
-        input.assessment.targetOpportunityBands[0] as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
+        targetBands[0] as keyof (typeof ROLE_FAMILY_CATALOG)[RoleFamilyKey]["titles_by_band"]
       ]?.[1];
     if (altTitle) {
       alternative = {

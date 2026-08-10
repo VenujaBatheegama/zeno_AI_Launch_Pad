@@ -17,6 +17,8 @@ const evidence: CareerEvidence = {
   skills: [],
   projects: [],
   certifications: [],
+  achievements: [],
+  references: [],
   warnings: [],
 };
 

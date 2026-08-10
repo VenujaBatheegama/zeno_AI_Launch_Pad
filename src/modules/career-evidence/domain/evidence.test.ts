@@ -26,6 +26,8 @@ const minimalExtraction = {
   ],
   projects: [],
   certifications: [],
+  achievements: [],
+  references: [],
   warnings: [],
 };
 
@@ -96,8 +98,31 @@ describe("career evidence contract", () => {
     expect(evidence.warnings).toContain(
       "Education “GCE O/L — 9A passes, Dec 2019” was kept for review because the institution was missing.",
     );
+    // Qualification-only school exams are allowed at verification time.
+    expect(() => verifiedCareerEvidenceSchema.parse(evidence)).not.toThrow();
+  });
+
+  it("rejects education that has neither institution nor qualification", () => {
+    const evidence = addExtractionMetadata(
+      extractedCareerEvidenceSchema.parse({
+        ...minimalExtraction,
+        skills: [],
+        education: [
+          {
+            institution: null,
+            qualification: null,
+            field_of_study: null,
+            start_date: null,
+            end_date: "2019",
+            source_quote: "Completed secondary schooling in 2019",
+          },
+        ],
+      }),
+      () => "00000000-0000-4000-8000-000000000010",
+    );
+
     expect(() => verifiedCareerEvidenceSchema.parse(evidence)).toThrow(
-      "Complete this required field before verification.",
+      /school\/institution or qualification/i,
     );
   });
 

@@ -59,6 +59,8 @@ describe("Slice 0", () => {
               ],
               projects: [],
               certifications: [],
+              achievements: [],
+              references: [],
               warnings: [],
             };
           },
@@ -172,5 +174,9 @@ class SliceRepository implements CareerEvidenceRepository {
 
   async getCurrent(userId: string) {
     return this.current?.userId === userId ? this.current : null;
+  }
+
+  async getDocumentExtractedText() {
+    return null;
   }
 }

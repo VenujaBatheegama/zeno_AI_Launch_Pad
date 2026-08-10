@@ -3,6 +3,7 @@ import {
   normalizeExtractedDate,
   type CareerEvidenceSet,
 } from "../domain/evidence";
+import { enrichEvidenceWithReferences } from "../domain/recover-references";
 import { CareerEvidenceError } from "../domain/errors";
 import type {
   CareerEvidenceRepository,
@@ -67,7 +68,9 @@ export async function ingestCv(
     );
     const extracted = await dependencies.evidenceExtractor.extract(extractedText);
     const grounded = removeUnsupportedEvidence(extracted, extractedText);
-    const evidence = addExtractionMetadata(grounded, dependencies.createId);
+    const withMetadata = addExtractionMetadata(grounded, dependencies.createId);
+    // PDF text often scrambles REFERENCES; recover referees deterministically.
+    const evidence = enrichEvidenceWithReferences(withMetadata, extractedText);
 
     await dependencies.repository.markDocumentProcessed({
       id: documentId,
@@ -193,12 +196,15 @@ function removeUnsupportedEvidence(
     return null;
   };
 
-  const profileLabels: Record<keyof typeof extracted.profile, string> = {
+  const profileLabels: Partial<Record<keyof typeof extracted.profile, string>> = {
     full_name: "full name",
     email: "email",
     phone: "phone number",
     location: "location",
     summary: "summary",
+    linkedin_url: "LinkedIn URL",
+    github_url: "GitHub URL",
+    portfolio_url: "portfolio URL",
   };
   const profile = Object.fromEntries(
     Object.entries(extracted.profile).map(([key, value]) => [
@@ -206,7 +212,7 @@ function removeUnsupportedEvidence(
       optionalSupported(
         value,
         "Profile",
-        profileLabels[key as keyof typeof extracted.profile],
+        profileLabels[key as keyof typeof extracted.profile] ?? key,
       ),
     ]),
   ) as typeof extracted.profile;
@@ -407,6 +413,52 @@ function removeUnsupportedEvidence(
     skills,
     projects,
     certifications,
+    achievements: (extracted.achievements ?? [])
+      .map((item) => {
+        const section = `Achievement “${entryLabel(item.name)}”`;
+        return {
+          ...item,
+          name: optionalSupported(item.name, section, "name"),
+          result: optionalSupported(item.result, section, "result"),
+          issuer: optionalSupported(item.issuer, section, "issuer"),
+          date: supportedDate(
+            item.date,
+            item.source_quote,
+            section,
+            "date",
+          ),
+          source_quote: supportedQuote(item.source_quote, section),
+        };
+      })
+      .filter((item) =>
+        keepPartialEntry(
+          Boolean(item.name || item.result),
+          `Achievement “${entryLabel(item.name)}”`,
+        ),
+      ),
+    references: (extracted.references ?? [])
+      .map((item) => {
+        const section = `Reference “${entryLabel(item.name)}”`;
+        return {
+          ...item,
+          name: optionalSupported(item.name, section, "name"),
+          title: optionalSupported(item.title, section, "title"),
+          organization: optionalSupported(
+            item.organization,
+            section,
+            "organization",
+          ),
+          email: optionalSupported(item.email, section, "email"),
+          phone: optionalSupported(item.phone, section, "phone"),
+          source_quote: supportedQuote(item.source_quote, section),
+        };
+      })
+      .filter((item) =>
+        keepPartialEntry(
+          Boolean(item.name),
+          `Reference “${entryLabel(item.name)}”`,
+        ),
+      ),
     warnings: [...extracted.warnings, ...omissionWarnings],
   };
 }

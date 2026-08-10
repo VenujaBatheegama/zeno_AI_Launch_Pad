@@ -53,6 +53,8 @@ describe("ingest CV", () => {
             ],
             projects: [],
             certifications: [],
+            achievements: [],
+            references: [],
             warnings: [],
           }),
         },
@@ -118,6 +120,8 @@ describe("ingest CV", () => {
             skills: [],
             projects: [],
             certifications: [],
+            achievements: [],
+            references: [],
             warnings: [],
           }),
         },
@@ -224,6 +228,8 @@ describe("ingest CV", () => {
             ],
             projects: [],
             certifications: [],
+            achievements: [],
+            references: [],
             warnings: [],
           }),
         },
@@ -311,5 +317,9 @@ class InMemoryRepository implements CareerEvidenceRepository {
 
   async getCurrent() {
     return this.evidence;
+  }
+
+  async getDocumentExtractedText() {
+    return this.document?.extractedText ?? null;
   }
 }

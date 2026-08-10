@@ -15,8 +15,31 @@ const configSchema = z
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     SUPABASE_STORAGE_BUCKET: z.string().min(1).default("cv-sources"),
+    // Primary key (still required for backwards compatibility).
     GROQ_API_KEY: z.string().min(1),
+    // Optional extra free-tier keys for temporary MVP rotation.
+    GROQ_API_KEY_2: z.string().min(1).optional(),
+    GROQ_API_KEY_3: z.string().min(1).optional(),
+    // Optional comma-separated override/addition: key1,key2,key3
+    GROQ_API_KEYS: z.string().optional(),
     GROQ_MODEL: z.string().min(1),
+    // Comma-separated models tried after GROQ_MODEL hits rate limits / failures.
+    // Prefer json_schema-capable models (openai/gpt-oss-*). Llama lacks strict schema.
+    GROQ_FALLBACK_MODELS: z
+      .string()
+      .default("openai/gpt-oss-120b"),
+    CAREER_EXTRACTION_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .default(2),
+    CAREER_EXTRACTION_MAX_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(2)
+      .default(2),
     JSEARCH_API_KEY: z.string().min(1).optional(),
     RAPIDAPI_KEY: z.string().min(1).optional(),
     JSEARCH_BASE_URL: z
@@ -113,6 +136,30 @@ const configSchema = z
       ),
     ];
 
+    const groqFallbackModels = [
+      ...new Set(
+        config.GROQ_FALLBACK_MODELS.split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .filter((value) => value !== config.GROQ_MODEL),
+      ),
+    ];
+
+    const fromList = (config.GROQ_API_KEYS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const groqApiKeys = [
+      ...new Set(
+        [
+          config.GROQ_API_KEY,
+          config.GROQ_API_KEY_2,
+          config.GROQ_API_KEY_3,
+          ...fromList,
+        ].filter((value): value is string => Boolean(value?.trim())),
+      ),
+    ];
+
     return {
       ...config,
       jsearchApiKey: apiKey,
@@ -120,6 +167,8 @@ const configSchema = z
       theirstackApiKey: config.THEIRSTACK_API_KEY,
       theirstackBaseUrl: config.THEIRSTACK_BASE_URL.replace(/\/+$/u, ""),
       jobSources,
+      groqFallbackModels,
+      groqApiKeys,
     };
   });
 
@@ -129,6 +178,10 @@ export type JobSourceKey = z.infer<typeof jobSourceKeySchema>;
 let cachedConfig: ServerConfig | undefined;
 
 export function getServerConfig(): ServerConfig {
+  // In development, re-parse so `next` env reloads pick up model/key changes.
+  if (process.env.NODE_ENV === "development") {
+    return configSchema.parse(process.env);
+  }
   cachedConfig ??= configSchema.parse(process.env);
   return cachedConfig;
 }

@@ -11,6 +11,7 @@ import type {
 } from "@/modules/job-discovery/domain/job";
 
 import type {
+  CachedRequirementExtraction,
   CareerIntelligenceRepository,
   JobAnalysis,
   JobMatchAnalysis,
@@ -33,6 +34,7 @@ export class InMemoryCareerIntelligenceRepository
   analyses = new Map<string, JobAnalysis>();
   matches = new Map<string, JobMatchAnalysis>();
   capabilityProfiles: PersistedCandidateCapabilityProfile[] = [];
+  extractions = new Map<string, CachedRequirementExtraction>();
 
   async saveCareerStageAssessment(input: {
     id: string;
@@ -73,6 +75,16 @@ export class InMemoryCareerIntelligenceRepository
       }
     >;
   }): Promise<JobSearchPlan> {
+    const latest = await this.getLatestSearchPlan(input.plan.userId);
+    if (
+      latest &&
+      (latest.preferenceRevision > input.plan.preferenceRevision ||
+        latest.planRevision > input.plan.planRevision ||
+        (latest.preferenceRevision === input.plan.preferenceRevision &&
+          latest.profileRevision > input.plan.profileRevision))
+    ) {
+      return latest;
+    }
     const plan: JobSearchPlan = {
       ...input.plan,
       queries: input.queries.map((query) => ({
@@ -149,6 +161,24 @@ export class InMemoryCareerIntelligenceRepository
   async getJobAnalysisByListing(userId: string, listingId: string) {
     const analysis = this.analyses.get(`${userId}:${listingId}`);
     return analysis ?? null;
+  }
+
+  async getRequirementExtraction(input: {
+    descriptionHash: string;
+    schemaVersion: string;
+    extractionPolicyVersion: string;
+  }) {
+    return (
+      this.extractions.get(
+        `${input.descriptionHash}:${input.schemaVersion}:${input.extractionPolicyVersion}`,
+      ) ?? null
+    );
+  }
+
+  async saveRequirementExtraction(row: CachedRequirementExtraction) {
+    const key = `${row.descriptionHash}:${row.schemaVersion}:${row.extractionPolicyVersion}`;
+    this.extractions.set(key, row);
+    return row;
   }
 
   async listJobAnalysesByListingIds(userId: string, listingIds: string[]) {
@@ -231,11 +261,40 @@ export class FakeEvidenceRepository implements CareerEvidenceRepository {
   async createDocument(): Promise<void> {}
   async markDocumentProcessed(): Promise<void> {}
   async markDocumentFailed(): Promise<void> {}
-  async createDraft(): Promise<CareerEvidenceSet> {
-    throw new Error("not implemented");
+  async createDraft(input: {
+    id: string;
+    userId: string;
+    sourceDocumentId: string;
+    evidence: CareerEvidenceSet["evidence"];
+    extractionModel: string;
+  }): Promise<CareerEvidenceSet> {
+    this.current = {
+      id: input.id,
+      userId: input.userId,
+      sourceDocumentId: input.sourceDocumentId,
+      status: "draft",
+      evidence: input.evidence,
+      extractionModel: input.extractionModel,
+      createdAt: "2026-08-09T12:00:00.000Z",
+      updatedAt: "2026-08-09T12:00:00.000Z",
+      verifiedAt: null,
+    };
+    return this.current;
   }
-  async saveDraft(): Promise<CareerEvidenceSet> {
-    throw new Error("not implemented");
+  async saveDraft(input: {
+    id: string;
+    userId: string;
+    evidence: CareerEvidenceSet["evidence"];
+  }): Promise<CareerEvidenceSet> {
+    if (!this.current || this.current.id !== input.id) {
+      throw new Error("draft not found");
+    }
+    this.current = {
+      ...this.current,
+      evidence: input.evidence,
+      updatedAt: "2026-08-09T12:00:00.000Z",
+    };
+    return this.current;
   }
   async verify(): Promise<CareerEvidenceSet> {
     throw new Error("not implemented");
@@ -245,6 +304,9 @@ export class FakeEvidenceRepository implements CareerEvidenceRepository {
   }
   async getCurrent(): Promise<CareerEvidenceSet | null> {
     return this.current;
+  }
+  async getDocumentExtractedText(): Promise<string | null> {
+    return null;
   }
 }
 
@@ -261,13 +323,15 @@ export class FakeJobDiscoveryRepository implements JobDiscoveryRepository {
     id: string;
     userId: string;
     preferences: JobSearchProfile["preferences"];
+    preferenceRevision: number;
     updatedAt: string;
   }) {
     this.profile = {
       id: input.id,
       userId: input.userId,
       preferences: input.preferences,
-      createdAt: input.updatedAt,
+      preferenceRevision: input.preferenceRevision,
+      createdAt: this.profile?.createdAt ?? input.updatedAt,
       updatedAt: input.updatedAt,
     };
     return this.profile;

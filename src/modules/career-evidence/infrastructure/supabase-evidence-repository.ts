@@ -199,6 +199,24 @@ export class SupabaseEvidenceRepository implements CareerEvidenceRepository {
 
     return data ? mapEvidenceRow(data as EvidenceRow) : null;
   }
+
+  async getDocumentExtractedText(input: {
+    documentId: string;
+    userId: string;
+  }): Promise<string | null> {
+    const { data, error } = await this.client
+      .from("cv_documents")
+      .select("extracted_text")
+      .eq("id", input.documentId)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+
+    if (error) {
+      throw persistenceError("CV source text could not be loaded.", error);
+    }
+
+    return (data?.extracted_text as string | null | undefined) ?? null;
+  }
 }
 
 function mapEvidenceRow(row: EvidenceRow): CareerEvidenceSet {

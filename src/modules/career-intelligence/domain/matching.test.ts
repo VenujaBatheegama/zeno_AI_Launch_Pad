@@ -266,6 +266,8 @@ function softwareInternEvidence(): CareerEvidence {
       },
     ],
     certifications: [],
+    achievements: [],
+    references: [],
     warnings: [],
   };
 }

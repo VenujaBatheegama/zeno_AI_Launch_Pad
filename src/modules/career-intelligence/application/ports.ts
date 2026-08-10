@@ -50,11 +50,16 @@ export type PlannedJobQuery = {
 export type JobSearchPlan = {
   id: string;
   userId: string;
-  careerStageAssessmentId: string;
+  careerStageAssessmentId: string | null;
   preferencesFingerprint: string;
   evidenceFingerprint: string;
   queryBudget: number;
   status: "draft" | "executed" | "partial" | "failed";
+  generationStatus: "pending" | "ready" | "failed";
+  smartSkillAnalyserEnabled: boolean;
+  preferenceRevision: number;
+  profileRevision: number;
+  planRevision: number;
   reasons: string[];
   createdAt: string;
   updatedAt: string;
@@ -75,6 +80,26 @@ export type JobAnalysis = {
   status: "ready" | "not_analysable" | "failed";
   warnings: string[];
   requirements: JobRequirement[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Shared extraction cache row keyed by description hash + schema/policy versions. */
+export type CachedRequirementExtraction = {
+  id: string;
+  jobId: string | null;
+  descriptionHash: string;
+  schemaVersion: string;
+  extractionPolicyVersion: string;
+  status: "ready" | "insufficient_description";
+  opportunityBand: OpportunityBand;
+  opportunityConfidence: ConfidenceLevel;
+  opportunityReasons: string[];
+  requirements: JobRequirement[];
+  warnings: string[];
+  model: string | null;
+  lastErrorCategory: string | null;
+  extractedAt: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -205,6 +230,15 @@ export interface CareerIntelligenceRepository {
     listingIds: string[],
   ): Promise<JobAnalysis[]>;
   saveJobAnalysis(analysis: JobAnalysis): Promise<JobAnalysis>;
+
+  getRequirementExtraction(input: {
+    descriptionHash: string;
+    schemaVersion: string;
+    extractionPolicyVersion: string;
+  }): Promise<CachedRequirementExtraction | null>;
+  saveRequirementExtraction(
+    row: CachedRequirementExtraction,
+  ): Promise<CachedRequirementExtraction>;
 
   getMatchAnalysisByListing(
     userId: string,

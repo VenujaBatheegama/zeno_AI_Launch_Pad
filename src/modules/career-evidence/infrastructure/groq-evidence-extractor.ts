@@ -1,10 +1,16 @@
-import { createGroq } from "@ai-sdk/groq";
 import {
   generateText,
   NoOutputGeneratedError,
   tool,
 } from "ai";
 import { ZodError } from "zod";
+
+import {
+  GroqKeyPool,
+  GroqKeysExhaustedError,
+  isGroqRateLimited,
+  isGroqToolFailure,
+} from "@/lib/ai/groq-key-pool";
 
 import type { EvidenceExtractor } from "../application/ports";
 import {
@@ -34,6 +40,19 @@ Rules:
   then explain exactly what the user should review. Avoid vague warnings such
   as "incomplete entries" or "uncertainty in the CV".
 - A profile summary must be copied from an existing summary; do not write one.
+- Extract LinkedIn, GitHub, and portfolio URLs into profile.linkedin_url,
+  profile.github_url, and profile.portfolio_url when explicitly present.
+- Keep project and work bullets atomic: do not collapse multiple technical facts
+  (technologies, features, auth, data, integrations, reporting) into one vague
+  sentence. Prefer several concrete bullets over one summary.
+- Preserve full technology lists on projects when listed in the CV.
+- Put competition results, hackathon placements, and awards in achievements
+  (name + result such as "2nd Runners-up"), not certifications.
+- Put course credentials and professional certifications in certifications with
+  the full credential title (do not shorten names).
+- Extract REFERENCES / referees into references[] when present. Capture name,
+  title/role, organization, email, and phone exactly as written. Do not invent
+  contact details. Do not put referees into education, work, or projects.
 - Every evidence item must include one exact, verbatim source_quote from that
   item's own local CV text block. Include its written dates in source_quote when
   dates are returned. Do not combine adjacent entries into one source_quote.
@@ -42,61 +61,146 @@ Rules:
 - Do not include commentary outside the JSON object.`;
 
 export class GroqEvidenceExtractor implements EvidenceExtractor {
-  private readonly model;
+  private readonly keyPool: GroqKeyPool;
+  private readonly modelIds: string[];
 
-  constructor(apiKey: string, modelId: string) {
-    const groq = createGroq({ apiKey });
-    this.model = groq(modelId);
+  constructor(
+    apiKeys: string | string[] | GroqKeyPool,
+    modelId: string,
+    fallbackModelIds: string[] = [],
+  ) {
+    this.keyPool =
+      apiKeys instanceof GroqKeyPool
+        ? apiKeys
+        : new GroqKeyPool(Array.isArray(apiKeys) ? apiKeys : [apiKeys]);
+    this.modelIds = dedupeModels([modelId, ...fallbackModelIds]);
   }
 
   async extract(text: string): Promise<ExtractedCareerEvidence> {
     let lastError: unknown;
+    let sawRateLimit = false;
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const result = await generateText({
-          model: this.model,
-          system: EXTRACTION_INSTRUCTIONS,
-          prompt: `Extract career evidence from the CV below.\n\n<CV>\n${text}\n</CV>`,
-          tools: {
-            recordCareerEvidence: tool({
-              description:
-                "Record only career evidence explicitly supported by the CV.",
-              inputSchema: careerEvidenceToolInputSchema,
-            }),
-          },
-          toolChoice: {
-            type: "tool",
-            toolName: "recordCareerEvidence",
-          },
-        });
+    try {
+      return await this.keyPool.withKey(async (apiKey) => {
+        let keyError: unknown;
+        let keySawRateLimit = false;
+        let keySawToolFailure = false;
 
-        const call = result.toolCalls.find(
-          (toolCall) => toolCall.toolName === "recordCareerEvidence",
+        for (const modelId of this.modelIds) {
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              return await this.extractWithModel(apiKey, modelId, text);
+            } catch (error) {
+              keyError = error;
+              lastError = error;
+              if (isGroqRateLimited(error)) {
+                keySawRateLimit = true;
+                sawRateLimit = true;
+                console.warn(
+                  `[cv-extract] rate-limited on model ${modelId}; trying next model/key.`,
+                );
+                break;
+              }
+              if (isMalformedOutput(error) || isGroqToolFailure(error)) {
+                keySawToolFailure = true;
+                if (attempt === 0) {
+                  console.warn(
+                    `[cv-extract] malformed/tool failure on ${modelId} (retrying once).`,
+                  );
+                  continue;
+                }
+                console.warn(
+                  `[cv-extract] malformed/tool failure on ${modelId}; trying next model.`,
+                );
+                break;
+              }
+              // Hard failure for this request — do not burn other keys/models.
+              throw error;
+            }
+          }
+        }
+
+        // Rotate key on rate-limit or persistent tool-call flakiness.
+        if (keySawRateLimit || keySawToolFailure) {
+          throw keyError instanceof Error
+            ? keyError
+            : new Error("Groq extraction failed for this key.");
+        }
+
+        throw keyError instanceof Error
+          ? keyError
+          : new Error("CV extraction failed for this Groq key.");
+      });
+    } catch (error) {
+      lastError = error;
+      if (
+        error instanceof GroqKeysExhaustedError ||
+        (sawRateLimit && isGroqRateLimited(error))
+      ) {
+        throw new CareerEvidenceError(
+          "AI_RATE_LIMITED",
+          error instanceof GroqKeysExhaustedError
+            ? error.message
+            : "CV extraction hit the Groq daily token limit across configured keys. Add GROQ_API_KEY_2 / GROQ_API_KEY_3 or wait for the quota to reset.",
+          { cause: lastError },
         );
-        if (!call) {
-          throw new MissingEvidenceToolCallError();
-        }
-
-        return extractedCareerEvidenceSchema.parse(call.input);
-      } catch (error) {
-        lastError = error;
-        if (attempt === 0 && isMalformedOutput(error)) {
-          continue;
-        }
-        break;
       }
+      throw new CareerEvidenceError(
+        "AI_EXTRACTION_FAILED",
+        "We could not structure the CV evidence. Please try again.",
+        { cause: lastError },
+      );
+    }
+  }
+
+  private async extractWithModel(
+    apiKey: string,
+    modelId: string,
+    text: string,
+  ): Promise<ExtractedCareerEvidence> {
+    const model = this.keyPool.createModel(apiKey, modelId);
+
+    const result = await generateText({
+      model,
+      system: EXTRACTION_INSTRUCTIONS,
+      prompt: `Extract career evidence from the CV below.\n\n<CV>\n${text}\n</CV>`,
+      tools: {
+        recordCareerEvidence: tool({
+          description:
+            "Record only career evidence explicitly supported by the CV.",
+          inputSchema: careerEvidenceToolInputSchema,
+        }),
+      },
+      toolChoice: {
+        type: "tool",
+        toolName: "recordCareerEvidence",
+      },
+    });
+
+    const call = result.toolCalls.find(
+      (toolCall) => toolCall.toolName === "recordCareerEvidence",
+    );
+    if (!call) {
+      throw new MissingEvidenceToolCallError();
     }
 
-    throw new CareerEvidenceError(
-      "AI_EXTRACTION_FAILED",
-      "We could not structure the CV evidence. Please try again.",
-      { cause: lastError },
-    );
+    return extractedCareerEvidenceSchema.parse(call.input);
   }
 }
 
 class MissingEvidenceToolCallError extends Error {}
+
+function dedupeModels(modelIds: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const modelId of modelIds) {
+    const trimmed = modelId.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
 
 function isMalformedOutput(error: unknown): boolean {
   return (
