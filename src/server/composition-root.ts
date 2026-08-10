@@ -56,11 +56,6 @@ import {
   assessCareerStageForUser,
   type AssessCareerStageCommand,
 } from "@/modules/career-intelligence/application/assess-career-stage";
-import {
-  getCandidateCapabilityProfile,
-  refreshCandidateCapabilityProfile,
-  type RefreshCandidateCapabilityProfileCommand,
-} from "@/modules/career-intelligence/application/capability-profile";
 import { clearMatchAnalysesForUser } from "@/modules/career-intelligence/application/clear-matches";
 import {
   getJobMatchDetails,
@@ -77,9 +72,10 @@ import {
   type ExecuteCareerAwareJobSearchCommand,
   type SearchForJobsCommand,
 } from "@/modules/career-intelligence/application/search-plan";
+import { expandSearchTitles } from "@/modules/career-intelligence/application/expand-search-titles";
 import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { DEFAULT_ANALYSIS_BATCH_SIZE } from "@/modules/career-intelligence/domain/policy";
-import { GroqCapabilitySignalExtractor } from "@/modules/career-intelligence/infrastructure/groq-capability-extractor";
+import { EscoOccupationService } from "@/modules/career-intelligence/infrastructure/esco-occupation-service";
 import { GroqJobRequirementExtractor } from "@/modules/career-intelligence/infrastructure/groq-job-analyser";
 import { GroqRequirementMatcher } from "@/modules/career-intelligence/infrastructure/groq-requirement-matcher";
 import { SupabaseCareerIntelligenceRepository } from "@/modules/career-intelligence/infrastructure/supabase-career-intelligence-repository";
@@ -103,13 +99,13 @@ import { getServerConfig } from "./config";
 import { getGroqKeyPool } from "./groq";
 import { createSupabaseClient } from "./supabase-client";
 
-async function refreshPlanAfterEvidenceChange(userId: string): Promise<void> {
+async function refreshPlanAfterPreferencesChange(userId: string): Promise<void> {
   const config = getServerConfig();
   const supabase = createSupabaseClient(config);
   const jobRepository = new SupabaseJobDiscoveryRepository(supabase);
+  const repository = new SupabaseCareerIntelligenceRepository(supabase);
   const profile = await jobRepository.getSearchProfile(userId);
-  if (!profile?.preferences.smart_skill_analyser_enabled) return;
-  if (profile.preferences.roles.length === 0) return;
+  if (!profile || profile.preferences.roles.length === 0) return;
   await ensureJobSearchPlan(
     {
       userId,
@@ -118,12 +114,26 @@ async function refreshPlanAfterEvidenceChange(userId: string): Promise<void> {
     },
     {
       jobRepository,
-      repository: new SupabaseCareerIntelligenceRepository(supabase),
+      repository,
       evidenceRepository: new SupabaseEvidenceRepository(supabase),
+      escoResolver: createEscoResolver(config, repository),
       createId: randomUUID,
       now: () => new Date(),
     },
   );
+}
+
+function createEscoResolver(
+  config: ReturnType<typeof getServerConfig>,
+  cache: SupabaseCareerIntelligenceRepository,
+) {
+  return new EscoOccupationService({
+    baseUrl: config.ESCO_API_BASE_URL,
+    language: config.ESCO_LANGUAGE,
+    timeoutMs: config.ESCO_TIMEOUT_MS,
+    maxAlternatives: config.ESCO_MAX_ALTERNATIVE_TITLES,
+    cache,
+  });
 }
 
 export type CareerEvidenceApplication = ReturnType<
@@ -206,22 +216,13 @@ function createCareerEvidenceApplication(userId: string) {
         },
       ),
     saveDraft: async (command: Omit<SaveDraftCommand, "userId">) => {
-      const draft = await saveDraft({ ...command, userId }, repository);
-      void refreshPlanAfterEvidenceChange(userId).catch((error) => {
-        console.error("Plan refresh after evidence draft save failed:", error);
-      });
-      return draft;
+      return saveDraft({ ...command, userId }, repository);
     },
     verify: async (command: Omit<VerifyEvidenceCommand, "userId">) => {
-      const verified = await verifyEvidence(
+      return verifyEvidence(
         { ...command, userId },
         { repository, now: () => new Date() },
       );
-      // When Smart Skill Analyser is on, refresh the internal search plan.
-      void refreshPlanAfterEvidenceChange(userId).catch((error) => {
-        console.error("Plan refresh after evidence verify failed:", error);
-      });
-      return verified;
     },
     getCurrent: () => getCurrentEvidence(userId, repository),
     ensureConversationDraft: (evidence: Parameters<
@@ -278,24 +279,7 @@ function createJobDiscoveryApplication(userId: string) {
           createId: randomUUID,
           now,
           onPreferencesChanged: async () => {
-            await ensureJobSearchPlan(
-              {
-                userId,
-                force: true,
-                queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
-              },
-              {
-                jobRepository: repository,
-                repository: new SupabaseCareerIntelligenceRepository(
-                  createSupabaseClient(config),
-                ),
-                evidenceRepository: new SupabaseEvidenceRepository(
-                  createSupabaseClient(config),
-                ),
-                createId: randomUUID,
-                now,
-              },
-            );
+            await refreshPlanAfterPreferencesChange(userId);
           },
         },
       );
@@ -304,12 +288,26 @@ function createJobDiscoveryApplication(userId: string) {
         searchPreview: searchPreviewFor(profile.preferences),
       };
     },
-    discover: (command: Omit<DiscoverJobsCommand, "userId">) => {
+    discover: async (command: Omit<DiscoverJobsCommand, "userId">) => {
       if (enabledKeys.length === 0) {
         throw new JobDiscoveryError(
           "SOURCE_UNAUTHORIZED",
           "No job sources are configured. Set JOB_SOURCES and provider credentials (JSEARCH/RAPIDAPI, THEIRSTACK_API_KEY, and/or ITPro).",
         );
+      }
+      const profile = await repository.getSearchProfile(userId);
+      const careerRepo = new SupabaseCareerIntelligenceRepository(
+        createSupabaseClient(config),
+      );
+      const escoResolver = createEscoResolver(config, careerRepo);
+      let roleTitles = profile?.preferences.roles ?? [];
+      if (profile && profile.preferences.roles.length > 0) {
+        const expanded = await expandSearchTitles({
+          roles: profile.preferences.roles,
+          budget: Math.min(5, Math.max(config.CAREER_SEARCH_QUERY_BUDGET, 3)),
+          resolver: escoResolver,
+        });
+        roleTitles = expanded.titles.map((item) => item.title);
       }
       return discoverJobs(
         { ...command, userId },
@@ -326,6 +324,7 @@ function createJobDiscoveryApplication(userId: string) {
             config.ITPRO_PAGE_SIZE,
           ),
           batchTitles: true,
+          roleTitles,
         },
       );
     },
@@ -366,10 +365,7 @@ function createCareerIntelligenceApplication(userId: string) {
     config.GROQ_MODEL,
     config.groqFallbackModels,
   );
-  const capabilityExtractor = new GroqCapabilitySignalExtractor(
-    groqKeys,
-    config.GROQ_MODEL,
-  );
+  const escoResolver = createEscoResolver(config, repository);
   const now = () => new Date();
   const deps = {
     evidenceRepository,
@@ -378,6 +374,7 @@ function createCareerIntelligenceApplication(userId: string) {
     source,
     extractor,
     matcher,
+    escoResolver,
     createId: randomUUID,
     now,
   };
@@ -389,15 +386,6 @@ function createCareerIntelligenceApplication(userId: string) {
     getAssessment: () =>
       repository.getLatestCareerStageAssessment(userId),
     getPlan: () => repository.getLatestSearchPlan(userId),
-    getCapabilityProfile: () =>
-      getCandidateCapabilityProfile(userId, repository),
-    refreshCapabilityProfile: (
-      command: Omit<RefreshCandidateCapabilityProfileCommand, "userId"> = {},
-    ) =>
-      refreshCandidateCapabilityProfile(
-        { ...command, userId },
-        { ...deps, extractor: capabilityExtractor },
-      ),
     assess: (command: Omit<AssessCareerStageCommand, "userId"> = {}) =>
       assessCareerStageForUser(
         { ...command, userId },

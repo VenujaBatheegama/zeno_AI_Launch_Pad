@@ -18,11 +18,13 @@ import { fingerprint } from "../domain/fingerprint";
 import {
   CAREER_STAGE_POLICY_VERSION,
   DEFAULT_SEARCH_QUERY_BUDGET,
+  escoPolicyFingerprint,
 } from "../domain/policy";
-import { expandRoleTitles } from "../domain/role-families";
+import { expandSearchTitles } from "./expand-search-titles";
 import type {
   CareerIntelligenceRepository,
   Clock,
+  EscoOccupationResolver,
   IdGenerator,
   JobSearchPlan,
   PersistedCareerStageAssessment,
@@ -33,6 +35,7 @@ const createPlanSchema = z.object({
   assessmentId: z.uuid().optional(),
   queryBudget: z.number().int().min(1).max(8).default(DEFAULT_SEARCH_QUERY_BUDGET),
   force: z.boolean().default(false),
+  excludedTitles: z.array(z.string().trim().min(1)).max(20).default([]),
 });
 
 const executePlanSchema = z.object({
@@ -50,6 +53,7 @@ const searchForJobsSchema = z.object({
     .min(1)
     .max(8)
     .default(DEFAULT_SEARCH_QUERY_BUDGET),
+  excludedTitles: z.array(z.string().trim().min(1)).max(20).default([]),
 });
 
 export type CreateCareerAwareSearchPlanCommand = z.input<typeof createPlanSchema>;
@@ -60,12 +64,12 @@ export type EnsureSearchPlanResult = {
   plan: JobSearchPlan;
   regenerated: boolean;
   softNotice: string | null;
+  alsoSearchFor: string[];
 };
 
 /**
- * Ensure a usable search plan exists for the latest preferences / analyser mode.
- * Preference-only mode does not use capability signals; it may still create a
- * lightweight assessment row so older DBs (NOT NULL assessment id) can save.
+ * Ensure a usable search plan exists for the latest preferences + ESCO titles.
+ * Verified career evidence is not used for title expansion.
  */
 export async function ensureJobSearchPlan(
   command: CreateCareerAwareSearchPlanCommand,
@@ -73,6 +77,7 @@ export async function ensureJobSearchPlan(
     jobRepository: JobDiscoveryRepository;
     repository: CareerIntelligenceRepository;
     evidenceRepository?: CareerEvidenceRepository;
+    escoResolver: EscoOccupationResolver;
     createId: IdGenerator;
     now: Clock;
   },
@@ -88,9 +93,10 @@ export async function ensureJobSearchPlan(
     );
   }
 
-  const smart = Boolean(profile.preferences.smart_skill_analyser_enabled);
   const preferencesFingerprint = fingerprint(profile.preferences);
   const preferenceRevision = profile.preferenceRevision;
+  const evidenceFingerprint = escoPolicyFingerprint();
+  const profileRevision = 0;
 
   let assessment =
     parsed.assessmentId
@@ -102,50 +108,16 @@ export async function ensureJobSearchPlan(
           parsed.userId,
         );
 
-  let evidenceFingerprint = "preferences-only";
-  let profileRevision = 0;
-  let softNotice: string | null = null;
-  let capabilityAggregates =
-    (
-      await dependencies.repository.getLatestCapabilityProfile(parsed.userId)
-    )?.aggregates ?? [];
-
-  if (smart) {
-    const evidence = dependencies.evidenceRepository
-      ? await dependencies.evidenceRepository.getCurrent(parsed.userId)
-      : null;
-    if (evidence?.status === "verified") {
-      evidenceFingerprint = fingerprint({
-        id: evidence.id,
-        verifiedAt: evidence.verifiedAt,
-        evidence: evidence.evidence,
-      });
-      profileRevision = hashRevision(evidenceFingerprint);
-    } else {
-      softNotice =
-        "Add more career information to improve Zeno’s recommendations.";
-      evidenceFingerprint = assessment?.evidenceFingerprint ?? "no-verified-evidence";
-    }
-    if (!assessment) {
-      softNotice =
-        softNotice ??
-        "Add more career information to improve Zeno’s recommendations.";
-    }
-  } else {
-    // Preference-only: ignore capability aggregates entirely.
-    capabilityAggregates = [];
-    // Older DBs still require career_stage_assessment_id NOT NULL — anchor a
-    // lightweight preference-only assessment so plan save succeeds before 0007.
-    assessment = await ensurePreferenceOnlyAssessmentAnchor({
-      userId: parsed.userId,
-      preferencesFingerprint,
-      existing: assessment,
-      evidenceRepository: dependencies.evidenceRepository,
-      repository: dependencies.repository,
-      createId: dependencies.createId,
-      now: dependencies.now,
-    });
-  }
+  // Lightweight assessment anchor so older DBs requiring assessment id can save.
+  assessment = await ensurePreferenceOnlyAssessmentAnchor({
+    userId: parsed.userId,
+    preferencesFingerprint,
+    existing: assessment,
+    evidenceRepository: dependencies.evidenceRepository,
+    repository: dependencies.repository,
+    createId: dependencies.createId,
+    now: dependencies.now,
+  });
 
   const existing = await dependencies.repository.getLatestSearchPlan(
     parsed.userId,
@@ -156,36 +128,42 @@ export async function ensureJobSearchPlan(
     existing.generationStatus === "ready" &&
     existing.preferencesFingerprint === preferencesFingerprint &&
     existing.evidenceFingerprint === evidenceFingerprint &&
-    existing.smartSkillAnalyserEnabled === smart &&
     existing.preferenceRevision === preferenceRevision &&
     existing.profileRevision === profileRevision &&
-    existing.queryBudget === parsed.queryBudget
+    existing.queryBudget === parsed.queryBudget &&
+    parsed.excludedTitles.length === 0
   ) {
-    return { plan: existing, regenerated: false, softNotice };
+    return {
+      plan: existing,
+      regenerated: false,
+      softNotice: null,
+      alsoSearchFor: alsoSearchTitles(existing),
+    };
   }
 
-  const titles = expandRoleTitles({
-    preferences: profile.preferences,
-    assessment,
+  const expanded = await expandSearchTitles({
+    roles: profile.preferences.roles,
     budget: parsed.queryBudget,
-    smartSkillAnalyserEnabled: smart,
-    capabilityAggregates: smart ? capabilityAggregates : undefined,
+    resolver: dependencies.escoResolver,
+    opportunityBand: assessment?.targetOpportunityBands[0] ?? "early_career",
+    excludedTitles: parsed.excludedTitles,
   });
-  if (titles.length === 0) {
+  if (expanded.titles.length === 0) {
     throw new CareerIntelligenceError(
       "INVALID_INPUT",
       "No valid search titles could be generated from the current preferences.",
     );
   }
 
+  const softNotice =
+    expanded.notices.length > 0 ? expanded.notices.join(" ") : null;
+
   const now = dependencies.now().toISOString();
   const planId = dependencies.createId();
   const planRevision = (existing?.planRevision ?? 0) + 1;
   const reasons = [
-    smart
-      ? "Prepared using your job preferences and career profile."
-      : "Prepared using your saved job preferences.",
-    `Generated ${titles.length} search queries.`,
+    "Prepared using your saved job preferences and ESCO occupation titles.",
+    `Generated ${expanded.titles.length} search queries.`,
   ];
   if (softNotice) reasons.push(softNotice);
 
@@ -200,7 +178,6 @@ export async function ensureJobSearchPlan(
         queryBudget: parsed.queryBudget,
         status: "draft",
         generationStatus: "ready",
-        smartSkillAnalyserEnabled: smart,
         preferenceRevision,
         profileRevision,
         planRevision,
@@ -208,7 +185,7 @@ export async function ensureJobSearchPlan(
         createdAt: now,
         updatedAt: now,
       },
-      queries: titles.map((title, index) => ({
+      queries: expanded.titles.map((title, index) => ({
         id: dependencies.createId(),
         roleFamily: title.familyLabel,
         queryText: title.title,
@@ -220,15 +197,20 @@ export async function ensureJobSearchPlan(
         createdAt: now,
       })),
     });
-    return { plan, regenerated: true, softNotice };
+    return {
+      plan,
+      regenerated: true,
+      softNotice,
+      alsoSearchFor: alsoSearchTitles(plan),
+    };
   } catch (error) {
-    // Keep the previous usable plan on failure.
     if (existing && existing.generationStatus === "ready") {
       return {
         plan: existing,
         regenerated: false,
         softNotice:
           "Zeno could not refresh the latest job search setup, so the previous one was kept.",
+        alsoSearchFor: alsoSearchTitles(existing),
       };
     }
     throw error;
@@ -242,6 +224,7 @@ export async function createCareerAwareSearchPlan(
     jobRepository: JobDiscoveryRepository;
     repository: CareerIntelligenceRepository;
     evidenceRepository?: CareerEvidenceRepository;
+    escoResolver: EscoOccupationResolver;
     createId: IdGenerator;
     now: Clock;
   },
@@ -427,6 +410,7 @@ export async function searchForJobs(
     source: JobSource;
     repository: CareerIntelligenceRepository;
     evidenceRepository?: CareerEvidenceRepository;
+    escoResolver: EscoOccupationResolver;
     createId: IdGenerator;
     now: Clock;
   },
@@ -437,6 +421,7 @@ export async function searchForJobs(
   warnings: string[];
   softNotice: string | null;
   preparingMessage: string | null;
+  alsoSearchFor: string[];
 }> {
   const parsed = searchForJobsSchema.parse(command);
   const ensured = await ensureJobSearchPlan(
@@ -444,6 +429,7 @@ export async function searchForJobs(
       userId: parsed.userId,
       queryBudget: parsed.queryBudget,
       force: false,
+      excludedTitles: parsed.excludedTitles,
     },
     dependencies,
   );
@@ -463,15 +449,14 @@ export async function searchForJobs(
     preparingMessage: ensured.regenerated
       ? "Zeno prepared your latest job search."
       : null,
+    alsoSearchFor: ensured.alsoSearchFor,
   };
 }
 
-function hashRevision(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash || 1;
+function alsoSearchTitles(plan: JobSearchPlan): string[] {
+  return plan.queries
+    .filter((query) => query.source !== "exact_role")
+    .map((query) => query.queryText);
 }
 
 /**
@@ -532,9 +517,7 @@ async function ensurePreferenceOnlyAssessmentAnchor(input: {
       targetOpportunityBands: ["early_career"],
       stretchOpportunityBands: [],
       unsuitableBands: [],
-      reasons: [
-        "Preference-only search plan (Smart Skill Analyser off).",
-      ],
+      reasons: ["Preference + ESCO search plan anchor."],
       preferenceOverrides: [],
       evidenceIds: [],
       policyVersion: CAREER_STAGE_POLICY_VERSION,

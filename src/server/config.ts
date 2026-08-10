@@ -69,6 +69,23 @@ const configSchema = z
       .min(1)
       .max(20)
       .default(5),
+    ESCO_API_BASE_URL: z
+      .string()
+      .min(1)
+      .default("https://ec.europa.eu/esco/api"),
+    ESCO_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1000)
+      .max(60000)
+      .default(10000),
+    ESCO_LANGUAGE: z.string().min(2).max(10).default("en"),
+    ESCO_MAX_ALTERNATIVE_TITLES: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(3)
+      .default(2),
     // Hybrid provider list, comma-separated. All enabled sources are equal peers.
     JOB_SOURCES: z
       .string()

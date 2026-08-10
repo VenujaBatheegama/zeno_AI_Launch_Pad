@@ -5,7 +5,7 @@ import { emptyJobSearchPreferences } from "@/modules/job-discovery/domain/job";
 
 import { assessCareerStage } from "./career-stage";
 import { monthsWithoutOverlap, summarizeExperience } from "./experience";
-import { expandRoleTitles } from "./role-families";
+import { selectSearchTitlesFromEscoHits } from "./esco-selection";
 import { rankMatches } from "./ranking";
 import { computeEvidenceFitScore } from "./scoring";
 
@@ -78,61 +78,41 @@ describe("career intelligence domain", () => {
     );
   });
 
-  it("expands one role preference into bounded title variants", () => {
-    const assessment = assessCareerStage({
-      evidence: evidenceWithInternshipMonths(),
-      preferences: {
-        ...emptyJobSearchPreferences,
-        roles: ["Software Engineer"],
-      },
-      evidenceFingerprint: "ev",
-      preferencesFingerprint: "pref",
-      assessedAt: NOW,
-    });
-    const titles = expandRoleTitles({
-      preferences: {
-        ...emptyJobSearchPreferences,
-        roles: ["Software Engineer"],
-      },
-      assessment,
-      budget: 4,
+  it("keeps exact role titles without injecting unrelated catalog families", () => {
+    const resolution = selectSearchTitlesFromEscoHits({
+      originalRole: "Software Engineer",
+      hits: [
+        {
+          uri: "http://data.europa.eu/esco/occupation/se",
+          title: "software developer",
+          alternativeLabels: ["application developer"],
+        },
+      ],
+      maxAlternatives: 2,
     });
 
-    expect(titles.length).toBeGreaterThan(1);
-    expect(titles.length).toBeLessThanOrEqual(4);
-    expect(titles.map((item) => item.title)).toEqual(
-      expect.arrayContaining(["Software Engineer"]),
-    );
+    expect(resolution.searchTitles[0]).toBe("Software Engineer");
+    expect(resolution.searchTitles.length).toBeLessThanOrEqual(4);
+    expect(
+      resolution.searchTitles.some((title) => /devops|platform|sre/iu.test(title)),
+    ).toBe(false);
   });
 
-  it("does not inject DevOps titles from empty preference fields", () => {
-    const assessment = assessCareerStage({
-      evidence: evidenceWithInternshipMonths(),
-      preferences: {
-        ...emptyJobSearchPreferences,
-        roles: ["Software Engineer"],
-      },
-      evidenceFingerprint: "ev",
-      preferencesFingerprint: "pref",
-      assessedAt: NOW,
-    });
-    const titles = expandRoleTitles({
-      preferences: {
-        ...emptyJobSearchPreferences,
-        roles: ["Software Engineer"],
-        target_role_families: [],
-        capability_intents: [],
-      },
-      assessment,
-      budget: 4,
+  it("does not invent DevOps titles when ESCO returns software hits only", () => {
+    const resolution = selectSearchTitlesFromEscoHits({
+      originalRole: "Software Engineer",
+      hits: [
+        {
+          uri: "u",
+          title: "software developer",
+          alternativeLabels: ["web developer"],
+        },
+      ],
     });
 
     expect(
-      titles.some((item) => /devops|platform|sre/iu.test(item.title)),
+      resolution.searchTitles.some((title) => /devops|platform|sre/iu.test(title)),
     ).toBe(false);
-    expect(titles.every((item) => item.familyKey !== "devops_platform")).toBe(
-      true,
-    );
   });
 
   it("computes a reproducible evidence-fit score from weights and credits", () => {

@@ -1,13 +1,6 @@
 import type { CareerEvidence } from "@/modules/career-evidence/domain/evidence";
 
-import type {
-  AggregatedCapability,
-  InferredDirection,
-} from "../domain/capability-aggregation";
-import type {
-  CapabilitySignal,
-  ExtractedCapabilitySignals,
-} from "../domain/capability-schemas";
+import type { EscoResolutionStatus, PlannedQuerySource } from "../domain/esco-selection";
 import type { CareerStageAssessment } from "../domain/career-stage";
 import type {
   CareerLevelSuitability,
@@ -36,13 +29,7 @@ export type PlannedJobQuery = {
   opportunityBand: OpportunityBand;
   priority: number;
   reason: string;
-  source:
-    | "explicit_preference"
-    | "deterministic_mapping"
-    | "preferred_technology"
-    | "demonstrated_capability"
-    | "exploration"
-    | "alternative_lane";
+  source: PlannedQuerySource;
   executionStatus: "pending" | "succeeded" | "failed" | "skipped";
   createdAt: string;
 };
@@ -52,12 +39,13 @@ export type JobSearchPlan = {
   userId: string;
   careerStageAssessmentId: string | null;
   preferencesFingerprint: string;
+  /** ESCO policy fingerprint used when the plan was generated. */
   evidenceFingerprint: string;
   queryBudget: number;
   status: "draft" | "executed" | "partial" | "failed";
   generationStatus: "pending" | "ready" | "failed";
-  smartSkillAnalyserEnabled: boolean;
   preferenceRevision: number;
+  /** Reserved revision slot (ESCO policy hash historically used profileRevision). */
   profileRevision: number;
   planRevision: number;
   reasons: string[];
@@ -145,12 +133,6 @@ export type RankedJobMatchCard = {
   stale: boolean;
   eligible: boolean;
   queryProvenance: string[];
-  preferenceTier?: string;
-  preferenceReasons?: string[];
-  capabilityAlignmentScore?: number;
-  capabilityAlignmentReasons?: string[];
-  inferredDirectionAlignment?: "aligned" | "adjacent" | "none";
-  personalizationExplanation?: string;
 };
 
 export type JobMatchDetails = {
@@ -160,23 +142,33 @@ export type JobMatchDetails = {
   assessment: PersistedCareerStageAssessment;
 };
 
-export type PersistedCandidateCapabilityProfile = {
-  id: string;
-  userId: string;
-  evidenceSetId: string;
-  evidenceFingerprint: string;
-  extractionPolicyVersion: string;
-  aggregationPolicyVersion: string;
-  status: "ready" | "stale" | "failed";
-  warnings: string[];
-  aggregates: AggregatedCapability[];
-  directions: InferredDirection[];
-  signals: CapabilitySignal[];
-  createdAt: string;
-  updatedAt: string;
+export type EscoRoleResolutionCache = {
+  normalizedRole: string;
+  language: string;
+  occupationId: string | null;
+  preferredTitle: string | null;
+  selectedSearchTitles: string[];
+  status: EscoResolutionStatus;
+  resolverVersion: string;
+  selectionPolicyVersion: string;
+  resolvedAt: string;
 };
 
-export interface CareerIntelligenceRepository {
+export interface EscoOccupationResolver {
+  resolveRole(role: string): Promise<import("../domain/esco-selection").EscoRoleResolution>;
+}
+
+export interface EscoRoleResolutionCacheStore {
+  getResolution(input: {
+    normalizedRole: string;
+    language: string;
+    resolverVersion: string;
+    selectionPolicyVersion: string;
+  }): Promise<EscoRoleResolutionCache | null>;
+  saveResolution(row: EscoRoleResolutionCache): Promise<void>;
+}
+
+export interface CareerIntelligenceRepository extends EscoRoleResolutionCacheStore {
   saveCareerStageAssessment(input: {
     id: string;
     userId: string;
@@ -252,17 +244,6 @@ export interface CareerIntelligenceRepository {
     updatedAt: string;
   }): Promise<void>;
   clearMatchAnalyses(userId: string): Promise<number>;
-
-  saveCapabilityProfile(
-    profile: PersistedCandidateCapabilityProfile,
-  ): Promise<PersistedCandidateCapabilityProfile>;
-  getLatestCapabilityProfile(
-    userId: string,
-  ): Promise<PersistedCandidateCapabilityProfile | null>;
-  markCapabilityProfileStale(input: {
-    userId: string;
-    updatedAt: string;
-  }): Promise<void>;
 }
 
 export interface JobRequirementExtractor {
@@ -279,10 +260,6 @@ export interface RequirementMatcher {
     evidence: CareerEvidence;
     unclassifiedRequirementIds: string[];
   }): Promise<RequirementMatch[]>;
-}
-
-export interface CapabilitySignalExtractor {
-  extract(evidence: CareerEvidence): Promise<ExtractedCapabilitySignals>;
 }
 
 export type IdGenerator = () => string;

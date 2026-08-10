@@ -6,34 +6,34 @@ career intelligence:
 
 `CV upload → text extraction → structured draft → review/edit → verification`
 
-`Job preferences → hybrid discovery (JSearch + TheirStack + ITPro.lk) →
-normalize/merge/deduplicate → save/dismiss`
+`Job preferences → ESCO occupation title expansion → hybrid discovery
+(LinkedIn + JSearch + TheirStack + ITPro.lk) → normalize/merge/deduplicate →
+save/dismiss`
 
-`Verified evidence + preferences → career stage → multi-query plan → analyse →
+`Verified evidence + preferences → career stage → analyse discovered jobs →
 deterministic evidence-fit scoring → ranked matches`
 
 `Analysed job + verified evidence → content plan → one LLM tailor call →
 grounding validation → ATS PDF preview/download`
+
+**Search principle:** you choose the roles and filters. ESCO may add a few
+closely related occupation titles. Verified career evidence is used only after
+discovery (matching, scoring, CV tailoring) — never to silently pick search
+roles.
 
 ## Local setup
 
 Requirements: Node.js 22+ and pnpm.
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_slice_0.sql` in its SQL editor. This creates
-   the two Slice 0 tables and the private `cv-sources` bucket.
-3. Run `supabase/migrations/0002_slice_1.sql`. This additively creates search
-   preferences, organizations, jobs, provider listings, and user-job state.
-4. Run `supabase/migrations/0003_slice_2.sql`. This additively creates career
-   stage assessments, search plans, planned queries, query provenance links,
-   job analyses/requirements, and match analyses.
-5. Run `supabase/migrations/0004_slice_2_1.sql`. This additively creates
-   candidate capability profiles/signals and widens planned-query source values.
-6. Run `supabase/migrations/0005_slice_3.sql`. This additively creates
-   `cv_tailoring_variants` for evidence-grounded tailored CV plans/artifacts.
-7. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
+2. Run `supabase/migrations/0001_slice_0.sql` through `0009_esco_replace_smart_search.sql`
+   in order (or apply pending migrations with the Supabase CLI). Migration
+   `0009` adds the ESCO resolution cache, updates planned-query sources to
+   `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
+   Skill Analyser / capability-profile tables.
+3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
-8. Configure hybrid job sources via `JOB_SOURCES` (default
+4. Configure hybrid job sources via `JOB_SOURCES` (default
    `linkedin,jsearch,theirstack,itpro`). All enabled sources are equal peers:
    concurrent fan-out, interleaved merge, no preferred provider. Missing
    optional credentials disable that source rather than failing the whole app:
@@ -44,25 +44,27 @@ Requirements: Node.js 22+ and pnpm.
    - **TheirStack**: `THEIRSTACK_API_KEY` (keep `THEIRSTACK_PAGE_SIZE` small —
      credits are per job returned)
    - **ITPro.lk**: public `GET /api/v1/jobs`, no API key required
-   - Public ATS boards (Greenhouse/Lever) are an extension point only;
-     not wired in the current MVP (`ATS_BOARDS` documented in `.env.example`)
-9. Install and run:
+5. Optional ESCO tuning: `ESCO_API_BASE_URL`, `ESCO_TIMEOUT_MS`,
+   `ESCO_LANGUAGE`, `ESCO_MAX_ALTERNATIVE_TITLES` (default 2). If ESCO is down
+   or ambiguous, Zeno searches your exact role titles only.
+6. Install and run:
 
    ```sh
    pnpm install
    pnpm dev
    ```
 
-The application deliberately uses one `DEMO_USER_ID`; it does not yet provide
-authentication or production authorization. Supabase, Groq, and JSearch
-access are server-only. Never expose these values with `NEXT_PUBLIC_`.
-Runtime generation uses the Vercel AI SDK with the official
-`@ai-sdk/groq` provider; `GROQ_MODEL` centralizes the Groq-hosted model choice.
+Supabase, Groq, JSearch, and ESCO access are server-only. Never expose these
+values with `NEXT_PUBLIC_`. Runtime generation uses the Vercel AI SDK with the
+official `@ai-sdk/groq` provider; `GROQ_MODEL` centralizes the Groq-hosted
+model choice.
 
-### Slice 02 caps
+### Search / analysis caps
 
-- `CAREER_SEARCH_QUERY_BUDGET` default `4` (max planned JSearch queries per run)
+- `CAREER_SEARCH_QUERY_BUDGET` default `2` (max planned provider queries per run)
 - `CAREER_ANALYSIS_BATCH_SIZE` default `5` (max jobs analysed per user action)
+- `ESCO_MAX_ALTERNATIVE_TITLES` default `2` (extra labels per explicit role,
+  excluding the ESCO preferred title)
 
 Evidence-fit scoring is deterministic application policy (`scoring-v2`):
 
@@ -96,22 +98,15 @@ unknown rather than being inferred.
 
 ## Live Career Intelligence check
 
-1. Complete Slice 0 with a verified CV that includes internship dates and skills.
-2. On `/jobs`, set a broad role such as Software Engineering / Software Engineer.
-   Do not force internships for the first pass.
-3. Open `http://localhost:3000/matching`.
-4. Run **Assess career stage** and confirm next bands prioritize associate /
-   junior / graduate / Engineer I / suitable Software Engineer when internship
-   experience is about six+ months.
-5. Create the search plan and confirm several bounded title queries.
-6. Run the planned search (uses the hybrid job-source aggregator).
-7. Select a few jobs with usable descriptions and analyse them.
-8. Open match details and manually recalculate one evidence-fit score from the
-   displayed weights/credits.
-9. Confirm gaps and unknowns remain distinct, and matched/partial items cite
-   verified evidence IDs.
-10. Change preferences to internships, reassess, and confirm the override is
-    explained and internships remain eligible.
+1. Complete onboarding with a verified CV that includes internship dates and skills.
+2. On matching, set explicit roles such as Software Engineer.
+3. Open `http://localhost:3000/app/matching` (or `/matching`).
+4. Optionally assess career stage for post-discovery ranking context.
+5. Search for jobs and confirm **Also search for** shows ESCO alternatives
+   (or exact-role fallback if ESCO is unavailable).
+6. Analyse discovered jobs; confirm evidence-fit ranking uses verified evidence.
+7. Open match details and confirm gaps/unknowns stay distinct from matched items.
+8. Tailor a CV for a matched listing and confirm grounding validation still applies.
 
 ## Verification
 

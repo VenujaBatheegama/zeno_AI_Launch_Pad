@@ -1,13 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   JobMatchDetails,
   JobSearchPlan,
   PersistedCareerStageAssessment,
-  PersistedCandidateCapabilityProfile,
   RankedJobMatchCard,
 } from "../application/ports";
 import {
@@ -16,8 +14,6 @@ import {
   type EmploymentType,
   type ExperienceLevel,
   type JobSearchPreferences,
-  type PreferenceIntent,
-  type PreferenceIntentMode,
   type WorkMode,
 } from "@/modules/job-discovery/domain/job";
 
@@ -26,7 +22,6 @@ type Props = {
   initialPlan: JobSearchPlan | null;
   initialMatches: RankedJobMatchCard[];
   initialJobs: DiscoveredJob[];
-  initialCapabilityProfile: PersistedCandidateCapabilityProfile | null;
   initialPreferences: JobSearchPreferences | null;
   analysisBatchSize: number;
 };
@@ -36,13 +31,11 @@ export function CareerIntelligenceWorkspace({
   initialPlan,
   initialMatches,
   initialJobs,
-  initialCapabilityProfile,
   initialPreferences,
   analysisBatchSize,
 }: Props) {
   void initialAssessment;
-  void initialCapabilityProfile;
-  const [plan, setPlan] = useState<JobSearchPlan | null>(initialPlan);
+  const [, setPlan] = useState<JobSearchPlan | null>(initialPlan);
   const [matches, setMatches] = useState(initialMatches);
   const [jobs, setJobs] = useState(initialJobs);
   const [savedPreferences, setSavedPreferences] =
@@ -53,6 +46,12 @@ export function CareerIntelligenceWorkspace({
   const [prefsOpen, setPrefsOpen] = useState(
     () => !initialPreferences || initialPreferences.roles.length === 0,
   );
+  const [alsoSearchFor, setAlsoSearchFor] = useState<string[]>(() =>
+    (initialPlan?.queries ?? [])
+      .filter((query) => query.source !== "exact_role")
+      .map((query) => query.queryText),
+  );
+  const [excludedTitles, setExcludedTitles] = useState<string[]>([]);
   const [recommendedRoles, setRecommendedRoles] = useState<string[]>(
     () => initialPlan?.queries.map((query) => query.queryText) ?? [],
   );
@@ -178,30 +177,6 @@ export function CareerIntelligenceWorkspace({
       setMessage("Job preferences saved. Zeno updated your job search setup.");
     });
 
-  const toggleSmartAnalyser = (enabled: boolean) => {
-    const next = {
-      ...preferences,
-      smart_skill_analyser_enabled: enabled,
-    };
-    setPreferences(next);
-    void run("analyser", async () => {
-      const saved = await request<{ preferences: JobSearchPreferences }>(
-        "/api/job-preferences",
-        {
-          method: "PATCH",
-          body: JSON.stringify({ preferences: next }),
-        },
-      );
-      setSavedPreferences(saved.preferences);
-      setPreferences(saved.preferences);
-      setMessage(
-        enabled
-          ? "Smart Skill Analyser enabled. Zeno will consider your career profile on the next search."
-          : "Smart Skill Analyser disabled. Searches will use your job preferences only.",
-      );
-    });
-  };
-
   const executeSearch = () =>
     run("search", async () => {
       if (!savedPreferences || savedPreferences.roles.length === 0) {
@@ -219,26 +194,27 @@ export function CareerIntelligenceWorkspace({
         warnings: string[];
         softNotice: string | null;
         preparingMessage: string | null;
+        alsoSearchFor: string[];
         plan: {
           id: string;
           status: string;
           queryCount: number;
           recommendedRoles: string[];
-          smartSkillAnalyserEnabled: boolean;
+          alsoSearchFor: string[];
           updatedAt: string;
         };
       }>("/api/career-intelligence/search", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ excludedTitles }),
       });
       setRecommendedRoles(result.plan.recommendedRoles);
+      setAlsoSearchFor(result.alsoSearchFor ?? result.plan.alsoSearchFor ?? []);
       setPlan((current) =>
         current
           ? {
               ...current,
               id: result.plan.id,
               status: result.plan.status as JobSearchPlan["status"],
-              smartSkillAnalyserEnabled: result.plan.smartSkillAnalyserEnabled,
               updatedAt: result.plan.updatedAt,
             }
           : current,
@@ -514,21 +490,6 @@ export function CareerIntelligenceWorkspace({
                 }
               />
               <JobsListInput
-                label="Technologies"
-                value={labelsForMode(preferences.capability_intents, "prefer")}
-                placeholder="C#, .NET, React"
-                onChange={(labels) =>
-                  setPreferences((current) => ({
-                    ...current,
-                    capability_intents: replaceModeIntents(
-                      current.capability_intents,
-                      "prefer",
-                      labels,
-                    ),
-                  }))
-                }
-              />
-              <JobsListInput
                 label="Exclude"
                 value={preferences.excluded_keywords}
                 placeholder="Senior, Principal"
@@ -614,48 +575,49 @@ export function CareerIntelligenceWorkspace({
       </section>
 
       <section className="space-y-3 rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="max-w-2xl">
-            <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
-              Enable Zeno Smart Skill Analyser
-            </h2>
-            <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-              When enabled, Zeno considers both your job preferences and the
-              skills and experience in your career profile when deciding which
-              roles to search for.
-            </p>
-          </div>
-          <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-medium text-[var(--zeno-ink)]">
-            <span className="sr-only">Enable Zeno Smart Skill Analyser</span>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-checked={preferences.smart_skill_analyser_enabled}
-              checked={preferences.smart_skill_analyser_enabled}
-              disabled={busy !== null}
-              onChange={(event) => toggleSmartAnalyser(event.target.checked)}
-              className="h-5 w-9 cursor-pointer accent-[var(--zeno-primary)]"
-            />
-            <span>
-              {preferences.smart_skill_analyser_enabled ? "On" : "Off"}
-              {busy === "analyser" ? " · Saving…" : ""}
-            </span>
-          </label>
+        <div className="max-w-2xl">
+          <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
+            Also search for
+          </h2>
+          <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
+            Employers may use these titles for closely matching work. Remove any
+            you do not want on the next search.
+          </p>
         </div>
+        {alsoSearchFor.length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {alsoSearchFor.map((title) => (
+              <li
+                key={title}
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 py-1 text-sm text-[var(--zeno-ink)]"
+              >
+                <span>{title}</span>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+                  onClick={() => {
+                    setAlsoSearchFor((current) =>
+                      current.filter((item) => item !== title),
+                    );
+                    setExcludedTitles((current) =>
+                      current.includes(title) ? current : [...current, title],
+                    );
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[var(--zeno-ink-muted)]">
+            After you search, suggested alternate titles will appear here.
+          </p>
+        )}
         <p className="text-xs text-[var(--zeno-ink-faint)]">
-          {preferences.smart_skill_analyser_enabled
-            ? "Matching inputs: preferences + eligible career profile evidence."
-            : "Matching inputs: explicit job preferences only."}
-        </p>
-        <p className="text-xs text-[var(--zeno-ink-muted)]">
-          Keep your{" "}
-          <Link
-            href="/app/career-profile"
-            className="font-semibold text-[var(--zeno-primary)] hover:underline"
-          >
-            Career Profile
-          </Link>{" "}
-          up to date for better recommendations.
+          Occupation titles assisted by ESCO. Your Career Profile is used after
+          discovery for match scoring and CV tailoring, not to choose search
+          roles.
         </p>
       </section>
 
@@ -667,10 +629,8 @@ export function CareerIntelligenceWorkspace({
             </h2>
             {recommendedRoles.length > 0 ? (
               <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-                Recommended roles based on your preferences
-                {savedPreferences?.smart_skill_analyser_enabled
-                  ? " and career profile"
-                  : ""}
+                Searching titles from your preferences
+                {alsoSearchFor.length > 0 ? " plus close ESCO alternatives" : ""}
                 : {recommendedRoles.slice(0, 5).join(", ")}
               </p>
             ) : (
@@ -819,20 +779,12 @@ export function CareerIntelligenceWorkspace({
                         : ""}
                     </p>
                     <p className="mt-1 text-sm text-slate-700">
-                      {match.preferenceTier
-                        ? `Preference tier: ${humanize(match.preferenceTier)} · `
-                        : ""}
                       {match.evidenceFitScore}% evidence fit · Career level:{" "}
                       {humanize(match.careerLevel)} · Confidence:{" "}
                       {match.confidence}
                       {match.stale ? " · Stale inputs" : ""}
                       {!match.eligible ? " · Hard constraint warning" : ""}
                     </p>
-                    {match.personalizationExplanation && (
-                      <p className="mt-1 text-sm text-slate-600">
-                        Why Zeno ranked this: {match.personalizationExplanation}
-                      </p>
-                    )}
                     <p className="mt-1 text-sm text-slate-600">
                       Matched: {match.topMatched.join(", ") || "none"}
                     </p>
@@ -1274,34 +1226,6 @@ function MatchGroup({
 
 function humanize(value: string): string {
   return value.replaceAll("_", " ");
-}
-
-function labelsForMode(
-  intents: PreferenceIntent[],
-  mode: PreferenceIntentMode,
-): string[] {
-  return intents
-    .filter((item) => item.mode === mode && item.kind === "technology")
-    .map((item) => item.label);
-}
-
-function replaceModeIntents(
-  intents: PreferenceIntent[],
-  mode: PreferenceIntentMode,
-  labels: string[],
-): PreferenceIntent[] {
-  const kept = intents.filter(
-    (item) => !(item.mode === mode && item.kind === "technology"),
-  );
-  const next = [...new Set(labels.map((label) => label.trim()).filter(Boolean))].map(
-    (label) => ({
-      kind: "technology" as const,
-      key: label.toLocaleLowerCase().replace(/\s+/gu, "_"),
-      label,
-      mode,
-    }),
-  );
-  return [...kept, ...next];
 }
 
 /** Finalize list values (trim each item, drop empties, dedupe). */

@@ -13,15 +13,17 @@ import type {
 import type {
   CachedRequirementExtraction,
   CareerIntelligenceRepository,
+  EscoOccupationResolver,
+  EscoRoleResolutionCache,
   JobAnalysis,
   JobMatchAnalysis,
   JobRequirementExtractor,
   JobSearchPlan,
-  PersistedCandidateCapabilityProfile,
   PersistedCareerStageAssessment,
   PlannedJobQuery,
   RequirementMatcher,
 } from "./ports";
+import type { EscoRoleResolution } from "../domain/esco-selection";
 import type { CareerStageAssessment } from "../domain/career-stage";
 import type { ExtractedJobAnalysis, RequirementMatch } from "../domain/schemas";
 
@@ -33,7 +35,7 @@ export class InMemoryCareerIntelligenceRepository
   links = new Map<string, Set<string>>();
   analyses = new Map<string, JobAnalysis>();
   matches = new Map<string, JobMatchAnalysis>();
-  capabilityProfiles: PersistedCandidateCapabilityProfile[] = [];
+  escoResolutions: EscoRoleResolutionCache[] = [];
   extractions = new Map<string, CachedRequirementExtraction>();
 
   async saveCareerStageAssessment(input: {
@@ -229,30 +231,52 @@ export class InMemoryCareerIntelligenceRepository
     return removed;
   }
 
-  async saveCapabilityProfile(profile: PersistedCandidateCapabilityProfile) {
-    const index = this.capabilityProfiles.findIndex(
-      (item) => item.id === profile.id,
-    );
-    if (index >= 0) this.capabilityProfiles[index] = profile;
-    else this.capabilityProfiles.unshift(profile);
-    return profile;
-  }
-
-  async getLatestCapabilityProfile(userId: string) {
-    return (
-      this.capabilityProfiles.find((item) => item.userId === userId) ?? null
-    );
-  }
-
-  async markCapabilityProfileStale(input: {
-    userId: string;
-    updatedAt: string;
+  async getResolution(input: {
+    normalizedRole: string;
+    language: string;
+    resolverVersion: string;
+    selectionPolicyVersion: string;
   }) {
-    for (const profile of this.capabilityProfiles) {
-      if (profile.userId !== input.userId) continue;
-      profile.status = "stale";
-      profile.updatedAt = input.updatedAt;
-    }
+    return (
+      this.escoResolutions.find(
+        (row) =>
+          row.normalizedRole === input.normalizedRole &&
+          row.language === input.language &&
+          row.resolverVersion === input.resolverVersion &&
+          row.selectionPolicyVersion === input.selectionPolicyVersion,
+      ) ?? null
+    );
+  }
+
+  async saveResolution(row: EscoRoleResolutionCache) {
+    const index = this.escoResolutions.findIndex(
+      (item) =>
+        item.normalizedRole === row.normalizedRole &&
+        item.language === row.language &&
+        item.resolverVersion === row.resolverVersion &&
+        item.selectionPolicyVersion === row.selectionPolicyVersion,
+    );
+    if (index >= 0) this.escoResolutions[index] = row;
+    else this.escoResolutions.push(row);
+  }
+}
+
+/** Exact-role-only ESCO stub for tests (no network). */
+export class FakeEscoOccupationResolver implements EscoOccupationResolver {
+  constructor(
+    private readonly resolveImpl?: (
+      role: string,
+    ) => Promise<EscoRoleResolution> | EscoRoleResolution,
+  ) {}
+
+  async resolveRole(role: string): Promise<EscoRoleResolution> {
+    if (this.resolveImpl) return this.resolveImpl(role);
+    return {
+      originalRole: role,
+      searchTitles: [role],
+      status: "unresolved",
+      notice: `ESCO stub: exact title only for “${role}”.`,
+    };
   }
 }
 

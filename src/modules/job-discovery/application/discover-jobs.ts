@@ -49,6 +49,8 @@ export async function discoverJobs(
     maxPages: number;
     pageSize: number;
     batchTitles?: boolean;
+    /** Optional ESCO-expanded titles; defaults to preference roles. */
+    roleTitles?: string[];
   },
 ): Promise<DiscoveryPage> {
   const parsed = discoverJobsCommandSchema.parse(command);
@@ -66,7 +68,15 @@ export async function discoverJobs(
     );
   }
 
-  const criteria = buildSearchCriteria(profile.preferences, {
+  const preferencesForSearch = {
+    ...profile.preferences,
+    roles:
+      dependencies.roleTitles && dependencies.roleTitles.length > 0
+        ? dependencies.roleTitles
+        : profile.preferences.roles,
+  };
+
+  const criteria = buildSearchCriteria(preferencesForSearch, {
     maxRequests: dependencies.maxRequests,
     pageSize: dependencies.pageSize,
     cursors: decodeCursorState(parsed.cursor),
@@ -124,7 +134,7 @@ export async function discoverJobs(
     ).values(),
   ];
   const rankedJobs = rankJobsByRelevance(uniqueJobs, {
-    role_titles: profile.preferences.roles.slice(0, 5),
+    role_titles: preferencesForSearch.roles.slice(0, 5),
     locations: profile.preferences.locations.slice(0, 3),
     work_modes: profile.preferences.work_modes,
     employment_types: profile.preferences.employment_types,

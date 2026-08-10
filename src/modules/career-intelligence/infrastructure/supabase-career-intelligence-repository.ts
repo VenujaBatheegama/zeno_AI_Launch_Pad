@@ -3,16 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CachedRequirementExtraction,
   CareerIntelligenceRepository,
+  EscoRoleResolutionCache,
   JobAnalysis,
   JobMatchAnalysis,
   JobSearchPlan,
-  PersistedCandidateCapabilityProfile,
   PersistedCareerStageAssessment,
   PlannedJobQuery,
 } from "../application/ports";
 import type { JobRequirement } from "../domain/schemas";
 import type { CareerStageAssessment } from "../domain/career-stage";
-import { capabilitySignalSchema } from "../domain/capability-schemas";
 import { CareerIntelligenceError } from "../domain/errors";
 import {
   jobRequirementSchema,
@@ -119,7 +118,6 @@ export class SupabaseCareerIntelligenceRepository
       query_budget: input.plan.queryBudget,
       status: input.plan.status,
       generation_status: input.plan.generationStatus,
-      smart_skill_analyser_enabled: input.plan.smartSkillAnalyserEnabled,
       preference_revision: input.plan.preferenceRevision,
       profile_revision: input.plan.profileRevision,
       plan_revision: input.plan.planRevision,
@@ -150,7 +148,6 @@ export class SupabaseCareerIntelligenceRepository
         status: input.plan.status,
         reasons: [
           ...input.plan.reasons,
-          `meta:smart=${input.plan.smartSkillAnalyserEnabled}`,
           `meta:prefRev=${input.plan.preferenceRevision}`,
           `meta:profileRev=${input.plan.profileRevision}`,
           `meta:planRev=${input.plan.planRevision}`,
@@ -539,119 +536,49 @@ export class SupabaseCareerIntelligenceRepository
     return data?.length ?? 0;
   }
 
-  async saveCapabilityProfile(
-    profile: PersistedCandidateCapabilityProfile,
-  ): Promise<PersistedCandidateCapabilityProfile> {
-    const { error } = await this.client.from("candidate_capability_profiles").upsert(
-      {
-        id: profile.id,
-        user_id: profile.userId,
-        evidence_set_id: profile.evidenceSetId,
-        evidence_fingerprint: profile.evidenceFingerprint,
-        extraction_policy_version: profile.extractionPolicyVersion,
-        aggregation_policy_version: profile.aggregationPolicyVersion,
-        status: profile.status,
-        warnings: profile.warnings,
-        aggregates: profile.aggregates,
-        directions: profile.directions,
-        created_at: profile.createdAt,
-        updated_at: profile.updatedAt,
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) throw persistence("Capability profile could not be saved.", error);
-
-    await this.client
-      .from("capability_evidence_signals")
-      .delete()
-      .eq("profile_id", profile.id);
-
-    if (profile.signals.length > 0) {
-      const { error: signalError } = await this.client
-        .from("capability_evidence_signals")
-        .insert(
-          profile.signals.map((signal) => ({
-            profile_id: profile.id,
-            capability_key: signal.capability_key,
-            display_label: signal.display_label,
-            capability_type: signal.capability_type,
-            evidence_ids: signal.evidence_ids,
-            evidence_context: signal.evidence_context,
-            depth: String(signal.depth),
-            ownership_signal: signal.ownership_signal,
-            source_quote: signal.source_quote,
-            rationale: signal.rationale,
-            warnings: signal.warnings,
-          })),
-        );
-      if (signalError) {
-        throw persistence("Capability signals could not be saved.", signalError);
-      }
-    }
-
-    const saved = await this.getLatestCapabilityProfile(profile.userId);
-    if (!saved) throw persistence("Capability profile disappeared after save.", null);
-    return saved;
-  }
-
-  async getLatestCapabilityProfile(
-    userId: string,
-  ): Promise<PersistedCandidateCapabilityProfile | null> {
+  async getResolution(input: {
+    normalizedRole: string;
+    language: string;
+    resolverVersion: string;
+    selectionPolicyVersion: string;
+  }): Promise<EscoRoleResolutionCache | null> {
     const { data, error } = await this.client
-      .from("candidate_capability_profiles")
+      .from("esco_role_resolutions")
       .select("*")
-      .eq("user_id", userId)
+      .eq("normalized_role", input.normalizedRole)
+      .eq("language", input.language)
+      .eq("resolver_version", input.resolverVersion)
+      .eq("selection_policy_version", input.selectionPolicyVersion)
       .maybeSingle();
     if (error) {
-      if (isMissingCapabilitySchema(error)) {
-        console.warn(
-          "Capability profile tables are unavailable. Apply supabase/migrations/0004_slice_2_1.sql.",
-          error,
-        );
-        return null;
-      }
-      throw persistence("Capability profile could not be loaded.", error);
+      if (isMissingEscoSchema(error)) return null;
+      throw persistence("ESCO role resolution cache could not be loaded.", error);
     }
     if (!data) return null;
-
-    const { data: signals, error: signalError } = await this.client
-      .from("capability_evidence_signals")
-      .select("*")
-      .eq("profile_id", data.id as string);
-    if (signalError) {
-      if (isMissingCapabilitySchema(signalError)) {
-        console.warn(
-          "Capability signal table is unavailable. Apply supabase/migrations/0004_slice_2_1.sql.",
-          signalError,
-        );
-        return mapCapabilityProfile({ ...data, capability_evidence_signals: [] });
-      }
-      throw persistence("Capability signals could not be loaded.", signalError);
-    }
-
-    return mapCapabilityProfile({
-      ...data,
-      capability_evidence_signals: signals ?? [],
-    });
+    return mapEscoResolution(data);
   }
 
-  async markCapabilityProfileStale(input: {
-    userId: string;
-    updatedAt: string;
-  }): Promise<void> {
-    const { error } = await this.client
-      .from("candidate_capability_profiles")
-      .update({ status: "stale", updated_at: input.updatedAt })
-      .eq("user_id", input.userId);
+  async saveResolution(row: EscoRoleResolutionCache): Promise<void> {
+    const { error } = await this.client.from("esco_role_resolutions").upsert(
+      {
+        normalized_role: row.normalizedRole,
+        language: row.language,
+        occupation_id: row.occupationId,
+        preferred_title: row.preferredTitle,
+        selected_search_titles: row.selectedSearchTitles,
+        status: row.status,
+        resolver_version: row.resolverVersion,
+        selection_policy_version: row.selectionPolicyVersion,
+        resolved_at: row.resolvedAt,
+      },
+      {
+        onConflict:
+          "normalized_role,language,resolver_version,selection_policy_version",
+      },
+    );
     if (error) {
-      if (isMissingCapabilitySchema(error)) {
-        console.warn(
-          "Skipping capability staleness update; apply supabase/migrations/0004_slice_2_1.sql.",
-          error,
-        );
-        return;
-      }
-      throw persistence("Capability profile could not be marked stale.", error);
+      if (isMissingEscoSchema(error)) return;
+      throw persistence("ESCO role resolution cache could not be saved.", error);
     }
   }
 
@@ -677,11 +604,6 @@ export class SupabaseCareerIntelligenceRepository
       generationStatus:
         (row.generation_status as JobSearchPlan["generationStatus"] | undefined) ??
         "ready",
-      smartSkillAnalyserEnabled:
-        row.smart_skill_analyser_enabled !== undefined &&
-        row.smart_skill_analyser_enabled !== null
-          ? Boolean(row.smart_skill_analyser_enabled)
-          : meta.smart,
       preferenceRevision: Number(row.preference_revision ?? meta.prefRev ?? 1),
       profileRevision: Number(row.profile_revision ?? meta.profileRev ?? 0),
       planRevision: Number(row.plan_revision ?? meta.planRev ?? 1),
@@ -845,7 +767,6 @@ function mapMatchAnalysis(row: Record<string, unknown>): JobMatchAnalysis {
 }
 
 function parsePlanMeta(reasons: string[]): {
-  smart: boolean;
   prefRev: number;
   profileRev: number;
   planRev: number;
@@ -855,14 +776,13 @@ function parsePlanMeta(reasons: string[]): {
     return hit?.slice(`meta:${key}=`.length);
   };
   return {
-    smart: read("smart") === "true",
     prefRev: Number(read("prefRev") ?? 1),
     profileRev: Number(read("profileRev") ?? 0),
     planRev: Number(read("planRev") ?? 1),
   };
 }
 
-function isMissingCapabilitySchema(error: unknown): boolean {
+function isMissingEscoSchema(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const record = error as { code?: string; message?: string; details?: string };
   const text = `${record.message ?? ""} ${record.details ?? ""}`.toLocaleLowerCase();
@@ -876,52 +796,17 @@ function isMissingCapabilitySchema(error: unknown): boolean {
   );
 }
 
-function mapCapabilityProfile(
-  row: Record<string, unknown>,
-): PersistedCandidateCapabilityProfile {
-  const signals = (
-    (row.capability_evidence_signals as Array<Record<string, unknown>>) ?? []
-  ).map((signal) => {
-    const rawDepth = signal.depth;
-    const depth =
-      rawDepth === "unknown" || rawDepth === null || rawDepth === undefined
-        ? "unknown"
-        : ([0, 1, 2, 3, 4] as const)[
-            Math.min(Math.max(Number(rawDepth), 0), 4)
-          ]!;
-    return capabilitySignalSchema.parse({
-      capability_key: signal.capability_key,
-      display_label: signal.display_label,
-      capability_type: signal.capability_type,
-      evidence_ids: signal.evidence_ids,
-      evidence_context: signal.evidence_context,
-      depth,
-      ownership_signal: signal.ownership_signal,
-      source_quote:
-        typeof signal.source_quote === "string" && signal.source_quote.trim()
-          ? signal.source_quote
-          : null,
-      rationale: signal.rationale,
-      warnings: signal.warnings ?? [],
-    });
-  });
-
+function mapEscoResolution(row: Record<string, unknown>): EscoRoleResolutionCache {
   return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    evidenceSetId: row.evidence_set_id as string,
-    evidenceFingerprint: row.evidence_fingerprint as string,
-    extractionPolicyVersion: row.extraction_policy_version as string,
-    aggregationPolicyVersion: row.aggregation_policy_version as string,
-    status: row.status as PersistedCandidateCapabilityProfile["status"],
-    warnings: row.warnings as string[],
-    aggregates:
-      row.aggregates as PersistedCandidateCapabilityProfile["aggregates"],
-    directions:
-      row.directions as PersistedCandidateCapabilityProfile["directions"],
-    signals,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    normalizedRole: row.normalized_role as string,
+    language: row.language as string,
+    occupationId: (row.occupation_id as string | null) ?? null,
+    preferredTitle: (row.preferred_title as string | null) ?? null,
+    selectedSearchTitles: (row.selected_search_titles as string[]) ?? [],
+    status: row.status as EscoRoleResolutionCache["status"],
+    resolverVersion: row.resolver_version as string,
+    selectionPolicyVersion: row.selection_policy_version as string,
+    resolvedAt: row.resolved_at as string,
   };
 }
 

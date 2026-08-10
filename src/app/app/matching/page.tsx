@@ -11,18 +11,13 @@ export default async function MatchingPage() {
   const userId = await requireUserId();
   const intelligence = getCareerIntelligenceApplication(userId);
   const jobsApp = getJobDiscoveryApplication(userId);
-  const [assessment, plan, matches, jobs, capabilityProfile, profile] =
-    await Promise.all([
-      intelligence.getAssessment(),
-      intelligence.getPlan(),
-      intelligence.listMatches(),
-      jobsApp.listJobs(),
-      intelligence.getCapabilityProfile().catch((error) => {
-        console.error("Capability profile unavailable:", error);
-        return null;
-      }),
-      jobsApp.getProfile(),
-    ]);
+  const [assessment, plan, matches, jobs, profile] = await Promise.all([
+    intelligence.getAssessment(),
+    intelligence.getPlan(),
+    intelligence.listMatches(),
+    jobsApp.listJobs(),
+    jobsApp.getProfile(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -40,7 +35,6 @@ export default async function MatchingPage() {
         initialPlan={plan}
         initialMatches={matches}
         initialJobs={jobs}
-        initialCapabilityProfile={capabilityProfile}
         initialPreferences={profile?.preferences ?? null}
         analysisBatchSize={intelligence.analysisBatchSize}
       />

@@ -11,6 +11,7 @@ import {
 import { assessCareerStageForUser } from "./assess-career-stage";
 import { analyseAndMatchJob } from "./analyse-and-match";
 import {
+  FakeEscoOccupationResolver,
   FakeEvidenceRepository,
   FakeExtractor,
   FakeJobDiscoveryRepository,
@@ -62,6 +63,12 @@ describe("career intelligence application", () => {
       {
         jobRepository: new FakeJobDiscoveryRepository(profile()),
         repository,
+        escoResolver: new FakeEscoOccupationResolver(async (role) => ({
+          originalRole: role,
+          preferredTitle: "software developer",
+          searchTitles: [role, "software developer", "application developer", "web developer"],
+          status: "resolved",
+        })),
         createId: sequentialIds(100),
         now: () => NOW,
       },
@@ -91,6 +98,11 @@ describe("career intelligence application", () => {
       {
         jobRepository: new FakeJobDiscoveryRepository(profile()),
         repository,
+        escoResolver: new FakeEscoOccupationResolver(async (role) => ({
+          originalRole: role,
+          searchTitles: [role, "software developer"],
+          status: "resolved",
+        })),
         createId: sequentialIds(50),
         now: () => NOW,
       },
@@ -436,10 +448,6 @@ function profile(): JobSearchProfile {
       roles: ["Software Engineer"],
       locations: ["Colombo"],
       excluded_keywords: ["senior"],
-      target_role_families: [],
-      capability_intents: [],
-      reject_inferred_direction: false,
-      smart_skill_analyser_enabled: false,
     },
     preferenceRevision: 1,
     createdAt: NOW.toISOString(),

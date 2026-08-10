@@ -7,10 +7,12 @@ import {
 
 import { ensureJobSearchPlan } from "./search-plan";
 import {
+  FakeEscoOccupationResolver,
   FakeEvidenceRepository,
   FakeJobDiscoveryRepository,
   InMemoryCareerIntelligenceRepository,
 } from "./fakes";
+import { escoPolicyFingerprint } from "../domain/policy";
 
 const USER = "00000000-0000-4000-8000-000000000001";
 const NOW = new Date("2026-08-09T12:00:00.000Z");
@@ -23,7 +25,6 @@ function profile(overrides?: Partial<JobSearchProfile["preferences"]>): JobSearc
       ...emptyJobSearchPreferences,
       roles: ["Software Engineer"],
       locations: ["Colombo"],
-      smart_skill_analyser_enabled: false,
       ...overrides,
     },
     preferenceRevision: 1,
@@ -33,7 +34,7 @@ function profile(overrides?: Partial<JobSearchProfile["preferences"]>): JobSearc
 }
 
 describe("ensureJobSearchPlan", () => {
-  it("creates a preference-only plan with a lightweight assessment anchor", async () => {
+  it("creates a preference + ESCO plan with exact role first", async () => {
     const repository = new InMemoryCareerIntelligenceRepository();
     const result = await ensureJobSearchPlan(
       { userId: USER, queryBudget: 3 },
@@ -41,25 +42,30 @@ describe("ensureJobSearchPlan", () => {
         jobRepository: new FakeJobDiscoveryRepository(profile()),
         repository,
         evidenceRepository: new FakeEvidenceRepository(null),
+        escoResolver: new FakeEscoOccupationResolver(async (role) => ({
+          originalRole: role,
+          occupationId: "http://data.europa.eu/esco/occupation/example",
+          preferredTitle: "software developer",
+          searchTitles: [role, "software developer", "application developer"],
+          status: "resolved",
+        })),
         createId: sequentialIds(),
         now: () => NOW,
       },
     );
 
     expect(result.regenerated).toBe(true);
-    expect(result.plan.smartSkillAnalyserEnabled).toBe(false);
-    // Anchor exists so pre-0007 DBs (NOT NULL assessment id) can still save.
+    expect(result.plan.evidenceFingerprint).toBe(escoPolicyFingerprint());
     expect(result.plan.careerStageAssessmentId).toBeTruthy();
-    expect(repository.assessments[0]?.evidenceFingerprint).toBe(
-      "preferences-only",
-    );
-    expect(result.plan.queries.length).toBeGreaterThan(0);
-    expect(result.plan.queries.some((q) => q.queryText.includes("Software"))).toBe(
-      true,
-    );
+    expect(result.plan.queries[0]?.queryText).toBe("Software Engineer");
+    expect(result.plan.queries[0]?.source).toBe("exact_role");
+    expect(result.alsoSearchFor.length).toBeGreaterThan(0);
+    expect(result.plan.queries.every((q) =>
+      ["exact_role", "esco_preferred", "esco_alternative"].includes(q.source),
+    )).toBe(true);
   });
 
-  it("keeps preference-only plans null when no evidence repository is available", async () => {
+  it("falls back to exact role when ESCO is unresolved", async () => {
     const repository = new InMemoryCareerIntelligenceRepository();
     const result = await ensureJobSearchPlan(
       { userId: USER, queryBudget: 3 },
@@ -67,11 +73,14 @@ describe("ensureJobSearchPlan", () => {
         jobRepository: new FakeJobDiscoveryRepository(profile()),
         repository,
         createId: sequentialIds(),
+        escoResolver: new FakeEscoOccupationResolver(),
         now: () => NOW,
       },
     );
 
-    expect(result.plan.careerStageAssessmentId).toBeNull();
+    expect(result.plan.queries).toHaveLength(1);
+    expect(result.plan.queries[0]?.source).toBe("exact_role");
+    expect(result.softNotice).toMatch(/exact title only/i);
   });
 
   it("reuses a current plan instead of creating duplicates", async () => {
@@ -79,6 +88,7 @@ describe("ensureJobSearchPlan", () => {
     const deps = {
       jobRepository: new FakeJobDiscoveryRepository(profile()),
       repository,
+      escoResolver: new FakeEscoOccupationResolver(),
       createId: sequentialIds(),
       now: () => NOW,
     };
@@ -88,7 +98,7 @@ describe("ensureJobSearchPlan", () => {
     expect(second.plan.id).toBe(first.plan.id);
   });
 
-  it("regenerates when Smart Skill Analyser is toggled", async () => {
+  it("regenerates when preference revision changes", async () => {
     const repository = new InMemoryCareerIntelligenceRepository();
     const jobRepository = new FakeJobDiscoveryRepository(profile());
     const first = await ensureJobSearchPlan(
@@ -96,6 +106,7 @@ describe("ensureJobSearchPlan", () => {
       {
         jobRepository,
         repository,
+        escoResolver: new FakeEscoOccupationResolver(),
         createId: sequentialIds(),
         now: () => NOW,
       },
@@ -106,7 +117,7 @@ describe("ensureJobSearchPlan", () => {
       userId: USER,
       preferences: {
         ...profile().preferences,
-        smart_skill_analyser_enabled: true,
+        roles: ["Backend Developer"],
       },
       preferenceRevision: 2,
       updatedAt: NOW.toISOString(),
@@ -117,7 +128,7 @@ describe("ensureJobSearchPlan", () => {
       {
         jobRepository,
         repository,
-        evidenceRepository: new FakeEvidenceRepository(null),
+        escoResolver: new FakeEscoOccupationResolver(),
         createId: sequentialIds(50),
         now: () => NOW,
       },
@@ -125,8 +136,7 @@ describe("ensureJobSearchPlan", () => {
 
     expect(second.regenerated).toBe(true);
     expect(second.plan.id).not.toBe(first.plan.id);
-    expect(second.plan.smartSkillAnalyserEnabled).toBe(true);
-    expect(second.softNotice).toMatch(/career information/i);
+    expect(second.plan.queries[0]?.queryText).toBe("Backend Developer");
   });
 
   it("rejects older plan writes after a newer preference revision", async () => {
@@ -139,6 +149,7 @@ describe("ensureJobSearchPlan", () => {
           preferenceRevision: 5,
         }),
         repository,
+        escoResolver: new FakeEscoOccupationResolver(),
         createId: sequentialIds(10),
         now: () => NOW,
       },

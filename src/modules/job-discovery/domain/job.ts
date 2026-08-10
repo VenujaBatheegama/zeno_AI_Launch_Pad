@@ -35,17 +35,10 @@ const PREFERENCE_PLACEHOLDER_EXAMPLES = new Set([
   "software engineer, devops engineer",
   "sri lanka, colombo, remote",
   "senior, principal",
-  "devops / platform, software engineering",
-  "devops / platform",
-  "docker, kubernetes, aws",
   "only when you want jobs removed",
   "e.g. software engineer",
   "e.g. colombo, remote",
   "e.g. senior",
-  "e.g. software engineering",
-  "e.g. docker",
-  "e.g. terraform",
-  "e.g. php",
   "leave blank unless you want this",
   "leave blank unless needed",
 ]);
@@ -61,32 +54,6 @@ const preferenceList = z
     ...new Set(values.filter((value) => !isPreferencePlaceholder(value))),
   ]);
 
-export const preferenceIntentModeSchema = z.enum([
-  "prefer",
-  "explore",
-  "avoid",
-  "exclude",
-  "only",
-]);
-export type PreferenceIntentMode = z.infer<typeof preferenceIntentModeSchema>;
-
-export const preferenceIntentKindSchema = z.enum([
-  "technology",
-  "domain",
-  "work_type",
-]);
-export type PreferenceIntentKind = z.infer<typeof preferenceIntentKindSchema>;
-
-export const preferenceIntentSchema = z
-  .object({
-    kind: preferenceIntentKindSchema,
-    key: z.string().trim().min(1).max(80),
-    label: z.string().trim().min(1).max(100),
-    mode: preferenceIntentModeSchema,
-  })
-  .strict();
-export type PreferenceIntent = z.infer<typeof preferenceIntentSchema>;
-
 export const jobSearchPreferencesSchema = z
   .object({
     roles: preferenceList,
@@ -95,25 +62,6 @@ export const jobSearchPreferencesSchema = z
     employment_types: z.array(employmentTypeSchema).max(5),
     experience_levels: z.array(experienceLevelSchema).max(5),
     excluded_keywords: preferenceList,
-    // Slice 02.1 additive preference fields (defaults keep Slice 01 payloads valid).
-    target_role_families: preferenceList.default([]),
-    capability_intents: z
-      .array(preferenceIntentSchema)
-      .max(30)
-      .default([])
-      .transform((intents) =>
-        intents.filter(
-          (intent) =>
-            !isPreferencePlaceholder(intent.label) &&
-            !isPreferencePlaceholder(intent.key),
-        ),
-      ),
-    reject_inferred_direction: z.boolean().default(false),
-    /**
-     * When true, internal plan generation may also use eligible Career Evidence
-     * (skills/experience). When false, only explicit preferences drive search.
-     */
-    smart_skill_analyser_enabled: z.boolean().default(false),
   })
   .strict();
 
@@ -249,10 +197,6 @@ export const emptyJobSearchPreferences: JobSearchPreferences = {
   employment_types: [],
   experience_levels: [],
   excluded_keywords: [],
-  target_role_families: [],
-  capability_intents: [],
-  reject_inferred_direction: false,
-  smart_skill_analyser_enabled: false,
 };
 
 export function titleMatchesExcludedKeyword(

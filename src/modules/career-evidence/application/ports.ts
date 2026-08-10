@@ -74,6 +74,10 @@ export interface CareerEvidenceRepository {
   }): Promise<CareerEvidenceSet>;
   getById(id: string, userId: string): Promise<CareerEvidenceSet | null>;
   getCurrent(userId: string): Promise<CareerEvidenceSet | null>;
+  getDocumentExtractedText(input: {
+    documentId: string;
+    userId: string;
+  }): Promise<string | null>;
 }
 
 export type IdGenerator = () => string;

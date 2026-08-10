@@ -9,8 +9,6 @@ import {
   type ExperienceLevel,
   type JobSearchPreferences,
   type JobSearchProfile,
-  type PreferenceIntent,
-  type PreferenceIntentMode,
   type UserJobState,
   type WorkMode,
 } from "../domain/job";
@@ -239,96 +237,7 @@ export function JobDiscoveryWorkspace({
               }))
             }
           />
-          <ListInput
-            label="Target role families"
-            value={preferences.target_role_families}
-            placeholder="e.g. Software Engineering"
-            onChange={(target_role_families) =>
-              setPreferences((current) => ({
-                ...current,
-                target_role_families,
-              }))
-            }
-          />
-          <ListInput
-            label="Prefer technologies"
-            value={labelsForMode(preferences.capability_intents, "prefer")}
-            placeholder="Leave blank unless you want this"
-            onChange={(labels) =>
-              setPreferences((current) => ({
-                ...current,
-                capability_intents: replaceModeIntents(
-                  current.capability_intents,
-                  "prefer",
-                  labels,
-                ),
-              }))
-            }
-          />
-          <ListInput
-            label="Explore technologies"
-            value={labelsForMode(preferences.capability_intents, "explore")}
-            placeholder="Leave blank unless you want this"
-            onChange={(labels) =>
-              setPreferences((current) => ({
-                ...current,
-                capability_intents: replaceModeIntents(
-                  current.capability_intents,
-                  "explore",
-                  labels,
-                ),
-              }))
-            }
-          />
-          <ListInput
-            label="Avoid technologies"
-            value={labelsForMode(preferences.capability_intents, "avoid")}
-            placeholder="Leave blank unless you want this"
-            onChange={(labels) =>
-              setPreferences((current) => ({
-                ...current,
-                capability_intents: replaceModeIntents(
-                  current.capability_intents,
-                  "avoid",
-                  labels,
-                ),
-              }))
-            }
-          />
-          <ListInput
-            label="Exclude technologies (hard filter)"
-            value={labelsForMode(preferences.capability_intents, "exclude")}
-            placeholder="Leave blank unless needed"
-            onChange={(labels) =>
-              setPreferences((current) => ({
-                ...current,
-                capability_intents: replaceModeIntents(
-                  current.capability_intents,
-                  "exclude",
-                  labels,
-                ),
-              }))
-            }
-          />
         </div>
-
-        <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={preferences.reject_inferred_direction}
-            onChange={(event) =>
-              setPreferences((current) => ({
-                ...current,
-                reject_inferred_direction: event.target.checked,
-              }))
-            }
-          />
-          <span>
-            Reject Zeno&apos;s inferred current direction for personalization
-            (does not change verified career evidence).
-          </span>
-        </label>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <ChoiceGroup
@@ -641,11 +550,6 @@ function SavedPreferencesPreview(props: {
     ["Employment", joinOrNone(prefs.employment_types.map(humanizeToken))],
     ["Experience", joinOrNone(prefs.experience_levels.map(humanizeToken))],
     ["Excluded keywords", joinOrNone(prefs.excluded_keywords)],
-    ["Target families", joinOrNone(prefs.target_role_families)],
-    ["Prefer", joinOrNone(labelsForMode(prefs.capability_intents, "prefer"))],
-    ["Explore", joinOrNone(labelsForMode(prefs.capability_intents, "explore"))],
-    ["Avoid", joinOrNone(labelsForMode(prefs.capability_intents, "avoid"))],
-    ["Exclude tech", joinOrNone(labelsForMode(prefs.capability_intents, "exclude"))],
   ];
 
   return (
@@ -759,32 +663,6 @@ function formatJobDescriptionPreview(description: string | null): string | null 
   text = text.replace(/<[^>]+>/g, " ");
   text = text.replace(/\s+/g, " ").trim();
   return text.length > 0 ? text : null;
-}
-
-function labelsForMode(
-  intents: PreferenceIntent[],
-  mode: PreferenceIntentMode,
-): string[] {
-  return intents
-    .filter((item) => item.mode === mode && item.kind === "technology")
-    .map((item) => item.label);
-}
-
-function replaceModeIntents(
-  intents: PreferenceIntent[],
-  mode: PreferenceIntentMode,
-  labels: string[],
-): PreferenceIntent[] {
-  const kept = intents.filter(
-    (item) => !(item.mode === mode && item.kind === "technology"),
-  );
-  const next = labels.map((label) => ({
-    kind: "technology" as const,
-    key: label.toLocaleLowerCase().replace(/\s+/gu, "_"),
-    label,
-    mode,
-  }));
-  return [...kept, ...next];
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {

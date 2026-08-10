@@ -23,7 +23,6 @@ describe("saveJobSearchPreferences", () => {
           ...emptyJobSearchPreferences,
           roles: ["Software Engineer", "Software Engineer", " Backend Developer "],
           locations: ["Colombo", "Colombo"],
-          smart_skill_analyser_enabled: true,
         },
       },
       {
@@ -39,7 +38,6 @@ describe("saveJobSearchPreferences", () => {
       "Backend Developer",
     ]);
     expect(profile.preferences.locations).toEqual(["Colombo"]);
-    expect(profile.preferences.smart_skill_analyser_enabled).toBe(true);
   });
 
   it("triggers plan refresh after save and keeps prefs if refresh fails", async () => {

@@ -88,10 +88,6 @@ export async function assessCareerStageForUser(
     userId: parsed.userId,
     updatedAt: assessedAt,
   });
-  await dependencies.repository.markCapabilityProfileStale({
-    userId: parsed.userId,
-    updatedAt: assessedAt,
-  });
 
   return dependencies.repository.saveCareerStageAssessment({
     id: dependencies.createId(),
