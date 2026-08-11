@@ -9,8 +9,8 @@ export const ESCO_RESOLVER_VERSION = "esco-resolver-v1";
 export const ESCO_SELECTION_POLICY_VERSION = "esco-selection-v1";
 
 export const DEFAULT_SEARCH_QUERY_BUDGET = 2;
-/** Shortlist size for detailed analyse (scoring-v2); larger than final display. */
-export const DEFAULT_ANALYSIS_BATCH_SIZE = 15;
+/** Shortlist size for detailed analyse after search; also the Jobs page display cap. */
+export const DEFAULT_ANALYSIS_BATCH_SIZE = 10;
 /** Max ESCO alternative titles per explicit role (preferred is separate). */
 export const DEFAULT_ESCO_MAX_ALTERNATIVE_TITLES = 2;
 
