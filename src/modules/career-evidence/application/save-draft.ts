@@ -17,14 +17,21 @@ export async function saveDraft(
   repository: CareerEvidenceRepository,
 ): Promise<CareerEvidenceSet> {
   const current = await repository.getById(command.id, command.userId);
-  if (!current || current.status !== "draft") {
+  if (!current) {
     throw new CareerEvidenceError(
       "INVALID_STATE",
-      "This evidence draft no longer exists or has already been verified.",
+      "This evidence set no longer exists.",
+    );
+  }
+  if (current.status !== "draft" && current.status !== "verified") {
+    throw new CareerEvidenceError(
+      "INVALID_STATE",
+      "This evidence set cannot be edited in its current state.",
     );
   }
   const submitted = careerEvidenceSchema.parse(command.evidence);
 
+  // Editing a verified profile reopens it as a draft (cleared on save).
   return repository.saveDraft({
     id: command.id,
     userId: command.userId,

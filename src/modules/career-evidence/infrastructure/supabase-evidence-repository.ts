@@ -120,15 +120,17 @@ export class SupabaseEvidenceRepository implements CareerEvidenceRepository {
     userId: string;
     evidence: CareerEvidence;
   }): Promise<CareerEvidenceSet> {
+    // Always write as draft — editing a verified set reopens it for review.
     const { data, error } = await this.client
       .from("career_evidence_sets")
       .update({
         evidence: input.evidence,
+        status: "draft",
+        verified_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.id)
       .eq("user_id", input.userId)
-      .eq("status", "draft")
       .select()
       .single();
 

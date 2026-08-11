@@ -6,9 +6,15 @@ import type { CareerEvidenceSet } from "../domain/evidence";
 
 type UploadFormProps = {
   onUploaded: (evidenceSet: CareerEvidenceSet) => void;
+  title?: string;
+  description?: string;
 };
 
-export function UploadForm({ onUploaded }: UploadFormProps) {
+export function UploadForm({
+  onUploaded,
+  title = "Update from CV",
+  description = "PDF or DOCX up to 10 MB. Review before verifying.",
+}: UploadFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,32 +51,37 @@ export function UploadForm({ onUploaded }: UploadFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-3 shadow-[var(--zeno-shadow-sm)]"
     >
-      <h2 className="text-xl font-semibold text-slate-950">Upload your CV</h2>
-      <p className="mt-1 text-sm leading-5 text-slate-600">
-        Use a text-based PDF or DOCX up to 10 MB. Zeno will extract a draft for
-        you to review; nothing is trusted until you verify it.
-      </p>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <input
-          name="cv"
-          type="file"
-          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          required
-          disabled={isUploading}
-          className="block min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:font-medium"
-        />
-        <button
-          type="submit"
-          disabled={isUploading}
-          className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isUploading ? "Extracting…" : "Upload and extract"}
-        </button>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[13px] font-semibold text-[var(--zeno-ink)]">
+            {title}
+          </p>
+          <p className="text-[12px] text-[var(--zeno-ink-muted)]">
+            {description}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            name="cv"
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            required
+            disabled={isUploading}
+            className="block min-w-0 text-[12px] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--zeno-violet-wash)] file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-[var(--zeno-primary-deep)]"
+          />
+          <button
+            type="submit"
+            disabled={isUploading}
+            className="inline-flex h-9 shrink-0 items-center rounded-[8px] bg-[var(--zeno-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-50"
+          >
+            {isUploading ? "Extracting…" : "Import"}
+          </button>
+        </div>
       </div>
       {error ? (
-        <p role="alert" className="mt-4 text-sm font-medium text-red-700">
+        <p role="alert" className="mt-2 text-sm font-medium text-red-700">
           {error}
         </p>
       ) : null}

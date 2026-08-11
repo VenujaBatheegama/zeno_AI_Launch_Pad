@@ -151,7 +151,13 @@ class SliceRepository implements CareerEvidenceRepository {
   }
 
   async saveDraft(input: Parameters<CareerEvidenceRepository["saveDraft"]>[0]) {
-    this.current = { ...this.current!, evidence: input.evidence };
+    this.current = {
+      ...this.current!,
+      evidence: input.evidence,
+      status: "draft",
+      verifiedAt: null,
+      updatedAt: new Date().toISOString(),
+    };
     return this.current;
   }
 
