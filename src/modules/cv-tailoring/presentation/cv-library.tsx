@@ -20,7 +20,12 @@ type CvCard = {
   updatedAt: string;
 };
 
-export function CvLibrary() {
+type Props = {
+  /** When true, omit the outer page header (used inside CvsHub tabs). */
+  embedded?: boolean;
+};
+
+export function CvLibrary({ embedded = false }: Props) {
   const [variants, setVariants] = useState<CvCard[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +59,7 @@ export function CvLibrary() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount fetch
     void load();
   }, []);
 
@@ -87,20 +93,22 @@ export function CvLibrary() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">CVs</h1>
-          <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-            Tailored CVs generated from your matched jobs.
-          </p>
-        </div>
-        <Link
-          href="/app/matching"
-          className="inline-flex rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--zeno-primary-deep)]"
-        >
-          Generate from a match
-        </Link>
-      </header>
+      {!embedded ? (
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">CVs</h1>
+            <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
+              Tailored CVs generated from your matched jobs.
+            </p>
+          </div>
+          <Link
+            href="/app/cvs?tab=create"
+            className="inline-flex rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--zeno-primary-deep)]"
+          >
+            Create CV
+          </Link>
+        </header>
+      ) : null}
 
       {error ? (
         <p className="rounded-[var(--zeno-radius-sm)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -113,14 +121,14 @@ export function CvLibrary() {
       ) : variants.length === 0 ? (
         <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-6">
           <p className="text-sm text-[var(--zeno-ink-muted)]">
-            No tailored CVs yet. Analyse a job match, generate a CV, and finish
-            the PDF — it will appear here as its own tile.
+            No tailored CVs yet. Choose a matched job to generate a CV — it will
+            appear here as its own tile.
           </p>
           <Link
-            href="/app/matching"
+            href="/app/cvs/matched"
             className="mt-4 inline-flex text-sm font-semibold text-[var(--zeno-primary)] hover:underline"
           >
-            Go to matching
+            Choose from matched jobs
           </Link>
         </div>
       ) : (
@@ -151,6 +159,12 @@ export function CvLibrary() {
                 <p className="mt-2 text-xs text-red-700">{variant.errorMessage}</p>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={`/app/cvs/tailor/${variant.listingId}`}
+                  className="inline-flex rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--zeno-ink)] hover:border-[var(--zeno-border-hover)]"
+                >
+                  Open
+                </Link>
                 {variant.canDownload ? (
                   <a
                     href={`/api/cv-tailoring/${variant.id}/download`}
@@ -171,12 +185,6 @@ export function CvLibrary() {
                       : "Finish PDF"}
                   </button>
                 ) : null}
-                <Link
-                  href="/app/matching"
-                  className="inline-flex rounded-[var(--zeno-radius-sm)] border border-transparent px-3 py-1.5 text-xs font-semibold text-[var(--zeno-primary)] hover:underline"
-                >
-                  Open matching
-                </Link>
               </div>
             </li>
           ))}

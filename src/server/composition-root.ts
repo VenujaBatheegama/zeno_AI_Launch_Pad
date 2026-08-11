@@ -90,6 +90,10 @@ import {
   renderTailoredCvVariant,
   type CreateAndGenerateCvCommand,
 } from "@/modules/cv-tailoring/application/tailor-cv";
+import {
+  updateTailoredCvContent,
+  type UpdateTailoredCvContentCommand,
+} from "@/modules/cv-tailoring/application/update-tailored-content";
 import { GroqCvLanguageTailorer } from "@/modules/cv-tailoring/infrastructure/groq-cv-tailorer";
 import { PdfKitCvRenderer } from "@/modules/cv-tailoring/infrastructure/pdfkit-cv-renderer";
 import { ReactPdfCvRenderer } from "@/modules/cv-tailoring/infrastructure/react-pdf-cv-renderer";
@@ -575,6 +579,13 @@ function createCvTailoringApplication(userId: string) {
       getCvVariant(
         { userId, variantId: command.variantId },
         deps,
+      ),
+    updateContent: (
+      command: Omit<UpdateTailoredCvContentCommand, "userId">,
+    ) =>
+      updateTailoredCvContent(
+        { ...command, userId },
+        { repository, now },
       ),
     listForListing: (command: { listingId: string }) =>
       listCvVariantsForListing(
