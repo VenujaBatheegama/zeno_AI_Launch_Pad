@@ -1,6 +1,10 @@
 import { z } from "zod";
 
+import type { CareerEvidenceRepository } from "@/modules/career-evidence/application/ports";
 import type { JobDiscoveryRepository } from "@/modules/job-discovery/application/ports";
+import { emptyJobSearchPreferences } from "@/modules/job-discovery/domain/job";
+import { alignJobToProfile } from "@/modules/job-discovery/domain/profile-alignment";
+import { scoreJobRelevance } from "@/modules/job-discovery/domain/relevance";
 
 import { CareerIntelligenceError } from "../domain/errors";
 import { fingerprint } from "../domain/fingerprint";
@@ -8,9 +12,11 @@ import {
   MATCHING_POLICY_VERSION,
   SCORING_POLICY_VERSION,
 } from "../domain/policy";
-import { rankMatches } from "../domain/ranking";
+import { rankMatchesPersonalized } from "../domain/ranking";
+import { buildMatchableProfileTerms } from "./build-profile-terms";
 import type {
   CareerIntelligenceRepository,
+  EscoOccupationResolver,
   JobMatchAnalysis,
   JobMatchDetails,
   RankedJobMatchCard,
@@ -34,6 +40,8 @@ export async function listRankedJobMatches(
   dependencies: {
     jobRepository: JobDiscoveryRepository;
     repository: CareerIntelligenceRepository;
+    evidenceRepository?: CareerEvidenceRepository;
+    escoResolver?: EscoOccupationResolver;
   },
 ): Promise<RankedJobMatchCard[]> {
   const parsed = listSchema.parse(command);
@@ -57,6 +65,22 @@ export async function listRankedJobMatches(
     dependencies.jobRepository.getSearchProfile(parsed.userId),
   );
 
+  const preferences = profile?.preferences ?? emptyJobSearchPreferences;
+  const evidenceSet = dependencies.evidenceRepository
+    ? await settledNull(() =>
+        dependencies.evidenceRepository!.getCurrent(parsed.userId),
+      )
+    : null;
+  const profileTerms = await buildMatchableProfileTerms({
+    preferences,
+    evidence:
+      evidenceSet?.status === "verified" ? evidenceSet.evidence : null,
+    escoResolver: dependencies.escoResolver,
+  });
+  const hasExplicitInterests =
+    preferences.preferred_interests.length > 0 ||
+    preferences.excluded_interests.length > 0;
+
   const matchByListing = new Map(
     matches.map((item) => [item.listingId, item]),
   );
@@ -74,6 +98,7 @@ export async function listRankedJobMatches(
         )) ?? new Map<string, string[]>());
 
   const cards: RankedJobMatchCard[] = [];
+  const personalizedInputs = [];
 
   for (const job of jobs) {
     const match = matchByListing.get(job.listing_id);
@@ -97,10 +122,25 @@ export async function listRankedJobMatches(
       ) ||
       Boolean(plan && match.preferencesFingerprint !== plan.preferencesFingerprint);
 
-    const topMatched = summarizeMatches(match, "matched");
-    const primaryGaps = summarizeMatches(match, "gap");
+    const searchRelevance = scoreJobRelevance(job, {
+      role_titles: preferences.roles.slice(0, 5),
+      locations: preferences.locations.slice(0, 3),
+      work_modes: preferences.work_modes,
+      employment_types: preferences.employment_types,
+      experience_levels: preferences.experience_levels,
+    });
+    const alignment = alignJobToProfile({
+      title: job.title,
+      description: job.description,
+      terms: profileTerms,
+    });
+    const rankingReasons: string[] = [];
+    if (searchRelevance >= 70) rankingReasons.push("Strong match for your selected role");
+    else if (searchRelevance >= 40) rankingReasons.push("Matches your selected role");
+    for (const reason of alignment.reasons) rankingReasons.push(reason);
+    rankingReasons.push(`Evidence fit: ${match.evidenceFitScore}%`);
 
-    cards.push({
+    const card: RankedJobMatchCard = {
       listingId: job.listing_id,
       jobId: job.job_id,
       title: job.title,
@@ -110,28 +150,36 @@ export async function listRankedJobMatches(
       evidenceFitScore: match.evidenceFitScore,
       careerLevel: match.careerLevel,
       confidence: match.analysisConfidence,
-      topMatched,
-      primaryGaps,
+      topMatched: summarizeMatches(match, "matched"),
+      primaryGaps: summarizeMatches(match, "gap"),
       explanation: match.explanation,
       stale: softStale,
       eligible: match.hardConstraintEligible,
       queryProvenance: queryMap.get(job.listing_id) ?? [],
-    });
-  }
-
-  const ranked = rankMatches(
-    cards.map((card) => ({
+      searchRelevance,
+      interestAlignment: alignment.interestScore,
+      rankingReasons,
+      preferredMatches: alignment.preferredMatches,
+      verifiedMatches: alignment.verifiedMatches,
+    };
+    cards.push(card);
+    personalizedInputs.push({
       listingId: card.listingId,
       jobId: card.jobId,
       eligible: card.eligible,
       evidenceFitScore: card.evidenceFitScore,
       careerLevel: card.careerLevel,
       confidence: card.confidence,
-      publishedAt:
-        jobs.find((job) => job.listing_id === card.listingId)?.published_at ??
-        null,
-    })),
-  );
+      publishedAt: job.published_at,
+      searchRelevance,
+      interestAlignment: alignment.interestScore,
+      rankingReasons,
+    });
+  }
+
+  const ranked = rankMatchesPersonalized(personalizedInputs, {
+    hasExplicitInterests,
+  });
   const order = new Map(ranked.map((item, index) => [item.listingId, index]));
   return cards.sort(
     (a, b) => (order.get(a.listingId) ?? 0) - (order.get(b.listingId) ?? 0),
@@ -143,6 +191,8 @@ export async function getJobMatchDetails(
   dependencies: {
     jobRepository: JobDiscoveryRepository;
     repository: CareerIntelligenceRepository;
+    evidenceRepository?: CareerEvidenceRepository;
+    escoResolver?: EscoOccupationResolver;
   },
 ): Promise<JobMatchDetails> {
   const parsed = detailsSchema.parse(command);

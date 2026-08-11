@@ -68,7 +68,7 @@ const configSchema = z
       .int()
       .min(1)
       .max(20)
-      .default(5),
+      .default(15),
     ESCO_API_BASE_URL: z
       .string()
       .min(1)

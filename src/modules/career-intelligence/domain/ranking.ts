@@ -1,9 +1,12 @@
 import {
+  FINAL_RANK_WEIGHTS,
+  PROFILE_ALIGNMENT_WEIGHTS,
+} from "./policy";
+import type { CareerLevelSuitability, ConfidenceLevel } from "./schemas";
+import {
   isJobTitleIncompatibleWithPreferences,
   titleMatchesExcludedKeyword,
 } from "@/modules/job-discovery/domain/job";
-
-import type { CareerLevelSuitability, ConfidenceLevel } from "./schemas";
 
 const suitabilityRank: Record<CareerLevelSuitability, number> = {
   overridden_by_explicit_preference: 0,
@@ -32,6 +35,73 @@ export type RankableMatch = {
   publishedAt: string | null;
 };
 
+export type PersonalizedRankableMatch = RankableMatch & {
+  searchRelevance: number;
+  /** Interest-only (preferred/excluded); 0 when user has no explicit interests. */
+  interestAlignment: number;
+  rankingReasons?: string[];
+};
+
+export type FinalRankBreakdown = {
+  searchRelevance: number;
+  interestAlignment: number;
+  evidenceFit: number;
+  finalScore: number;
+  reasons: string[];
+};
+
+/**
+ * Normalize discovery search relevance (~0–200) onto a 0–100 scale.
+ */
+export function normalizeSearchRelevance(raw: number): number {
+  return Math.max(0, Math.min(100, Math.round(raw / 1.5)));
+}
+
+/**
+ * Normalize interest alignment onto 0–100 using the positive preference weight scale.
+ */
+export function normalizeInterestAlignment(raw: number): number {
+  if (raw === 0) return 0;
+  const span = PROFILE_ALIGNMENT_WEIGHTS.positiveCap;
+  const shifted = raw + Math.abs(PROFILE_ALIGNMENT_WEIGHTS.excludedMatch) * 2;
+  return Math.max(0, Math.min(100, Math.round((shifted / (span + 40)) * 100)));
+}
+
+export function combineFinalRankingScore(input: {
+  searchRelevance: number;
+  interestAlignment: number;
+  evidenceFit: number;
+  hasExplicitInterests: boolean;
+}): FinalRankBreakdown {
+  const search = normalizeSearchRelevance(input.searchRelevance);
+  const interest = input.hasExplicitInterests
+    ? normalizeInterestAlignment(input.interestAlignment)
+    : 0;
+  const evidence = Math.max(0, Math.min(100, input.evidenceFit));
+
+  const weights = input.hasExplicitInterests
+    ? FINAL_RANK_WEIGHTS
+    : {
+        searchRelevance: FINAL_RANK_WEIGHTS.searchRelevance + FINAL_RANK_WEIGHTS.interestAlignment / 2,
+        interestAlignment: 0,
+        evidenceFit: FINAL_RANK_WEIGHTS.evidenceFit + FINAL_RANK_WEIGHTS.interestAlignment / 2,
+      };
+
+  const finalScore =
+    weights.searchRelevance * search +
+    weights.interestAlignment * interest +
+    weights.evidenceFit * evidence;
+
+  return {
+    searchRelevance: search,
+    interestAlignment: interest,
+    evidenceFit: evidence,
+    finalScore,
+    reasons: [],
+  };
+}
+
+/** Legacy eligibility-first sort used when personalized signals are unavailable. */
 export function rankMatches(matches: RankableMatch[]): RankableMatch[] {
   return [...matches].sort((a, b) => {
     if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
@@ -48,6 +118,46 @@ export function rankMatches(matches: RankableMatch[]): RankableMatch[] {
     if (bTime !== aTime) return bTime - aTime;
     return a.jobId.localeCompare(b.jobId);
   });
+}
+
+/**
+ * Final post-analyse ordering: search relevance gates weak role matches,
+ * then composite of normalized search + interest + evidence-fit (scoring-v2).
+ */
+export function rankMatchesPersonalized(
+  matches: PersonalizedRankableMatch[],
+  options?: { hasExplicitInterests?: boolean },
+): PersonalizedRankableMatch[] {
+  const hasExplicitInterests = options?.hasExplicitInterests ?? true;
+  return [...matches]
+    .map((match) => {
+      const combined = combineFinalRankingScore({
+        searchRelevance: match.searchRelevance,
+        interestAlignment: match.interestAlignment,
+        evidenceFit: match.evidenceFitScore,
+        hasExplicitInterests,
+      });
+      return { match, combined };
+    })
+    .sort((a, b) => {
+      if (a.match.eligible !== b.match.eligible) {
+        return a.match.eligible ? -1 : 1;
+      }
+      const aStrong = a.match.searchRelevance >= 40;
+      const bStrong = b.match.searchRelevance >= 40;
+      if (aStrong !== bStrong) return aStrong ? -1 : 1;
+      if (b.combined.finalScore !== a.combined.finalScore) {
+        return b.combined.finalScore - a.combined.finalScore;
+      }
+      if (b.match.evidenceFitScore !== a.match.evidenceFitScore) {
+        return b.match.evidenceFitScore - a.match.evidenceFitScore;
+      }
+      const aTime = a.match.publishedAt ? Date.parse(a.match.publishedAt) : 0;
+      const bTime = b.match.publishedAt ? Date.parse(b.match.publishedAt) : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return a.match.jobId.localeCompare(b.match.jobId);
+    })
+    .map((entry) => entry.match);
 }
 
 export function evaluateHardConstraints(input: {

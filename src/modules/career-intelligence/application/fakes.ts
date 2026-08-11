@@ -267,6 +267,13 @@ export class FakeEscoOccupationResolver implements EscoOccupationResolver {
     private readonly resolveImpl?: (
       role: string,
     ) => Promise<EscoRoleResolution> | EscoRoleResolution,
+    private readonly skillImpl?: (
+      term: string,
+    ) => Promise<{ originalTerm: string; conceptUri?: string; labels: string[] }> | {
+      originalTerm: string;
+      conceptUri?: string;
+      labels: string[];
+    },
   ) {}
 
   async resolveRole(role: string): Promise<EscoRoleResolution> {
@@ -277,6 +284,11 @@ export class FakeEscoOccupationResolver implements EscoOccupationResolver {
       status: "unresolved",
       notice: `ESCO stub: exact title only for “${role}”.`,
     };
+  }
+
+  async resolveSkillLabels(term: string) {
+    if (this.skillImpl) return this.skillImpl(term);
+    return { originalTerm: term, labels: [term] };
   }
 }
 

@@ -490,13 +490,35 @@ export function CareerIntelligenceWorkspace({
                 }
               />
               <JobsListInput
-                label="Exclude"
+                label="Exclude titles"
                 value={preferences.excluded_keywords}
                 placeholder="Senior, Principal"
                 onChange={(excluded_keywords) =>
                   setPreferences((current) => ({
                     ...current,
                     excluded_keywords,
+                  }))
+                }
+              />
+              <JobsListInput
+                label="Preferred interests"
+                value={preferences.preferred_interests}
+                placeholder="Java, mentoring"
+                onChange={(preferred_interests) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    preferred_interests,
+                  }))
+                }
+              />
+              <JobsListInput
+                label="Excluded interests"
+                value={preferences.excluded_interests}
+                placeholder="sales"
+                onChange={(excluded_interests) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    excluded_interests,
                   }))
                 }
               />
@@ -785,6 +807,19 @@ export function CareerIntelligenceWorkspace({
                       {match.stale ? " · Stale inputs" : ""}
                       {!match.eligible ? " · Hard constraint warning" : ""}
                     </p>
+                    {(match.preferredMatches?.length ||
+                      match.verifiedMatches?.length ||
+                      match.rankingReasons?.length) ? (
+                      <p className="mt-1 text-xs text-slate-600">
+                        {match.preferredMatches && match.preferredMatches.length > 0
+                          ? `Preferred interest: ${match.preferredMatches.join(", ")}. `
+                          : ""}
+                        {match.verifiedMatches && match.verifiedMatches.length > 0
+                          ? `Verified matches: ${match.verifiedMatches.join(", ")}. `
+                          : ""}
+                        Evidence fit: {match.evidenceFitScore}%
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-sm text-slate-600">
                       Matched: {match.topMatched.join(", ") || "none"}
                     </p>

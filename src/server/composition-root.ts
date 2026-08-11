@@ -72,6 +72,7 @@ import {
   type ExecuteCareerAwareJobSearchCommand,
   type SearchForJobsCommand,
 } from "@/modules/career-intelligence/application/search-plan";
+import { buildMatchableProfileTerms } from "@/modules/career-intelligence/application/build-profile-terms";
 import { expandSearchTitles } from "@/modules/career-intelligence/application/expand-search-titles";
 import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { DEFAULT_ANALYSIS_BATCH_SIZE } from "@/modules/career-intelligence/domain/policy";
@@ -328,11 +329,33 @@ function createJobDiscoveryApplication(userId: string) {
         },
       );
     },
-    listJobs: (command: Omit<ListJobsCommand, "userId"> = {}) =>
-      listDiscoveredJobs(
-        { ...command, userId },
-        repository,
-      ),
+    listJobs: async (command: Omit<ListJobsCommand, "userId"> = {}) => {
+      const profile = await repository.getSearchProfile(userId);
+      const evidenceRepository = new SupabaseEvidenceRepository(
+        createSupabaseClient(config),
+      );
+      const careerRepo = new SupabaseCareerIntelligenceRepository(
+        createSupabaseClient(config),
+      );
+      const evidence = await evidenceRepository.getCurrent(userId).catch(() => null);
+      const profileTerms = await buildMatchableProfileTerms({
+        preferences: profile?.preferences ?? {
+          roles: [],
+          locations: [],
+          work_modes: [],
+          employment_types: [],
+          experience_levels: [],
+          excluded_keywords: [],
+          preferred_interests: [],
+          excluded_interests: [],
+        },
+        evidence: evidence?.status === "verified" ? evidence.evidence : null,
+        escoResolver: createEscoResolver(config, careerRepo),
+      });
+      return listDiscoveredJobs({ ...command, userId }, repository, {
+        profileTerms,
+      });
+    },
     setJobState: (command: Omit<SetJobStateCommand, "userId">) =>
       setUserJobState(
         { ...command, userId },

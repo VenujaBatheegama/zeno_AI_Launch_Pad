@@ -62,9 +62,14 @@ model choice.
 ### Search / analysis caps
 
 - `CAREER_SEARCH_QUERY_BUDGET` default `2` (max planned provider queries per run)
-- `CAREER_ANALYSIS_BATCH_SIZE` default `5` (max jobs analysed per user action)
+- `CAREER_ANALYSIS_BATCH_SIZE` default `15` (detailed analyse shortlist; ranked results may show fewer)
 - `ESCO_MAX_ALTERNATIVE_TITLES` default `2` (extra labels per explicit role,
   excluding the ESCO preferred title)
+
+Fetched jobs are ordered by **search relevance** plus capped **profile alignment**
+(explicit preferred/excluded interests + verified skills). After Analyse,
+ordering combines search relevance, interest alignment, and **scoring-v2**
+evidence fit. Verified skills are never treated as interests.
 
 Evidence-fit scoring is deterministic application policy (`scoring-v2`):
 

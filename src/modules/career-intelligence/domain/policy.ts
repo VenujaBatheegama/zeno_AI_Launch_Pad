@@ -9,9 +9,29 @@ export const ESCO_RESOLVER_VERSION = "esco-resolver-v1";
 export const ESCO_SELECTION_POLICY_VERSION = "esco-selection-v1";
 
 export const DEFAULT_SEARCH_QUERY_BUDGET = 2;
-export const DEFAULT_ANALYSIS_BATCH_SIZE = 5;
+/** Shortlist size for detailed analyse (scoring-v2); larger than final display. */
+export const DEFAULT_ANALYSIS_BATCH_SIZE = 15;
 /** Max ESCO alternative titles per explicit role (preferred is separate). */
 export const DEFAULT_ESCO_MAX_ALTERNATIVE_TITLES = 2;
+
+/** Profile-alignment weights (discovery + final interest component). */
+export const PROFILE_ALIGNMENT_WEIGHTS = {
+  preferredMatch: 12,
+  verifiedMatch: 6,
+  excludedMatch: -20,
+  /** Cap on net positive alignment contribution added to search relevance. */
+  positiveCap: 36,
+} as const;
+
+/** Final personalized rank weights after normalizing each component to 0–100. */
+export const FINAL_RANK_WEIGHTS = {
+  searchRelevance: 0.5,
+  interestAlignment: 0.2,
+  evidenceFit: 0.3,
+} as const;
+
+export const ESCO_SKILL_RESOLVER_VERSION = "esco-skill-resolver-v1";
+export const ESCO_SKILL_SELECTION_POLICY_VERSION = "esco-skill-selection-v1";
 
 export const REQUIREMENT_WEIGHTS = {
   required: 3,

@@ -62,6 +62,10 @@ export const jobSearchPreferencesSchema = z
     employment_types: z.array(employmentTypeSchema).max(5),
     experience_levels: z.array(experienceLevelSchema).max(5),
     excluded_keywords: preferenceList,
+    /** Explicit future interests (skills/activities/subject areas). Not inferred from CV. */
+    preferred_interests: preferenceList.default([]),
+    /** Explicit work the user does not want. Not inferred from CV. */
+    excluded_interests: preferenceList.default([]),
   })
   .strict();
 
@@ -197,6 +201,8 @@ export const emptyJobSearchPreferences: JobSearchPreferences = {
   employment_types: [],
   experience_levels: [],
   excluded_keywords: [],
+  preferred_interests: [],
+  excluded_interests: [],
 };
 
 export function titleMatchesExcludedKeyword(

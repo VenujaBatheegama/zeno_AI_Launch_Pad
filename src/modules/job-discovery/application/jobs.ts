@@ -6,7 +6,8 @@ import {
   userJobStateSchema,
   type DiscoveredJob,
 } from "../domain/job";
-import { rankJobsByRelevance } from "../domain/relevance";
+import type { MatchableProfileTerm } from "../domain/profile-alignment";
+import { rankJobsPersonalized } from "../domain/relevance";
 import type { Clock, JobDiscoveryRepository } from "./ports";
 
 const listJobsCommandSchema = z.object({
@@ -35,6 +36,7 @@ export type ClearDiscoveredJobsCommand = z.input<typeof clearJobsCommandSchema>;
 export async function listDiscoveredJobs(
   command: ListJobsCommand,
   repository: JobDiscoveryRepository,
+  options?: { profileTerms?: MatchableProfileTerm[] },
 ): Promise<DiscoveredJob[]> {
   const parsed = listJobsCommandSchema.parse(command);
   const [jobs, profile] = await Promise.all([
@@ -45,14 +47,17 @@ export async function listDiscoveredJobs(
   const filtered = jobs.filter(
     (job) => !isJobTitleIncompatibleWithPreferences(job.title, preferences),
   );
-  // Display order is relevance to preferences — never provider/source order.
-  return rankJobsByRelevance(filtered, {
-    role_titles: preferences.roles.slice(0, 5),
-    locations: preferences.locations.slice(0, 3),
-    work_modes: preferences.work_modes,
-    employment_types: preferences.employment_types,
-    experience_levels: preferences.experience_levels,
-  });
+  return rankJobsPersonalized(
+    filtered,
+    {
+      role_titles: preferences.roles.slice(0, 5),
+      locations: preferences.locations.slice(0, 3),
+      work_modes: preferences.work_modes,
+      employment_types: preferences.employment_types,
+      experience_levels: preferences.experience_levels,
+    },
+    options?.profileTerms ?? [],
+  );
 }
 
 export async function clearDiscoveredJobsForUser(

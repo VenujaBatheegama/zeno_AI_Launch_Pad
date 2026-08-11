@@ -237,6 +237,28 @@ export function JobDiscoveryWorkspace({
               }))
             }
           />
+          <ListInput
+            label="Preferred interests"
+            value={preferences.preferred_interests}
+            placeholder="e.g. Java, patient care, IFRS"
+            onChange={(preferred_interests) =>
+              setPreferences((current) => ({
+                ...current,
+                preferred_interests,
+              }))
+            }
+          />
+          <ListInput
+            label="Excluded interests"
+            value={preferences.excluded_interests}
+            placeholder="e.g. sales, on-call"
+            onChange={(excluded_interests) =>
+              setPreferences((current) => ({
+                ...current,
+                excluded_interests,
+              }))
+            }
+          />
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -550,6 +572,8 @@ function SavedPreferencesPreview(props: {
     ["Employment", joinOrNone(prefs.employment_types.map(humanizeToken))],
     ["Experience", joinOrNone(prefs.experience_levels.map(humanizeToken))],
     ["Excluded keywords", joinOrNone(prefs.excluded_keywords)],
+    ["Preferred interests", joinOrNone(prefs.preferred_interests)],
+    ["Excluded interests", joinOrNone(prefs.excluded_interests)],
   ];
 
   return (

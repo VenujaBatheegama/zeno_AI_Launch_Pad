@@ -133,6 +133,11 @@ export type RankedJobMatchCard = {
   stale: boolean;
   eligible: boolean;
   queryProvenance: string[];
+  searchRelevance?: number;
+  interestAlignment?: number;
+  rankingReasons?: string[];
+  preferredMatches?: string[];
+  verifiedMatches?: string[];
 };
 
 export type JobMatchDetails = {
@@ -156,6 +161,15 @@ export type EscoRoleResolutionCache = {
 
 export interface EscoOccupationResolver {
   resolveRole(role: string): Promise<import("../domain/esco-selection").EscoRoleResolution>;
+  /**
+   * Same-concept skill labels only (preferred + alternatives). Never hierarchy.
+   * Failures must resolve to original-term-only without throwing.
+   */
+  resolveSkillLabels(term: string): Promise<{
+    originalTerm: string;
+    conceptUri?: string;
+    labels: string[];
+  }>;
 }
 
 export interface EscoRoleResolutionCacheStore {

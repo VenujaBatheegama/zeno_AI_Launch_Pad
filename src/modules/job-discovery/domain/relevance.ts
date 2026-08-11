@@ -1,5 +1,11 @@
 import type { JobSearchCriteria, NormalizedExternalJob } from "./job";
 import { analyseLocationPreferences } from "./location-match";
+import {
+  alignJobToProfile,
+  type JobProfileAlignment,
+  type MatchableProfileTerm,
+} from "./profile-alignment";
+import { PROFILE_ALIGNMENT_WEIGHTS } from "@/modules/career-intelligence/domain/policy";
 
 export type RelevanceRankableJob = Pick<
   NormalizedExternalJob,
@@ -15,6 +21,18 @@ export type RelevanceRankableJob = Pick<
   | "experience_level"
   | "application_url"
 >;
+
+export type PersonalizedRankBreakdown = {
+  searchRelevance: number;
+  interestAlignment: number;
+  verifiedAlignment: number;
+  alignmentContribution: number;
+  finalScore: number;
+  reasons: string[];
+  verifiedMatches: string[];
+  preferredMatches: string[];
+  excludedMatches: string[];
+};
 
 /**
  * Source-agnostic relevance for the hybrid pool.
@@ -46,6 +64,49 @@ export function scoreJobRelevance(
   return score;
 }
 
+export function scoreJobWithProfileAlignment(
+  job: RelevanceRankableJob,
+  criteria: Pick<
+    JobSearchCriteria,
+    | "role_titles"
+    | "locations"
+    | "work_modes"
+    | "employment_types"
+    | "experience_levels"
+  >,
+  terms: MatchableProfileTerm[],
+): PersonalizedRankBreakdown {
+  const searchRelevance = scoreJobRelevance(job, criteria);
+  const alignment = alignJobToProfile({
+    title: job.title,
+    description: job.description,
+    terms,
+  });
+  return breakdownFromParts(searchRelevance, alignment);
+}
+
+function breakdownFromParts(
+  searchRelevance: number,
+  alignment: JobProfileAlignment,
+): PersonalizedRankBreakdown {
+  return {
+    searchRelevance,
+    interestAlignment: alignment.interestScore,
+    verifiedAlignment:
+      alignment.verifiedMatches.length * PROFILE_ALIGNMENT_WEIGHTS.verifiedMatch,
+    alignmentContribution: alignment.alignmentScore,
+    finalScore: searchRelevance + alignment.alignmentScore,
+    reasons: alignment.reasons,
+    verifiedMatches: alignment.verifiedMatches,
+    preferredMatches: alignment.preferredMatches,
+    excludedMatches: alignment.excludedMatches,
+  };
+}
+
+/**
+ * Metadata-only ranking (no profile terms). Kept for hybrid discover paths
+ * that run before profile vocabulary is loaded.
+ */
 export function rankJobsByRelevance<T extends RelevanceRankableJob>(
   jobs: T[],
   criteria: Pick<
@@ -57,17 +118,46 @@ export function rankJobsByRelevance<T extends RelevanceRankableJob>(
     | "experience_levels"
   >,
 ): T[] {
+  return rankJobsPersonalized(jobs, criteria, []);
+}
+
+/**
+ * Preliminary discovery ranking: search relevance dominates; profile alignment
+ * is a capped add-on so unrelated occupations cannot win via skill overlap.
+ */
+export function rankJobsPersonalized<T extends RelevanceRankableJob>(
+  jobs: T[],
+  criteria: Pick<
+    JobSearchCriteria,
+    | "role_titles"
+    | "locations"
+    | "work_modes"
+    | "employment_types"
+    | "experience_levels"
+  >,
+  terms: MatchableProfileTerm[],
+): T[] {
   return [...jobs]
-    .map((job, index) => ({
-      job,
-      index,
-      score: scoreJobRelevance(job, criteria),
-      publishedMs: job.published_at
-        ? Date.parse(job.published_at)
-        : Number.NEGATIVE_INFINITY,
-    }))
+    .map((job, index) => {
+      const breakdown = scoreJobWithProfileAlignment(job, criteria, terms);
+      return {
+        job,
+        index,
+        score: breakdown.finalScore,
+        searchRelevance: breakdown.searchRelevance,
+        publishedMs: job.published_at
+          ? Date.parse(job.published_at)
+          : Number.NEGATIVE_INFINITY,
+      };
+    })
     .sort((a, b) => {
+      const aStrong = a.searchRelevance >= 40;
+      const bStrong = b.searchRelevance >= 40;
+      if (aStrong !== bStrong) return aStrong ? -1 : 1;
       if (b.score !== a.score) return b.score - a.score;
+      if (b.searchRelevance !== a.searchRelevance) {
+        return b.searchRelevance - a.searchRelevance;
+      }
       if (b.publishedMs !== a.publishedMs) return b.publishedMs - a.publishedMs;
       return a.index - b.index;
     })
@@ -99,7 +189,6 @@ function titleRelevance(title: string, roleTitles: string[]): number {
     else if (ratio >= 0.5) best = Math.max(best, 25);
   }
 
-  // Soft penalty for clearly elevated titles when the query family is entry/mid.
   const wantsSenior = roleTitles.some((role) =>
     /\b(senior|lead|principal|staff)\b/iu.test(role),
   );
