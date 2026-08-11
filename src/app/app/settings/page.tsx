@@ -20,8 +20,10 @@ export default function SettingsPage() {
   return (
     <div className="max-w-lg space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
+        <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
+          Settings
+        </h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
           Manage your Zeno account.
         </p>
       </header>

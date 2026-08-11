@@ -46,12 +46,7 @@ export function CareerIntelligenceWorkspace({
   const [prefsOpen, setPrefsOpen] = useState(
     () => !initialPreferences || initialPreferences.roles.length === 0,
   );
-  const [alsoSearchFor, setAlsoSearchFor] = useState<string[]>(() =>
-    (initialPlan?.queries ?? [])
-      .filter((query) => query.source !== "exact_role")
-      .map((query) => query.queryText),
-  );
-  const [excludedTitles, setExcludedTitles] = useState<string[]>([]);
+  const [excludedTitles] = useState<string[]>([]);
   const [recommendedRoles, setRecommendedRoles] = useState<string[]>(
     () => initialPlan?.queries.map((query) => query.queryText) ?? [],
   );
@@ -62,7 +57,10 @@ export function CareerIntelligenceWorkspace({
     [preferences, savedPreferences],
   );
   const [details, setDetails] = useState<JobMatchDetails | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [resultQuery, setResultQuery] = useState("");
+  const [filterPosted, setFilterPosted] = useState<
+    "any" | "day" | "week" | "month"
+  >("any");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +175,84 @@ export function CareerIntelligenceWorkspace({
       setMessage("Job preferences saved. Zeno updated your job search setup.");
     });
 
+  const resultLimit = Math.min(10, analysisBatchSize);
+
+  const jobsByListingId = useMemo(() => {
+    const map = new Map<string, DiscoveredJob>();
+    for (const job of jobs) map.set(job.listing_id, job);
+    return map;
+  }, [jobs]);
+
+  const filteredMatches = useMemo(() => {
+    const q = resultQuery.trim().toLowerCase();
+    return matches
+      .slice(0, resultLimit)
+      .filter((match) => {
+        const job = jobsByListingId.get(match.listingId);
+        if (filterPosted !== "any" && job?.published_at) {
+          const ageMs = Date.now() - new Date(job.published_at).getTime();
+          const day = 86_400_000;
+          const max =
+            filterPosted === "day"
+              ? day
+              : filterPosted === "week"
+                ? 7 * day
+                : 30 * day;
+          if (Number.isFinite(ageMs) && ageMs > max) return false;
+        }
+        if (!q) return true;
+        return (
+          match.title.toLowerCase().includes(q) ||
+          (match.organizationName ?? "").toLowerCase().includes(q) ||
+          match.topMatched.some((item) => item.toLowerCase().includes(q)) ||
+          match.explanation.toLowerCase().includes(q)
+        );
+      });
+  }, [matches, resultLimit, jobsByListingId, filterPosted, resultQuery]);
+
+  const analyseListings = async (listingIds: string[]) => {
+    if (listingIds.length === 0) return;
+    const batch = await request<{
+      results: Array<{
+        listingId: string;
+        match: { evidenceFitScore?: number } | null;
+        error?: string;
+      }>;
+      ranked?: RankedJobMatchCard[];
+    }>("/api/career-intelligence/matches", {
+      method: "POST",
+      body: JSON.stringify({ listingIds, force: false }),
+    });
+    let ranked = batch.ranked ?? [];
+    if (ranked.length === 0) {
+      try {
+        ranked = await request<RankedJobMatchCard[]>(
+          "/api/career-intelligence/matches",
+        );
+      } catch {
+        // Analyse may have saved results even if the reload timed out.
+      }
+    }
+    setMatches(ranked);
+    setDetails(null);
+    const failed = batch.results.filter((item) => item.error || !item.match);
+    const ok = batch.results.length - failed.length;
+    if (failed.length > 0) {
+      const uniqueErrors = [
+        ...new Set(
+          failed.map(
+            (item) =>
+              item.error ?? `Listing ${item.listingId.slice(0, 8)}… failed.`,
+          ),
+        ),
+      ].slice(0, 3);
+      setError(
+        `${failed.length} listing(s) could not be analysed. ${uniqueErrors.join(" ")}`,
+      );
+    }
+    return { ok, total: batch.results.length, rankedCount: ranked.length };
+  };
+
   const executeSearch = () =>
     run("search", async () => {
       if (!savedPreferences || savedPreferences.roles.length === 0) {
@@ -187,7 +263,7 @@ export function CareerIntelligenceWorkspace({
       if (prefsDirty) {
         throw new Error("Save your preference changes before searching.");
       }
-      setMessage("Zeno is preparing your latest job search…");
+      setMessage("Searching for jobs…");
       const result = await request<{
         jobsFound: number;
         partialFailure: boolean;
@@ -208,7 +284,6 @@ export function CareerIntelligenceWorkspace({
         body: JSON.stringify({ excludedTitles }),
       });
       setRecommendedRoles(result.plan.recommendedRoles);
-      setAlsoSearchFor(result.alsoSearchFor ?? result.plan.alsoSearchFor ?? []);
       setPlan((current) =>
         current
           ? {
@@ -221,94 +296,44 @@ export function CareerIntelligenceWorkspace({
       );
       const latestJobs = await request<DiscoveredJob[]>("/api/jobs");
       setJobs(latestJobs);
-      const notice = [result.preparingMessage, result.softNotice]
-        .filter(Boolean)
-        .join(" ");
-      setMessage(
-        result.jobsFound === 0
-          ? `${notice ? `${notice} ` : ""}No matching jobs found. Try adjusting preferences, searching again, or broadening location / work arrangement. ${latestJobs.length} job(s) remain listed.`
-          : result.partialFailure
-            ? `${notice ? `${notice} ` : ""}Found ${result.jobsFound} new job(s); some queries had warnings. ${latestJobs.length} total listed.`
-            : `${notice ? `${notice} ` : ""}Found ${result.jobsFound} new job(s). ${latestJobs.length} total listed.`,
-      );
-      if (result.warnings.length > 0) {
-        setError(result.warnings.slice(0, 4).join(" "));
-      }
-    });
 
-  const analyseSelected = () =>
-    run("analyse", async () => {
-      const activeJobs = jobs.filter((job) => job.user_state !== "dismissed");
+      const activeJobs = latestJobs.filter(
+        (job) => job.user_state !== "dismissed",
+      );
       const analysableJobs = activeJobs.filter(
         (job) => (job.description?.trim().length ?? 0) >= 80,
       );
-      const listingIds =
-        selected.length > 0
-          ? selected.slice(0, analysisBatchSize)
-          : (analysableJobs.length > 0 ? analysableJobs : activeJobs)
-              .slice(0, analysisBatchSize)
-              .map((job) => job.listing_id);
+      const listingIds = (
+        analysableJobs.length > 0 ? analysableJobs : activeJobs
+      )
+        .slice(0, resultLimit)
+        .map((job) => job.listing_id);
+
+      const notice = [result.preparingMessage, result.softNotice]
+        .filter(Boolean)
+        .join(" ");
+
       if (listingIds.length === 0) {
-        throw new Error("Discover jobs first, then analyse a bounded batch.");
-      }
-      if (
-        selected.length === 0 &&
-        analysableJobs.length === 0 &&
-        activeJobs.length > 0
-      ) {
-        throw new Error(
-          "None of the discovered jobs have a usable description yet. Clear searched jobs and Find jobs again (LinkedIn details are enriched on search), or pick jobs that show a description length.",
-        );
-      }
-      const batch = await request<{
-        results: Array<{
-          listingId: string;
-          match: { evidenceFitScore?: number } | null;
-          error?: string;
-          errorCategory?: string;
-          cacheHit?: boolean;
-          analysis?: { status?: string };
-        }>;
-        ranked?: RankedJobMatchCard[];
-      }>("/api/career-intelligence/matches", {
-        method: "POST",
-        // Reuse cached extractions; requirements are invalidated by description/schema/policy.
-        body: JSON.stringify({ listingIds, force: false }),
-      });
-      let ranked = batch.ranked ?? [];
-      if (ranked.length === 0) {
-        try {
-          ranked = await request<RankedJobMatchCard[]>(
-            "/api/career-intelligence/matches",
-          );
-        } catch {
-          // Analyse may have saved results even if the reload timed out.
-        }
-      }
-      setMatches(ranked);
-      setDetails(null);
-      const failed = batch.results.filter((item) => item.error || !item.match);
-      const ok = batch.results.length - failed.length;
-      setMessage(
-        ranked.length > 0
-          ? `Re-analysed ${batch.results.length} job(s): ${ranked.length} shown in ranked results (${ok} matched successfully).`
-          : `Re-analysed ${batch.results.length} job(s): ${ok} saved, but none are listed yet. Wait a moment and refresh if Supabase timed out.`,
-      );
-      if (failed.length > 0) {
-        const uniqueErrors = [
-          ...new Set(
-            failed.map(
-              (item) =>
-                item.error ??
-                `Listing ${item.listingId.slice(0, 8)}… failed.`,
-            ),
-          ),
-        ].slice(0, 3);
-        setError(
-          `${failed.length} listing(s) could not be analysed. ${uniqueErrors.join(" ")}`,
+        setMatches([]);
+        setMessage(
+          result.jobsFound === 0
+            ? `${notice ? `${notice} ` : ""}No matching jobs found. Try adjusting preferences or broadening location / work arrangement.`
+            : `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s), but none were ready to analyse yet.`,
         );
       } else {
-        setError(null);
+        setMessage(
+          `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s). Analysing the top ${listingIds.length} by relevance…`,
+        );
+        const analysed = await analyseListings(listingIds);
+        setMessage(
+          analysed && analysed.rankedCount > 0
+            ? `Found ${result.jobsFound} job(s). Showing ${Math.min(analysed.rankedCount, resultLimit)} analysed matches, ordered by relevance.`
+            : `Found ${result.jobsFound} job(s). Analysis finished for ${analysed?.ok ?? 0}/${analysed?.total ?? 0}; ranked results may still be catching up.`,
+        );
+      }
+
+      if (result.warnings.length > 0) {
+        setError(result.warnings.slice(0, 4).join(" "));
       }
     });
 
@@ -321,7 +346,29 @@ export function CareerIntelligenceWorkspace({
       setMatches([]);
       setDetails(null);
       setMessage(
-        `Cleared ${result.removed} stored match result(s). Analyse jobs again to rebuild rankings.`,
+        `Cleared ${result.removed} stored match result(s). Find new jobs to rebuild rankings.`,
+      );
+    });
+
+  const setJobSaved = (listingId: string, saved: boolean) =>
+    run("save", async () => {
+      await request(`/api/jobs/${listingId}/state`, {
+        method: "PATCH",
+        body: JSON.stringify({ state: saved ? "saved" : "discovered" }),
+      });
+      setJobs((current) =>
+        current.map((job) =>
+          job.listing_id === listingId
+            ? { ...job, user_state: saved ? "saved" : "discovered" }
+            : job,
+        ),
+      );
+      setMatches((current) =>
+        current.map((match) =>
+          match.listingId === listingId
+            ? { ...match, userState: saved ? "saved" : "discovered" }
+            : match,
+        ),
       );
     });
 
@@ -408,67 +455,87 @@ export function CareerIntelligenceWorkspace({
     });
   };
 
-  const toggleSelected = (listingId: string) => {
-    setSelected((current) => {
-      if (current.includes(listingId)) {
-        return current.filter((id) => id !== listingId);
-      }
-      if (current.length >= analysisBatchSize) {
-        setError(
-          `You can analyse up to ${analysisBatchSize} jobs at a time. Deselect one to choose another.`,
-        );
-        return current;
-      }
-      setError(null);
-      return [...current, listingId];
-    });
-  };
+  const savedSearchSummary = useMemo(() => {
+    if (!savedPreferences || savedPreferences.roles.length === 0) return null;
+    const parts = [
+      savedPreferences.roles.join(" / "),
+      savedPreferences.locations.length > 0
+        ? savedPreferences.locations.join(" and ")
+        : null,
+      savedPreferences.work_modes.length > 0
+        ? `${savedPreferences.work_modes.map(humanize).join(", ")} preferred`
+        : null,
+      savedPreferences.preferred_interests.length > 0
+        ? savedPreferences.preferred_interests.join(", ")
+        : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
+  }, [savedPreferences]);
 
   return (
     <div className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
+            Jobs
+          </h1>
+          <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
+            Roles Zeno has analysed against your verified profile. Nothing is
+            applied for automatically.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={executeSearch}
+          disabled={
+            busy !== null ||
+            !savedPreferences ||
+            savedPreferences.roles.length === 0 ||
+            prefsDirty
+          }
+          className="inline-flex h-10 items-center rounded-[10px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-[var(--zeno-shadow-sm)] hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
+        >
+          {busy === "search" ? "Searching & analysing…" : "Find new jobs"}
+        </button>
+      </header>
+
       {(message || error) && (
         <div className="space-y-2">
           {message && (
-            <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <p className="rounded-[10px] bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
               {message}
             </p>
           )}
           {error && (
-            <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-900">
+            <p className="rounded-[10px] bg-rose-50 px-3 py-2 text-sm text-rose-900">
               {error}
             </p>
           )}
         </div>
       )}
 
-      <section className="space-y-4 rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+      <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
-              Job preferences
-            </h2>
-            <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-              {savedPreferences?.roles.length
-                ? `Roles: ${savedPreferences.roles.join(", ")}`
-                : "Set a few job preferences so Zeno knows what to look for."}
-              {savedPreferences?.locations.length
-                ? ` · Locations: ${savedPreferences.locations.join(", ")}`
-                : ""}
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--zeno-ink-faint)]">
+              Saved search
+            </p>
+            <p className="mt-1 text-[13px] text-[var(--zeno-ink)]">
+              {savedSearchSummary ??
+                "Set a few job preferences so Zeno knows what to look for."}
             </p>
             {prefsDirty ? (
               <p className="mt-1 text-xs font-medium text-amber-800">
                 You have unsaved preference changes.
               </p>
-            ) : savedPreferences ? (
-              <p className="mt-1 text-xs text-[var(--zeno-ink-faint)]">Saved</p>
             ) : null}
           </div>
           <button
             type="button"
             onClick={() => setPrefsOpen((open) => !open)}
-            className="rounded-md border border-[var(--zeno-border)] px-3 py-2 text-sm font-semibold text-[var(--zeno-ink)]"
+            className="shrink-0 text-[13px] font-semibold text-[var(--zeno-primary)] hover:underline"
           >
-            {prefsOpen ? "Hide editor" : "Edit job preferences"}
+            {prefsOpen ? "Hide preferences" : "Edit preferences"}
           </button>
         </div>
 
@@ -598,267 +665,188 @@ export function CareerIntelligenceWorkspace({
         ) : null}
       </section>
 
-      <section className="space-y-3 rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
-        <div className="max-w-2xl">
-          <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
-            Also search for
-          </h2>
-          <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-            Employers may use these titles for closely matching work. Remove any
-            you do not want on the next search.
-          </p>
-        </div>
-        {alsoSearchFor.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {alsoSearchFor.map((title) => (
-              <li
-                key={title}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 py-1 text-sm text-[var(--zeno-ink)]"
+      {/* Posted-time filter bar */}
+      <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-3 shadow-[var(--zeno-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--zeno-ink-faint)]">
+            Posted
+          </span>
+          {(
+            [
+              ["any", "Any time"],
+              ["day", "Last 24 hours"],
+              ["week", "Last week"],
+              ["month", "Last month"],
+            ] as const
+          ).map(([value, label]) => {
+            const active = filterPosted === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilterPosted(value)}
+                className={`inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition ${
+                  active
+                    ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
+                    : "border border-[var(--zeno-border)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
+                }`}
               >
-                <span>{title}</span>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
-                  onClick={() => {
-                    setAlsoSearchFor((current) =>
-                      current.filter((item) => item !== title),
-                    );
-                    setExcludedTitles((current) =>
-                      current.includes(title) ? current : [...current, title],
-                    );
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-[var(--zeno-ink-muted)]">
-            After you search, suggested alternate titles will appear here.
-          </p>
-        )}
-        <p className="text-xs text-[var(--zeno-ink-faint)]">
-          Occupation titles assisted by ESCO. Your Career Profile is used after
-          discovery for match scoring and CV tailoring, not to choose search
-          roles.
-        </p>
-      </section>
-
-      <section className="space-y-3 rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-violet-wash)] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
-              Search for jobs
-            </h2>
-            {recommendedRoles.length > 0 ? (
-              <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-                Searching titles from your preferences
-                {alsoSearchFor.length > 0 ? " plus close ESCO alternatives" : ""}
-                : {recommendedRoles.slice(0, 5).join(", ")}
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-                Zeno will search using your latest saved preferences.
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={executeSearch}
-            disabled={
-              busy !== null ||
-              !savedPreferences ||
-              savedPreferences.roles.length === 0 ||
-              prefsDirty
-            }
-            className="rounded-md bg-[var(--zeno-primary)] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
-          >
-            {busy === "search" ? "Searching…" : "Search for jobs"}
-          </button>
+                {label}
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      <section className="space-y-3 border-b border-slate-200 pb-6">
+      <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">
-              Analyse selected jobs
-            </h2>
-            <p className="text-sm text-slate-600">
-              {selected.length} of {analysisBatchSize} selected
-            </p>
+          <label className="relative block w-full max-w-md">
+            <span className="sr-only">Search role, company or skill</span>
+            <input
+              type="search"
+              value={resultQuery}
+              onChange={(event) => setResultQuery(event.target.value)}
+              placeholder="Search role, company or skill"
+              className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
+            />
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-9 items-center rounded-full border border-[var(--zeno-border)] bg-white px-3 text-[12px] font-medium text-[var(--zeno-ink-muted)]">
+              Best match
+            </span>
+            <button
+              type="button"
+              onClick={clearMatches}
+              disabled={busy !== null || matches.length === 0}
+              className="text-[12px] font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
+            >
+              {busy === "clear" ? "Clearing…" : "Clear results"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={analyseSelected}
-            disabled={busy !== null || jobs.length === 0}
-            className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {busy === "analyse"
-              ? "Analysing…"
-              : `Analyse up to ${analysisBatchSize} jobs`}
-          </button>
         </div>
-        <p className="text-sm text-slate-600">
-          Select up to {analysisBatchSize} jobs. Analysis compares job
-          requirements with your career profile — it will not invent skills you
-          have not confirmed.
-        </p>
-        <ul className="space-y-3">
-          {jobs
-            .filter((job) => job.user_state !== "dismissed")
-            .slice(0, 20)
-            .map((job) => {
-              const checked = selected.includes(job.listing_id);
-              const atLimit =
-                !checked && selected.length >= analysisBatchSize;
-              return (
-                <li
-                  key={job.listing_id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700"
-                >
-                  <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={atLimit}
-                      onChange={() => toggleSelected(job.listing_id)}
-                      className="mt-1"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-950">{job.title}</p>
-                      <p>
-                        {job.organization_name ?? "Unknown company"}
-                        {job.location ? ` · ${job.location}` : ""}
-                        {job.work_mode ? ` · ${humanize(job.work_mode)}` : ""}
-                        {job.employment_type
-                          ? ` · ${humanize(job.employment_type)}`
-                          : ""}
-                      </p>
-                      {job.published_at ? (
-                        <p className="text-xs text-slate-500">
-                          Posted{" "}
-                          {new Date(job.published_at).toLocaleDateString()}
-                          {job.publisher || job.source_name
-                            ? ` · ${job.publisher ?? job.source_name}`
-                            : ""}
-                        </p>
-                      ) : null}
-                      {(job.application_url || job.source_url) && (
-                        <a
-                          href={job.application_url ?? job.source_url ?? undefined}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-block text-xs font-semibold text-emerald-700 hover:underline"
-                        >
-                          View or apply
-                        </a>
-                      )}
-                    </div>
-                  </label>
-                </li>
-              );
-            })}
-        </ul>
-        {jobs.filter((job) => job.user_state !== "dismissed").length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No jobs yet. Save preferences, then search for jobs.
+
+        {recommendedRoles.length > 0 ? (
+          <p className="text-[12px] text-[var(--zeno-ink-faint)]">
+            Searching titles from your preferences:{" "}
+            {recommendedRoles.slice(0, 5).join(", ")}
           </p>
         ) : null}
-      </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Ranked evidence-backed matches
-          </h2>
-          <button
-            type="button"
-            onClick={clearMatches}
-            disabled={busy !== null || matches.length === 0}
-            className="rounded-md border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800 disabled:opacity-60"
-          >
-            {busy === "clear" ? "Clearing…" : "Clear match results"}
-          </button>
-        </div>
-        {matches.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No current match results. Analyse jobs again after clearing, or if
-            older results were invalidated by a matcher update.
+        {filteredMatches.length === 0 ? (
+          <p className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-8 text-center text-sm text-[var(--zeno-ink-muted)]">
+            {matches.length === 0
+              ? "No analysed jobs yet. Save preferences, then find new jobs — Zeno will search and rank the top matches for you."
+              : "No jobs match those filters."}
           </p>
         ) : (
-          <ul className="space-y-4">
-            {matches.map((match) => (
-              <li
-                key={match.listingId}
-                className="border-b border-slate-200 pb-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-slate-950">
-                      {match.title}
-                      {match.organizationName
-                        ? ` — ${match.organizationName}`
-                        : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {match.evidenceFitScore}% evidence fit · Career level:{" "}
-                      {humanize(match.careerLevel)} · Confidence:{" "}
-                      {match.confidence}
-                      {match.stale ? " · Stale inputs" : ""}
-                      {!match.eligible ? " · Hard constraint warning" : ""}
-                    </p>
-                    {(match.preferredMatches?.length ||
-                      match.verifiedMatches?.length ||
-                      match.rankingReasons?.length) ? (
-                      <p className="mt-1 text-xs text-slate-600">
-                        {match.preferredMatches && match.preferredMatches.length > 0
-                          ? `Preferred interest: ${match.preferredMatches.join(", ")}. `
+          <ul className="space-y-3">
+            {filteredMatches.map((match) => {
+              const job = jobsByListingId.get(match.listingId);
+              const saved = match.userState === "saved";
+              const meta = [
+                match.organizationName,
+                job?.location,
+                job?.work_mode ? humanize(job.work_mode) : null,
+                job?.published_at ? relativePosted(job.published_at) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={match.listingId}
+                  className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-[var(--zeno-ink)]">
+                        {match.title}
+                        {match.organizationName
+                          ? ` | ${match.organizationName}`
                           : ""}
-                        {match.verifiedMatches && match.verifiedMatches.length > 0
-                          ? `Verified matches: ${match.verifiedMatches.join(", ")}. `
-                          : ""}
-                        Evidence fit: {match.evidenceFitScore}%
                       </p>
-                    ) : null}
-                    <p className="mt-1 text-sm text-slate-600">
-                      Matched: {match.topMatched.join(", ") || "none"}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Gaps: {match.primaryGaps.join(", ") || "none"}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-700">
-                      {match.explanation}
-                    </p>
-                    {match.queryProvenance.length > 0 && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        Found via: {match.queryProvenance.join(" · ")}
+                      <p className="mt-1 text-[12px] text-[var(--zeno-ink-muted)]">
+                        {meta}
                       </p>
-                    )}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-800">
+                      {Math.round(match.evidenceFitScore)}% match
+                    </span>
                   </div>
-                  <div className="flex gap-2">
-                    {match.applicationUrl && (
+
+                  <p className="mt-3 text-[13px] leading-relaxed text-[var(--zeno-ink)]">
+                    {match.explanation}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {match.topMatched.slice(0, 6).map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full bg-[var(--zeno-surface-sunken)] px-2.5 py-1 text-[11px] font-medium text-[var(--zeno-ink-muted)]"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                    {!match.eligible ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                        Constraint warning
+                      </span>
+                    ) : null}
+                    {match.stale ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                        Stale analysis
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    {match.applicationUrl ? (
                       <a
                         href={match.applicationUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800"
+                        className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] px-3 text-[12px] font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-violet-wash)]"
                       >
-                        Apply externally
+                        View job
                       </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openDetails(match.listingId)}
+                        className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] px-3 text-[12px] font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-violet-wash)]"
+                      >
+                        View job
+                      </button>
                     )}
+                    <a
+                      href={`/app/cvs/tailor/${match.listingId}`}
+                      className="text-[12px] font-semibold text-[var(--zeno-primary)] hover:underline"
+                    >
+                      Tailor CV
+                    </a>
                     <button
                       type="button"
                       onClick={() => openDetails(match.listingId)}
-                      className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                      className="text-[12px] font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
                     >
                       Match details
                     </button>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => setJobSaved(match.listingId, !saved)}
+                      className={`ml-auto inline-flex size-9 items-center justify-center rounded-[8px] ${
+                        saved
+                          ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
+                          : "text-[var(--zeno-ink-muted)] hover:bg-[var(--zeno-violet-wash)]"
+                      }`}
+                      aria-label={saved ? "Unsave job" : "Save job"}
+                    >
+                      <BookmarkIcon filled={saved} />
+                    </button>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -1263,6 +1251,32 @@ function MatchGroup({
 
 function humanize(value: string): string {
   return value.replaceAll("_", " ");
+}
+
+function relativePosted(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const ageMs = Date.now() - date.getTime();
+  const day = 86_400_000;
+  if (ageMs < day) return "Today";
+  if (ageMs < 2 * day) return "1 day ago";
+  if (ageMs < 7 * day) return `${Math.floor(ageMs / day)} days ago`;
+  if (ageMs < 30 * day) return `${Math.floor(ageMs / (7 * day))} weeks ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function BookmarkIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.75"
+    >
+      <path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-3.5L6 20V5.5a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
 }
 
 /** Finalize list values (trim each item, drop empties, dedupe). */
