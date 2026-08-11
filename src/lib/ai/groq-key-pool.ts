@@ -34,9 +34,17 @@ export class GroqKeyPool {
        * can pause the whole route (shared org quotas often share TPD).
        */
       rotateOnRateLimit?: boolean;
+      /**
+       * When true (default), try the next key after tool/JSON structured-output
+       * flakiness. Set false for json_schema extraction: those failures are
+       * usually model/token-budget issues, and rotating free-tier keys that
+       * share an org only burns TPM without helping.
+       */
+      rotateOnToolFailure?: boolean;
     },
   ): Promise<T> {
     const rotateOnRateLimit = options?.rotateOnRateLimit !== false;
+    const rotateOnToolFailure = options?.rotateOnToolFailure !== false;
     const candidates = this.orderedAvailableKeys();
     if (candidates.length === 0) {
       const retryAt = Math.min(...this.exhaustedUntil.values());
@@ -74,8 +82,13 @@ export class GroqKeyPool {
         // without cooling the current one down for the full TPD window.
         if (isGroqToolFailure(error)) {
           console.warn(
-            `[groq] key ${maskKey(apiKey)} tool-call failure; trying next key if available.`,
+            `[groq] key ${maskKey(apiKey)} tool-call/JSON failure; ${
+              rotateOnToolFailure
+                ? "trying next key if available."
+                : "not rotating keys (model/fallback handles retry)."
+            }`,
           );
+          if (!rotateOnToolFailure) throw error;
           continue;
         }
         throw error;
@@ -122,23 +135,31 @@ export function isGroqRateLimited(error: unknown): boolean {
   return (
     /rate limit/i.test(message) ||
     /tokens per day/i.test(message) ||
+    /tokens per minute/i.test(message) ||
+    /Request too large/i.test(message) ||
     /\bTPD\b/.test(message) ||
+    /\bTPM\b/.test(message) ||
     /\b429\b/.test(message)
   );
 }
 
 export function isGroqToolFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
+  const body =
+    error && typeof error === "object" && "responseBody" in error
+      ? String((error as { responseBody?: unknown }).responseBody ?? "")
+      : "";
+  const combined = `${message}\n${body}`;
   return (
-    /Tool choice is required/i.test(message) ||
-    /Failed to call a function/i.test(message) ||
-    /tool_use_failed/i.test(message) ||
-    /tool call validation failed/i.test(message) ||
-    /Failed to validate JSON/i.test(message) ||
-    // Groq/gpt-oss often emits truncated or invalid tool-argument JSON.
-    /Failed to parse tool call arguments as JSON/i.test(message) ||
-    /Invalid JSON/i.test(message) ||
-    /Unexpected token/i.test(message)
+    /Tool choice is required/i.test(combined) ||
+    /Failed to call a function/i.test(combined) ||
+    /tool_use_failed/i.test(combined) ||
+    /tool call validation failed/i.test(combined) ||
+    /Failed to validate JSON/i.test(combined) ||
+    // Groq sometimes omits the space: "asJSON"
+    /Failed to parse tool call arguments as\s*JSON/i.test(combined) ||
+    /Invalid JSON/i.test(combined) ||
+    /Unexpected token/i.test(combined)
   );
 }
 

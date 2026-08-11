@@ -58,6 +58,8 @@ describe("Groq evidence extraction through the AI SDK", () => {
     expect(mocks.generateText).toHaveBeenCalledTimes(2);
     expect(mocks.generateText).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        maxRetries: 0,
+        maxOutputTokens: 4096,
         toolChoice: {
           type: "tool",
           toolName: "recordCareerEvidence",
@@ -132,6 +134,49 @@ describe("Groq evidence extraction through the AI SDK", () => {
 
     expect(result).toEqual(extracted);
     expect(mocks.generateText).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers truncated tool output from failed_generation", async () => {
+    const partial = {
+      profile: {
+        full_name: "Ada Lovelace",
+        email: null,
+        phone: null,
+        location: null,
+        summary: null,
+      },
+      work_experience: [],
+      education: [],
+      skills: [],
+      projects: [],
+      certifications: [],
+      achievements: [],
+      references: [],
+      warnings: [],
+    };
+    mocks.generateText.mockRejectedValueOnce({
+      message: "Failed to parse tool call arguments asJSON",
+      responseBody: JSON.stringify({
+        error: {
+          code: "tool_use_failed",
+          failed_generation: JSON.stringify({
+            name: "recordCareerEvidence",
+            arguments: partial,
+          }),
+        },
+      }),
+    });
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const result = await new GroqEvidenceExtractor(
+      "test-api-key",
+      "openai/gpt-oss-20b",
+    ).extract("Ada Lovelace");
+    warn.mockRestore();
+
+    expect(result.profile.full_name).toBe("Ada Lovelace");
+    expect(result.warnings.some((item) => /truncated/i.test(item))).toBe(true);
+    expect(mocks.generateText).toHaveBeenCalledTimes(1);
   });
 
   it("rotates to another API key when the first key is rate-limited", async () => {

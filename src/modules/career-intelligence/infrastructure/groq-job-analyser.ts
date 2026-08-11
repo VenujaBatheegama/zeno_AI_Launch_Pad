@@ -13,12 +13,20 @@ import { CareerIntelligenceError } from "../domain/errors";
 import { normalizeJobDescription } from "../domain/description-normalize";
 import {
   classifyExtractionError,
+  EXTRACTION_USER_MESSAGES,
 } from "../domain/extraction-errors";
 import type { ExtractedJobAnalysis } from "../domain/schemas";
 import {
   strictJobRequirementsExtractionSchema,
   toExtractedJobAnalysis,
 } from "../domain/strict-extraction-schema";
+
+/**
+ * Reasoning models spend completion budget on CoT; leave room for the JSON body.
+ * Cap below free-tier TPM (8000): Groq reserves input + max_output against TPM
+ * before the call, so 8192 alone already exceeds the limit.
+ */
+const EXTRACTION_MAX_OUTPUT_TOKENS = 4096;
 
 const EXTRACTION_SYSTEM = `Extract structured job requirements from one vacancy description.
 Rules:
@@ -30,7 +38,8 @@ Rules:
 - Include a short exact source_quote for every requirement from the description.
 - Infer opportunity_band from title and description signals.
 - Always include warnings as an array (use [] when none).
-- Return only the JSON object matching the schema.`;
+- Return only the JSON object matching the schema.
+- Keep reasoning brief; prefer completing the JSON object over long deliberation.`;
 
 export type ExtractionAttemptStats = {
   model: string;
@@ -77,7 +86,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
     if (Date.now() < this.cooldownUntil) {
       throw new CareerIntelligenceError(
         "AI_UNAVAILABLE",
-        "Job analysis is briefly rate-limited. Try again shortly.",
+        EXTRACTION_USER_MESSAGES.rate_limited,
       );
     }
 
@@ -104,12 +113,15 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
         return extracted;
       } catch (error) {
         lastError = error;
+        console.warn(
+          `[job-extract] model=${modelId} attempt=${attempts} failed: ${summarizeExtractError(error)}`,
+        );
         if (isGroqRateLimited(error)) {
           const retryMs = parseRetryMsSafe(error);
           this.cooldownUntil = Date.now() + retryMs;
           throw new CareerIntelligenceError(
             "AI_UNAVAILABLE",
-            "Job analysis is briefly rate-limited. Try again shortly.",
+            EXTRACTION_USER_MESSAGES.rate_limited,
             { cause: error },
           );
         }
@@ -117,7 +129,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
         if (isConfigurationError(error)) {
           throw new CareerIntelligenceError(
             "AI_UNAVAILABLE",
-            "Job analysis is misconfigured. Check model/structured-output settings.",
+            EXTRACTION_USER_MESSAGES.configuration_error,
             { cause: error },
           );
         }
@@ -135,9 +147,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
     const category = classifyExtractionError(lastError);
     throw new CareerIntelligenceError(
       "AI_UNAVAILABLE",
-      category === "rate_limited"
-        ? "Job analysis is briefly rate-limited. Try again shortly."
-        : "We could not analyse this job description safely. Please try again.",
+      EXTRACTION_USER_MESSAGES[category],
       { cause: lastError },
     );
   }
@@ -151,13 +161,16 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
     },
   ): Promise<ExtractedJobAnalysis> {
     try {
-      // Do not rotate keys on 429 during extraction — free-tier keys often share
-      // org TPD; cascading every queued job through the same limit is worse.
+      // Do not rotate keys on 429 or JSON failures during extraction — free-tier
+      // keys often share an org TPM/TPD budget; cascading only burns quota.
+      // Fall through to a gpt-oss fallback model instead.
       return await this.keyPool.withKey(
         async (apiKey) => {
           const { output } = await generateText({
             model: this.keyPool.createModel(apiKey, modelId),
             temperature: 0,
+            maxRetries: 0,
+            maxOutputTokens: EXTRACTION_MAX_OUTPUT_TOKENS,
             system: EXTRACTION_SYSTEM,
             prompt: [
               "Extract atomic requirements and opportunity level.",
@@ -177,7 +190,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
           const parsed = strictJobRequirementsExtractionSchema.parse(output);
           return toExtractedJobAnalysis(parsed, input.requirementIds);
         },
-        { rotateOnRateLimit: false },
+        { rotateOnRateLimit: false, rotateOnToolFailure: false },
       );
     } catch (error) {
       if (error instanceof GroqKeysExhaustedError) throw error;
@@ -202,6 +215,10 @@ class NoStructuredOutputError extends Error {
 
 function isConfigurationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
+  // json_validate_failed / Failed to validate JSON are output failures, not config.
+  if (/json_validate_failed|Failed to (validate|generate) JSON|max completion tokens/i.test(message)) {
+    return false;
+  }
   return /does not support response format|json_schema|invalid_api_key|401|403/i.test(
     message,
   );
@@ -216,4 +233,16 @@ function parseRetryMsSafe(error: unknown): number {
   const seconds = message.match(/try again in ([\d.]+)s/i);
   if (seconds) return Number(seconds[1]) * 1000;
   return 60_000;
+}
+
+function summarizeExtractError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const body =
+    error && typeof error === "object" && "responseBody" in error
+      ? String((error as { responseBody?: unknown }).responseBody ?? "")
+      : "";
+  const failed =
+    body.match(/"failed_generation"\s*:\s*"([^"]+)"/)?.[1] ??
+    body.match(/failed_generation":"([^"]+)"/)?.[1];
+  return failed ? `${message.slice(0, 180)} [${failed.slice(0, 120)}]` : message.slice(0, 240);
 }

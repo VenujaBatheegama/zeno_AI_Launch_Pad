@@ -43,4 +43,21 @@ describe("GroqKeyPool rate-limit rotation", () => {
     ).rejects.toThrow(/rate limit/i);
     expect(seen).toEqual(["key-a"]);
   });
+
+  it("does not rotate keys when rotateOnToolFailure is false", async () => {
+    const pool = new GroqKeyPool(["key-a", "key-b"]);
+    const seen: string[] = [];
+    await expect(
+      pool.withKey(
+        async (apiKey) => {
+          seen.push(apiKey);
+          throw new Error(
+            "Failed to validate JSON. Please adjust your prompt.",
+          );
+        },
+        { rotateOnToolFailure: false },
+      ),
+    ).rejects.toThrow(/Failed to validate JSON/i);
+    expect(seen).toEqual(["key-a"]);
+  });
 });

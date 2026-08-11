@@ -161,12 +161,18 @@ export function groupSkillsDeterministically(
   for (const name of selectedNames) {
     const display = resolveSkillDisplay(name, inventory);
     if (!display) continue;
+    const clamped = clampSkillItem(display);
+    if (!clamped) continue;
     const category =
       CATEGORY_HINTS.find((hint) => hint.match.test(display))?.category ??
       "Other";
     const list = buckets.get(category) ?? [];
-    if (!list.some((item) => item.toLocaleLowerCase() === display.toLocaleLowerCase())) {
-      list.push(display);
+    if (
+      !list.some(
+        (item) => item.toLocaleLowerCase() === clamped.toLocaleLowerCase(),
+      )
+    ) {
+      list.push(clamped);
       buckets.set(category, list);
     }
   }
@@ -174,6 +180,16 @@ export function groupSkillsDeterministically(
   return [...buckets.entries()]
     .filter(([, items]) => items.length > 0)
     .map(([category, items]) => ({ category, items }));
+}
+
+/** Resume schema caps each skill label at 60 chars. */
+export const MAX_RESUME_SKILL_ITEM_CHARS = 60;
+
+export function clampSkillItem(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= MAX_RESUME_SKILL_ITEM_CHARS) return trimmed;
+  return trimmed.slice(0, MAX_RESUME_SKILL_ITEM_CHARS).trimEnd();
 }
 
 function extractLikelyTechTokens(text: string): string[] {

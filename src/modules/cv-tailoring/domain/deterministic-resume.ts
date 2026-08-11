@@ -13,6 +13,7 @@ import {
 } from "./project-paragraphs";
 import {
   buildSkillInventory,
+  clampSkillItem,
   groupSkillsDeterministically,
 } from "./skill-inventory";
 import type { KeywordAuditEntry } from "./schemas";
@@ -238,11 +239,17 @@ export function normalizeGroqDraft(
   const skills = draft.skills
     .map((group) => ({
       category: group.category,
-      items: group.items.filter((item) =>
-        inventory.displayNames.some(
-          (name) => name.toLocaleLowerCase() === item.trim().toLocaleLowerCase(),
-        ),
-      ),
+      items: group.items
+        .map((item) => clampSkillItem(item))
+        .filter((item) =>
+          inventory.displayNames.some(
+            (name) =>
+              name.toLocaleLowerCase() === item.trim().toLocaleLowerCase() ||
+              clampSkillItem(name).toLocaleLowerCase() ===
+                item.trim().toLocaleLowerCase(),
+          ),
+        )
+        .filter(Boolean),
     }))
     .filter((group) => group.items.length > 0);
 

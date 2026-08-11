@@ -295,15 +295,17 @@ export function CareerIntelligenceWorkspace({
           : `Re-analysed ${batch.results.length} job(s): ${ok} saved, but none are listed yet. Wait a moment and refresh if Supabase timed out.`,
       );
       if (failed.length > 0) {
-        setError(
-          `${failed.length} listing(s) could not be analysed. ${failed
-            .slice(0, 3)
-            .map(
+        const uniqueErrors = [
+          ...new Set(
+            failed.map(
               (item) =>
                 item.error ??
                 `Listing ${item.listingId.slice(0, 8)}… failed.`,
-            )
-            .join(" ")}`,
+            ),
+          ),
+        ].slice(0, 3);
+        setError(
+          `${failed.length} listing(s) could not be analysed. ${uniqueErrors.join(" ")}`,
         );
       } else {
         setError(null);

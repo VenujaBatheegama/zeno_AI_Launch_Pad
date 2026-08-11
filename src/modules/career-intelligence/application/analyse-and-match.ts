@@ -449,6 +449,16 @@ export async function analyseAndMatchBatch(
   const started = Date.now();
   const concurrency = Math.max(1, dependencies.extractionConcurrency ?? 2);
 
+  const evidenceSet = await dependencies.evidenceRepository.getCurrent(
+    parsed.userId,
+  );
+  if (!evidenceSet || evidenceSet.status !== "verified") {
+    throw new CareerIntelligenceError(
+      "EVIDENCE_REQUIRED",
+      "Verify career evidence before matching jobs. Finish onboarding (upload or chat through your experience), then confirm your profile.",
+    );
+  }
+
   const jobs = await dependencies.jobRepository.listJobs({
     userId: parsed.userId,
     includeDismissed: true,

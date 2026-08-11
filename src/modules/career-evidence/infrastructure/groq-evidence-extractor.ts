@@ -19,6 +19,16 @@ import {
   type ExtractedCareerEvidence,
 } from "../domain/evidence";
 import { CareerEvidenceError } from "../domain/errors";
+import {
+  parseRecoveredToolArguments,
+  readFailedGeneration,
+  salvageEvidencePayload,
+} from "../domain/recover-failed-tool-generation";
+
+/** Keep prompt + tool schema under free-tier TPM when max output is reserved. */
+const MAX_CV_PROMPT_CHARS = 12_000;
+/** Reasoning models need headroom, but Groq reserves max_output against TPM (8000). */
+const EXTRACTION_MAX_OUTPUT_TOKENS = 4096;
 
 const EXTRACTION_INSTRUCTIONS = `You extract career evidence from CV text.
 
@@ -45,6 +55,9 @@ Rules:
 - Keep project and work bullets atomic: do not collapse multiple technical facts
   (technologies, features, auth, data, integrations, reporting) into one vague
   sentence. Prefer several concrete bullets over one summary.
+- Cap each work/project entry at 6 bullets. Keep each source_quote under 180
+  characters and prefer the local heading line over pasting whole paragraphs.
+- Prefer finishing a valid tool call over exhaustive long quotes.
 - Preserve full technology lists on projects when listed in the CV.
 - Put competition results, hackathon placements, and awards in achievements
   (name + result such as "2nd Runners-up"), not certifications.
@@ -58,7 +71,8 @@ Rules:
   dates are returned. Do not combine adjacent entries into one source_quote.
 - Put uncertainty or conflicting text in warnings instead of resolving it creatively.
 - Return one JSON object that matches the supplied schema.
-- Do not include commentary outside the JSON object.`;
+- Do not include commentary outside the JSON object.
+- Keep reasoning brief so the tool-call JSON can complete.`;
 
 export class GroqEvidenceExtractor implements EvidenceExtractor {
   private readonly keyPool: GroqKeyPool;
@@ -77,60 +91,75 @@ export class GroqEvidenceExtractor implements EvidenceExtractor {
   }
 
   async extract(text: string): Promise<ExtractedCareerEvidence> {
+    const promptText = truncateCvText(text);
     let lastError: unknown;
     let sawRateLimit = false;
 
     try {
-      return await this.keyPool.withKey(async (apiKey) => {
-        let keyError: unknown;
-        let keySawRateLimit = false;
-        let keySawToolFailure = false;
+      // Tool-call truncation is model/output-budget related — rotating free-tier
+      // keys that share an org only burns TPM. Retry models inside the key instead.
+      return await this.keyPool.withKey(
+        async (apiKey) => {
+          let keyError: unknown;
+          let keySawRateLimit = false;
+          let keySawToolFailure = false;
 
-        for (const modelId of this.modelIds) {
-          for (let attempt = 0; attempt < 2; attempt += 1) {
-            try {
-              return await this.extractWithModel(apiKey, modelId, text);
-            } catch (error) {
-              keyError = error;
-              lastError = error;
-              if (isGroqRateLimited(error)) {
-                keySawRateLimit = true;
-                sawRateLimit = true;
-                console.warn(
-                  `[cv-extract] rate-limited on model ${modelId}; trying next model/key.`,
-                );
-                break;
-              }
-              if (isMalformedOutput(error) || isGroqToolFailure(error)) {
-                keySawToolFailure = true;
-                if (attempt === 0) {
+          for (const modelId of this.modelIds) {
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              try {
+                return await this.extractWithModel(apiKey, modelId, promptText);
+              } catch (error) {
+                keyError = error;
+                lastError = error;
+
+                const recovered = tryRecoverFromFailedGeneration(error);
+                if (recovered) {
                   console.warn(
-                    `[cv-extract] malformed/tool failure on ${modelId} (retrying once).`,
+                    `[cv-extract] recovered truncated tool output on ${modelId}.`,
                   );
-                  continue;
+                  return recovered;
                 }
-                console.warn(
-                  `[cv-extract] malformed/tool failure on ${modelId}; trying next model.`,
-                );
-                break;
+
+                if (isGroqRateLimited(error)) {
+                  keySawRateLimit = true;
+                  sawRateLimit = true;
+                  console.warn(
+                    `[cv-extract] rate-limited on model ${modelId}; trying next model/key.`,
+                  );
+                  break;
+                }
+                if (isMalformedOutput(error) || isGroqToolFailure(error)) {
+                  keySawToolFailure = true;
+                  if (attempt === 0) {
+                    console.warn(
+                      `[cv-extract] malformed/tool failure on ${modelId} (retrying once).`,
+                    );
+                    continue;
+                  }
+                  console.warn(
+                    `[cv-extract] malformed/tool failure on ${modelId}; trying next model.`,
+                  );
+                  break;
+                }
+                // Hard failure for this request — do not burn other keys/models.
+                throw error;
               }
-              // Hard failure for this request — do not burn other keys/models.
-              throw error;
             }
           }
-        }
 
-        // Rotate key on rate-limit or persistent tool-call flakiness.
-        if (keySawRateLimit || keySawToolFailure) {
+          // Rotate key on rate-limit only when the pool allows it.
+          if (keySawRateLimit || keySawToolFailure) {
+            throw keyError instanceof Error
+              ? keyError
+              : new Error("Groq extraction failed for this key.");
+          }
+
           throw keyError instanceof Error
             ? keyError
-            : new Error("Groq extraction failed for this key.");
-        }
-
-        throw keyError instanceof Error
-          ? keyError
-          : new Error("CV extraction failed for this Groq key.");
-      });
+            : new Error("CV extraction failed for this Groq key.");
+        },
+        { rotateOnToolFailure: false },
+      );
     } catch (error) {
       lastError = error;
       if (
@@ -142,6 +171,13 @@ export class GroqEvidenceExtractor implements EvidenceExtractor {
           error instanceof GroqKeysExhaustedError
             ? error.message
             : "CV extraction hit the Groq daily token limit across configured keys. Add GROQ_API_KEY_2 / GROQ_API_KEY_3 or wait for the quota to reset.",
+          { cause: lastError },
+        );
+      }
+      if (isGroqToolFailure(error) || isMalformedOutput(error)) {
+        throw new CareerEvidenceError(
+          "AI_EXTRACTION_FAILED",
+          "CV extraction produced incomplete structured output. Try again, or use a shorter CV export.",
           { cause: lastError },
         );
       }
@@ -162,6 +198,8 @@ export class GroqEvidenceExtractor implements EvidenceExtractor {
 
     const result = await generateText({
       model,
+      maxRetries: 0,
+      maxOutputTokens: EXTRACTION_MAX_OUTPUT_TOKENS,
       system: EXTRACTION_INSTRUCTIONS,
       prompt: `Extract career evidence from the CV below.\n\n<CV>\n${text}\n</CV>`,
       tools: {
@@ -190,6 +228,53 @@ export class GroqEvidenceExtractor implements EvidenceExtractor {
 
 class MissingEvidenceToolCallError extends Error {}
 
+function truncateCvText(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= MAX_CV_PROMPT_CHARS) return trimmed;
+  return `${trimmed.slice(0, MAX_CV_PROMPT_CHARS).trimEnd()}\n…[truncated]`;
+}
+
+function tryRecoverFromFailedGeneration(
+  error: unknown,
+): ExtractedCareerEvidence | null {
+  const failed = readFailedGeneration(error);
+  if (!failed) return null;
+  const args = parseRecoveredToolArguments(failed);
+  if (!args) return null;
+
+  let candidate = salvageEvidencePayload(args);
+  for (let drop = 0; drop < 4; drop += 1) {
+    const toolParsed = careerEvidenceToolInputSchema.safeParse(candidate);
+    if (toolParsed.success) {
+      const strict = extractedCareerEvidenceSchema.safeParse(toolParsed.data);
+      if (strict.success) return strict.data;
+    }
+    candidate = dropTrailingCollectionItem(candidate);
+  }
+  return null;
+}
+
+function dropTrailingCollectionItem(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const keys = [
+    "projects",
+    "work_experience",
+    "education",
+    "certifications",
+    "achievements",
+    "skills",
+    "references",
+  ] as const;
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value) && value.length > 0) {
+      return { ...payload, [key]: value.slice(0, -1) };
+    }
+  }
+  return payload;
+}
+
 function dedupeModels(modelIds: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -211,7 +296,8 @@ function isMalformedOutput(error: unknown): boolean {
       (error.message.includes("Failed to validate JSON") ||
         error.message.includes("Failed to call a function") ||
         error.message.includes("tool call validation failed") ||
-        error.message.includes("Tool choice is required"))) ||
+        error.message.includes("Tool choice is required") ||
+        /Failed to parse tool call arguments as\s*JSON/i.test(error.message))) ||
     error instanceof SyntaxError
   );
 }

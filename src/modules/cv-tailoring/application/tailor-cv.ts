@@ -279,8 +279,13 @@ export async function createTailoredCvContent(
       });
       draft = tailored.draft;
       usage = tailored.usage;
-    } catch {
-      // Low fit / LLM failure must never block CV generation when basic evidence exists.
+    } catch (error) {
+      // Low fit / LLM failure / rate limits must never block CV generation when
+      // basic evidence exists — fall back to verified source wording.
+      console.warn(
+        "[cv-tailor] AI tailor failed; using deterministic fallback:",
+        error instanceof Error ? error.message : error,
+      );
       resume = buildDeterministicResume({
         plan,
         snapshot,

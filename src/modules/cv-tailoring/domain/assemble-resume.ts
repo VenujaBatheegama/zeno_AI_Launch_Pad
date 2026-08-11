@@ -4,6 +4,7 @@ import { sentencesToParagraph } from "./project-paragraphs";
 import { sanitizeCvProse } from "./sanitize-prose";
 import {
   buildSkillInventory,
+  clampSkillItem,
   groupSkillsDeterministically,
   resolveSkillDisplay,
   type SkillInventory,
@@ -295,7 +296,9 @@ function sanitizeSkillGroups(
     if (!group.category.trim()) continue;
     const items = group.items
       .map((item) => resolveSkillDisplay(item, inventory))
-      .filter((item): item is string => Boolean(item));
+      .filter((item): item is string => Boolean(item))
+      .map((item) => clampSkillItem(item))
+      .filter(Boolean);
     const unique = [...new Set(items)];
     if (unique.length === 0) continue;
     cleaned.push({ category: group.category.trim(), items: unique });

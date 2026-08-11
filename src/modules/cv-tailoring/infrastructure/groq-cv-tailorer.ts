@@ -126,6 +126,8 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
           try {
             const result = await generateText({
               model: this.keyPool.createModel(apiKey, this.modelId),
+              maxRetries: 0,
+              maxOutputTokens: 4096,
               system: INSTRUCTIONS,
               prompt: [
                 `Prompt version: ${TAILORING_PROMPT_VERSION}`,
@@ -225,6 +227,8 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
           try {
             const result = await generateText({
               model: this.keyPool.createModel(apiKey, this.modelId),
+              maxRetries: 0,
+              maxOutputTokens: 4096,
               system: INSTRUCTIONS,
               prompt: [
                 "Repair only these bullets for one career item. Do not introduce new evidence.",

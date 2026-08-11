@@ -63,9 +63,13 @@ describe("GroqJobRequirementExtractor strict output", () => {
       tools?: unknown;
       output?: unknown;
       temperature?: number;
+      maxRetries?: number;
+      maxOutputTokens?: number;
     };
     expect(args.tools).toBeUndefined();
     expect(args.temperature).toBe(0);
+    expect(args.maxRetries).toBe(0);
+    expect(args.maxOutputTokens).toBe(4096);
     expect(args.output).toBeTruthy();
     expect(Output.object).toBeTypeOf("function");
   });
