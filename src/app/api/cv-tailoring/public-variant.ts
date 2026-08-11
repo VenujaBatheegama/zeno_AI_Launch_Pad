@@ -17,6 +17,10 @@ export function publicCvVariant(variant: CvTailoringVariant) {
       ? resume.targetTitle
       : variant.contentPlan.targetTitle,
     jobAlignment: variant.contentPlan.jobAlignment,
+    sectionOrder: variant.contentPlan.sectionOrder.filter(
+      (section) => section !== "contact",
+    ),
+    earlyCareer: variant.contentPlan.earlyCareer,
     assessment: variant.assessment ?? variant.contentPlan.assessment ?? null,
     selectedProjects: variant.contentPlan.projectItemIds,
     selectedExperience: variant.contentPlan.experienceItemIds,

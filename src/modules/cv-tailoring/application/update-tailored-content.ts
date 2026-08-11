@@ -2,8 +2,7 @@ import { z } from "zod";
 
 import { CvTailoringError } from "../domain/errors";
 import {
-  isTailoredResume,
-  tailoredResumeSchema,
+  userEditableTailoredResumeSchema,
   type TailoredResume,
 } from "../domain/tailored-resume";
 import type { Clock, CvTailoringRepository, CvTailoringVariant } from "./ports";
@@ -11,15 +10,14 @@ import type { Clock, CvTailoringRepository, CvTailoringVariant } from "./ports";
 const updateSchema = z.object({
   userId: z.uuid(),
   variantId: z.uuid(),
-  tailoredContent: tailoredResumeSchema,
-  /** Optimistic concurrency — reject if the stored row moved on. */
-  expectedUpdatedAt: z.string().datetime().optional(),
+  tailoredContent: userEditableTailoredResumeSchema,
 });
 
 export type UpdateTailoredCvContentCommand = z.input<typeof updateSchema>;
 
 /**
  * Persist user edits to structured ready_to_render content.
+ * Last-write-wins for the owning user — this CV is independent of the profile.
  * Does not modify verified evidence. Marks a ready PDF as stale.
  */
 export async function updateTailoredCvContent(
@@ -53,21 +51,12 @@ export async function updateTailoredCvContent(
       "Generate CV content before editing.",
     );
   }
-  if (
-    parsed.expectedUpdatedAt &&
-    existing.updatedAt !== parsed.expectedUpdatedAt
-  ) {
-    throw new CvTailoringError(
-      "STALE_INPUT",
-      "This CV was updated elsewhere. Reload and try again.",
-    );
-  }
 
   const content = markUserEditedFragments(
     existing.tailoredContent,
     parsed.tailoredContent,
   );
-  if (!isTailoredResume(content)) {
+  if (!userEditableTailoredResumeSchema.safeParse(content).success) {
     throw new CvTailoringError(
       "INVALID_INPUT",
       "Edited CV content failed schema validation.",
@@ -90,8 +79,6 @@ export async function updateTailoredCvContent(
 
   return dependencies.repository.saveVariant({
     ...existing,
-    // Keep prior artifact for recovery until a new render succeeds, but
-    // download is gated on status === "ready".
     status: "ready_to_render",
     tailoredContent: content,
     warnings,
@@ -210,7 +197,7 @@ function collectUserAuthoredWarnings(content: TailoredResume): string[] {
     );
   return hasUserAuthored
     ? [
-        "Some wording was edited by you and is not verified career evidence.",
+        "Edits apply to this CV only and do not change your career profile.",
       ]
     : [];
 }

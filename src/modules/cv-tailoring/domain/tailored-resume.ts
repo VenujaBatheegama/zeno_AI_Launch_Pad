@@ -173,6 +173,93 @@ export const tailoredResumeSchema = z
 export type TailoredResume = z.infer<typeof tailoredResumeSchema>;
 
 /**
+ * Post-generation CV edits are independent of the career profile.
+ * Length floors are relaxed so users can revise freely; generation still
+ * uses the stricter {@link tailoredResumeSchema}.
+ */
+export const userEditableTailoredResumeSchema = tailoredResumeSchema
+  .omit({
+    summary: true,
+    experience: true,
+    projects: true,
+    achievements: true,
+  })
+  .extend({
+    summary: z
+      .object({
+        text: z.string().min(1).max(700),
+        factIds: z.array(z.string()),
+        source: resumeTextSourceSchema.default("ai_generated"),
+      })
+      .strict(),
+    experience: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          employer: z.string().min(1),
+          title: z.string().min(1),
+          location: z.string().optional(),
+          startDate: z.string(),
+          endDate: z.string().nullable(),
+          isCurrent: z.boolean().optional(),
+          bullets: z
+            .array(
+              z
+                .object({
+                  text: z.string().min(1).max(320),
+                  factIds: z.array(z.string().min(1)).min(1),
+                  priority: z.number().int().optional(),
+                  source: resumeTextSourceSchema.default("ai_generated"),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(6),
+          priority: z.number().int().optional(),
+        })
+        .strict(),
+    ),
+    projects: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          name: z.string().min(1),
+          technologies: z.array(z.string()),
+          url: z.string().optional(),
+          startDate: z.string().optional(),
+          endDate: z.string().nullable().optional(),
+          paragraphs: z
+            .array(
+              z
+                .object({
+                  text: z.string().min(1).max(1200),
+                  factIds: z.array(z.string().min(1)).min(1),
+                  priority: z.number().int().optional(),
+                  source: resumeTextSourceSchema.default("ai_generated"),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(3),
+          priority: z.number().int().optional(),
+        })
+        .strict(),
+    ),
+    achievements: z
+      .array(
+        z
+          .object({
+            text: z.string().min(1),
+            factIds: z.array(z.string()),
+            priority: z.number().int().optional(),
+          })
+          .strict(),
+      )
+      .default([]),
+  })
+  .strict();
+
+/**
  * Lean Groq draft — verified identity fields are filled by assembleTailoredResume.
  */
 export const groqResumeDraftSchema = z
@@ -269,5 +356,8 @@ export const resumeDensitySchema = z.enum(["comfortable", "compact"]);
 export type ResumeDensity = z.infer<typeof resumeDensitySchema>;
 
 export function isTailoredResume(value: unknown): value is TailoredResume {
-  return tailoredResumeSchema.safeParse(value).success;
+  return (
+    tailoredResumeSchema.safeParse(value).success ||
+    userEditableTailoredResumeSchema.safeParse(value).success
+  );
 }

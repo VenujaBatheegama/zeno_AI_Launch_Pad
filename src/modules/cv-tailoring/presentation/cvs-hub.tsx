@@ -9,7 +9,7 @@ import { CvLibrary } from "./cv-library";
 type Tab = "mine" | "create";
 
 /**
- * CVs hub: keep the existing library as "CV", add Lovable-styled Create CV entry.
+ * CVs hub — Lovable-style library tabs and create entry.
  */
 export function CvsHub() {
   const searchParams = useSearchParams();
@@ -22,80 +22,77 @@ export function CvsHub() {
   }, []);
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--zeno-ink)]">
+    <div className="space-y-6">
+      <header className="max-w-2xl">
+        <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
           CVs
         </h1>
-        <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
+        <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
           Every tailored CV is assembled from your verified profile. Zeno does
           not invent experience.
         </p>
       </header>
 
-      <div className="inline-flex rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-0.5">
+      <div className="inline-flex gap-2">
         {(
           [
-            ["mine", "CV", "/app/cvs"],
+            ["mine", "My CVs", "/app/cvs"],
             ["create", "Create CV", createHref],
           ] as const
-        ).map(([value, label, href]) => (
-          <Link
-            key={value}
-            href={href}
-            className={`inline-flex h-8 items-center rounded-[7px] px-3 text-xs font-medium transition-colors ${
-              tab === value
-                ? "bg-white text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
-                : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
-            }`}
-          >
-            {label}
-          </Link>
-        ))}
+        ).map(([value, label, href]) => {
+          const active = tab === value;
+          return (
+            <Link
+              key={value}
+              href={href}
+              className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] font-medium transition ${
+                active
+                  ? "bg-[var(--zeno-ink)] text-white"
+                  : "border border-[var(--zeno-border)] bg-white text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
+              }`}
+            >
+              {label}
+            </Link>
+          );
+        })}
       </div>
 
-      {tab === "mine" ? (
-        <CvLibrary embedded />
-      ) : (
-        <CreateCvPanel />
-      )}
+      {tab === "mine" ? <CvLibrary embedded /> : <CreateCvPanel />}
     </div>
   );
 }
 
 function CreateCvPanel() {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-3 md:grid-cols-2">
-        <Link
-          href="/app/cvs/paste"
-          className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
-        >
-          <span className="flex size-9 items-center justify-center rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
-            <ClipboardIcon />
-          </span>
-          <p className="mt-3 text-[14px] font-semibold text-[var(--zeno-ink)]">
-            Paste a job description
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--zeno-ink-muted)]">
-            Add a job description from anywhere and create a grounded CV.
-          </p>
-        </Link>
-        <Link
-          href="/app/cvs/matched"
-          className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
-        >
-          <span className="flex size-9 items-center justify-center rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
-            <ListIcon />
-          </span>
-          <p className="mt-3 text-[14px] font-semibold text-[var(--zeno-ink)]">
-            Choose from matched jobs
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--zeno-ink-muted)]">
-            Select one of the opportunities Zeno has already analysed.
-          </p>
-        </Link>
-      </div>
+    <div className="grid gap-4 md:grid-cols-2">
+      <Link
+        href="/app/cvs/paste"
+        className="rounded-[16px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
+      >
+        <span className="flex size-10 items-center justify-center rounded-[12px] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
+          <ClipboardIcon />
+        </span>
+        <p className="mt-4 text-[15px] font-semibold text-[var(--zeno-ink)]">
+          Paste a job description
+        </p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--zeno-ink-muted)]">
+          Add a job description from anywhere and create a grounded CV.
+        </p>
+      </Link>
+      <Link
+        href="/app/cvs/matched"
+        className="rounded-[16px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
+      >
+        <span className="flex size-10 items-center justify-center rounded-[12px] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
+          <ListIcon />
+        </span>
+        <p className="mt-4 text-[15px] font-semibold text-[var(--zeno-ink)]">
+          Choose from matched jobs
+        </p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--zeno-ink-muted)]">
+          Select one of the opportunities Zeno has already analysed.
+        </p>
+      </Link>
     </div>
   );
 }

@@ -119,7 +119,6 @@ describe("updateTailoredCvContent", () => {
       {
         userId: USER,
         variantId: VARIANT_ID,
-        expectedUpdatedAt: existing.updatedAt,
         tailoredContent: sampleResume({
           summary: {
             text: "Edited summary for a software engineering internship application.",
@@ -160,46 +159,12 @@ describe("updateTailoredCvContent", () => {
     expect(savedBox.current?.status).toBe("ready_to_render");
   });
 
-  it("rejects stale expectedUpdatedAt", async () => {
-    await expect(
-      updateTailoredCvContent(
-        {
-          userId: USER,
-          variantId: VARIANT_ID,
-          expectedUpdatedAt: "2020-01-01T00:00:00.000Z",
-          tailoredContent: sampleResume(),
-        },
-        {
-          now: () => NOW,
-          repository: {
-            async getVariant() {
-              return variant("ready_to_render");
-            },
-            async saveVariant(next) {
-              return next;
-            },
-            async getVariantByIdempotencyKey() {
-              return null;
-            },
-            async listVariantsForListing() {
-              return [];
-            },
-            async listVariantsForUser() {
-              return [];
-            },
-          },
-        },
-      ),
-    ).rejects.toMatchObject({ code: "STALE_INPUT" });
-  });
-
   it("preserves fact IDs on unchanged fragments and marks only edited text", async () => {
     const existing = variant("ready_to_render");
     const result = await updateTailoredCvContent(
       {
         userId: USER,
         variantId: VARIANT_ID,
-        expectedUpdatedAt: existing.updatedAt,
         tailoredContent: sampleResume({
           summary: {
             text: existing.tailoredContent!.summary.text,

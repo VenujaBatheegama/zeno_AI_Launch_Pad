@@ -2,6 +2,7 @@ import { Document, Font, Page, Text, View } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
 
 import type { ContentPlan } from "../../domain/content-plan";
+import { defaultResumeSectionOrder } from "../../domain/resume-section-order";
 import type { TailoredResume } from "../../domain/tailored-resume";
 import {
   BulletList,
@@ -49,7 +50,7 @@ export function ProfessionalSingleColumnResume(props: {
 
   const sectionOrder =
     props.plan?.sectionOrder?.filter((section) => section !== "contact") ??
-    defaultSectionOrder(props.plan?.mode, props.plan?.earlyCareer);
+    defaultResumeSectionOrder(props.plan?.mode, props.plan?.earlyCareer);
 
   const sections: Record<string, ReactNode> = {
     summary: (
@@ -247,34 +248,6 @@ function renderProject(
       ))}
     </View>
   );
-}
-
-function defaultSectionOrder(
-  mode?: ContentPlan["mode"],
-  earlyCareer?: boolean,
-): string[] {
-  if (mode === "one_page" || earlyCareer) {
-    return [
-      "summary",
-      "skills",
-      "experience",
-      "education",
-      "projects",
-      "certifications",
-      "achievements",
-      "references",
-    ];
-  }
-  return [
-    "summary",
-    "skills",
-    "experience",
-    "projects",
-    "education",
-    "certifications",
-    "achievements",
-    "references",
-  ];
 }
 
 /** Helper export for typed children in presentational wrappers. */
