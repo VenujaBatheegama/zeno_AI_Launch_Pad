@@ -424,6 +424,15 @@ export async function searchForJobs(
   alsoSearchFor: string[];
 }> {
   const parsed = searchForJobsSchema.parse(command);
+
+  // Fresh search: drop previous discovered listings (keep saved) and old match
+  // cards so the Jobs page does not stack / duplicate prior results.
+  await dependencies.jobRepository.clearDiscoveredJobs({
+    userId: parsed.userId,
+    includeSaved: false,
+  });
+  await dependencies.repository.clearMatchAnalyses(parsed.userId);
+
   const ensured = await ensureJobSearchPlan(
     {
       userId: parsed.userId,

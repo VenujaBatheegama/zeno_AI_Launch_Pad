@@ -78,6 +78,13 @@ strongest technical direction. Mention internship/professional experience when p
 Never use internal terms such as "verified evidence" or "Zeno".
 Avoid filler: results-driven, passionate, highly motivated, proven track record,
 delivery-focused environment, eager to learn, team player, targeting roles that.
+
+Target title:
+- Set targetTitle to the suggested target title EXACTLY
+- Do not copy the raw job posting title
+- Never include locations, cities, states, countries, company names, remote/hybrid
+  tags, contract type, or seniority ranges (e.g. "Mid to Experienced Level")
+- The CV title must be a professional role name only (e.g. "Junior Software Engineer")
 Use plain ASCII punctuation only: hyphen "-", not em dash or en dash.
 
 Do not rewrite employer names, historical job titles, dates, institution names,
@@ -133,8 +140,9 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
                 `Prompt version: ${TAILORING_PROMPT_VERSION}`,
                 `Mode: ${input.mode}`,
                 `Job: ${input.jobTitle}${input.company ? ` at ${input.company}` : ""}`,
-                `Suggested target title: ${input.plan.targetTitle}`,
+                `Suggested target title (use EXACTLY as targetTitle): ${input.plan.targetTitle}`,
                 `Candidate level / alignment (informational): ${input.plan.jobAlignment}`,
+                "Do not copy location, seniority range, or posting fluff from the job title into targetTitle.",
                 input.tailoringContext
                   ? `User emphasis (not a factual source): ${input.tailoringContext}`
                   : "No extra user emphasis.",

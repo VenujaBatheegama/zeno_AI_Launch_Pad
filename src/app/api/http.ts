@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { CareerEvidenceError } from "@/modules/career-evidence/domain/errors";
+import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
 import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { CvTailoringError } from "@/modules/cv-tailoring/domain/errors";
 import { JobDiscoveryError } from "@/modules/job-discovery/domain/errors";
@@ -23,6 +24,27 @@ export function errorResponse(error: unknown): NextResponse {
         issues: error.issues.slice(0, 10),
       },
       { status: 400 },
+    );
+  }
+
+  if (error instanceof CareerCampaignError) {
+    const statusByCode = {
+      EVIDENCE_REQUIRED: 400,
+      PREFERENCES_REQUIRED: 400,
+      NOT_FOUND: 404,
+      INVALID_INPUT: 400,
+      INVALID_TRANSITION: 409,
+      CONFLICT: 409,
+      RUN_IN_PROGRESS: 409,
+      PACKET_NOT_READY: 409,
+      AI_UNAVAILABLE: 502,
+      INVALID_AI_OUTPUT: 502,
+      PERSISTENCE_FAILED: 503,
+      UNAUTHORIZED: 401,
+    } as const;
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: statusByCode[error.code] },
     );
   }
 
@@ -77,6 +99,7 @@ export function errorResponse(error: unknown): NextResponse {
       SEARCH_NOT_CONFIGURED: 400,
       SOURCE_UNAVAILABLE: 502,
       SOURCE_RATE_LIMITED: 429,
+      SOURCE_FORBIDDEN: 403,
       SOURCE_UNAUTHORIZED: 503,
       PERSISTENCE_FAILED: 503,
       NOT_FOUND: 404,

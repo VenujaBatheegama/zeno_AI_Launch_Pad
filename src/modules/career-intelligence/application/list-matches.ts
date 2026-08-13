@@ -196,38 +196,99 @@ export async function getJobMatchDetails(
   },
 ): Promise<JobMatchDetails> {
   const parsed = detailsSchema.parse(command);
-  const cards = await listRankedJobMatches(
-    { userId: parsed.userId, includeDismissed: true },
-    dependencies,
-  );
-  const card = cards.find((item) => item.listingId === parsed.listingId);
-  const analysis = await dependencies.repository.getJobAnalysisByListing(
-    parsed.userId,
-    parsed.listingId,
-  );
-  const match = await dependencies.repository.getMatchAnalysisByListing(
-    parsed.userId,
-    parsed.listingId,
-  );
-  const assessment =
-    await dependencies.repository.getLatestCareerStageAssessment(parsed.userId);
 
-  if (!card || !analysis || !match || !assessment) {
+  // Load only this listing — avoid listRankedJobMatches (full job list + ESCO).
+  const [jobs, analysis, match, assessment, profile] = await Promise.all([
+    dependencies.jobRepository.listJobs({
+      userId: parsed.userId,
+      includeDismissed: true,
+      limit: 100,
+      offset: 0,
+    }),
+    dependencies.repository.getJobAnalysisByListing(
+      parsed.userId,
+      parsed.listingId,
+    ),
+    dependencies.repository.getMatchAnalysisByListing(
+      parsed.userId,
+      parsed.listingId,
+    ),
+    dependencies.repository.getLatestCareerStageAssessment(parsed.userId),
+    dependencies.jobRepository.getSearchProfile(parsed.userId),
+  ]);
+
+  const job = jobs.find((item) => item.listing_id === parsed.listingId);
+  if (!job || !analysis || !match || !assessment) {
     throw new CareerIntelligenceError(
       "NOT_FOUND",
       "Match details are not available for that job yet.",
     );
   }
 
-  const profile = await dependencies.jobRepository.getSearchProfile(
-    parsed.userId,
-  );
-  if (profile) {
-    const preferencesFingerprint = fingerprint(profile.preferences);
-    if (match.preferencesFingerprint !== preferencesFingerprint) {
-      card.stale = true;
-    }
-  }
+  const preferences = profile?.preferences ?? emptyJobSearchPreferences;
+  const evidenceSet = dependencies.evidenceRepository
+    ? await settledNull(() =>
+        dependencies.evidenceRepository!.getCurrent(parsed.userId),
+      )
+    : null;
+  const profileTerms = await buildMatchableProfileTerms({
+    preferences,
+    evidence:
+      evidenceSet?.status === "verified" ? evidenceSet.evidence : null,
+    escoResolver: dependencies.escoResolver ?? null,
+  });
+
+  const searchRelevance = scoreJobRelevance(job, {
+    role_titles: preferences.roles.slice(0, 5),
+    locations: preferences.locations.slice(0, 3),
+    work_modes: preferences.work_modes,
+    employment_types: preferences.employment_types,
+    experience_levels: preferences.experience_levels,
+  });
+  const alignment = alignJobToProfile({
+    title: job.title,
+    description: job.description,
+    terms: profileTerms,
+  });
+  const rankingReasons: string[] = [];
+  if (searchRelevance >= 70) rankingReasons.push("Strong match for your selected role");
+  else if (searchRelevance >= 40) rankingReasons.push("Matches your selected role");
+  for (const reason of alignment.reasons) rankingReasons.push(reason);
+  rankingReasons.push(`Evidence fit: ${match.evidenceFitScore}%`);
+
+  const softStale =
+    match.status === "stale" ||
+    match.matchingPolicyVersion !== MATCHING_POLICY_VERSION ||
+    match.careerStageAssessmentId !== assessment.id ||
+    match.evidenceFingerprint !== assessment.evidenceFingerprint ||
+    match.scoringPolicyVersion !== SCORING_POLICY_VERSION ||
+    Boolean(
+      profile &&
+        match.preferencesFingerprint !== fingerprint(profile.preferences),
+    );
+
+  const card: RankedJobMatchCard = {
+    listingId: job.listing_id,
+    jobId: job.job_id,
+    title: job.title,
+    organizationName: job.organization_name,
+    applicationUrl: job.application_url,
+    userState: job.user_state,
+    evidenceFitScore: match.evidenceFitScore,
+    careerLevel: match.careerLevel,
+    confidence: match.analysisConfidence,
+    topMatched: summarizeMatches(match, "matched"),
+    primaryGaps: summarizeMatches(match, "gap"),
+    explanation: match.explanation,
+    stale: softStale,
+    eligible: match.hardConstraintEligible,
+    queryProvenance: [],
+    searchRelevance,
+    interestAlignment: alignment.interestScore,
+    rankingReasons,
+    preferredMatches: alignment.preferredMatches,
+    verifiedMatches: alignment.verifiedMatches,
+  };
 
   return {
     card,
@@ -241,14 +302,19 @@ function summarizeMatches(
   match: JobMatchAnalysis,
   status: "matched" | "gap",
 ): string[] {
-  return match.matches
-    .filter((item) => item.status === status)
-    .slice(0, 3)
-    .map((item) => {
-      const reason = item.reason.trim();
-      if (reason.length <= 80) return reason;
-      return `${reason.slice(0, 77)}…`;
-    });
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const item of match.matches) {
+    if (item.status !== status) continue;
+    const reason = item.reason.trim();
+    const label = reason.length <= 80 ? reason : `${reason.slice(0, 77)}…`;
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    labels.push(label);
+    if (labels.length >= 3) break;
+  }
+  return labels;
 }
 
 async function settledNull<T>(load: () => Promise<T>): Promise<T | null> {

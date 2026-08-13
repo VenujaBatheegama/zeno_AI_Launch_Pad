@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
-  JobMatchDetails,
   JobSearchPlan,
   PersistedCareerStageAssessment,
   RankedJobMatchCard,
@@ -16,6 +15,9 @@ import {
   type JobSearchPreferences,
   type WorkMode,
 } from "@/modules/job-discovery/domain/job";
+import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
+import { FreshJobWatchPanel } from "@/modules/career-campaign/presentation/fresh-job-watch-panel";
+import type { FreshJobWatchStatusView } from "@/modules/career-campaign/domain/fresh-watch";
 
 type Props = {
   initialAssessment: PersistedCareerStageAssessment | null;
@@ -24,7 +26,52 @@ type Props = {
   initialJobs: DiscoveredJob[];
   initialPreferences: JobSearchPreferences | null;
   analysisBatchSize: number;
+  initialFreshWatch: FreshJobWatchStatusView;
 };
+
+const JOB_SEARCH_STEPS = [
+  {
+    id: "prepare",
+    title: "Prepare",
+    description: "Clear prior results",
+  },
+  {
+    id: "search",
+    title: "Search",
+    description: "Query job sources",
+  },
+  {
+    id: "collect",
+    title: "Collect",
+    description: "Load discovered roles",
+  },
+  {
+    id: "analyse",
+    title: "Analyse",
+    description: "Match your evidence",
+  },
+  {
+    id: "rank",
+    title: "Rank",
+    description: "Order best fits",
+  },
+] as const;
+
+function searchStepIndex(
+  phase:
+    | null
+    | "preparing"
+    | "searching"
+    | "loading_jobs"
+    | "analysing"
+    | "ranking",
+): number {
+  if (phase === "ranking") return 4;
+  if (phase === "analysing") return 3;
+  if (phase === "loading_jobs") return 2;
+  if (phase === "searching") return 1;
+  return 0;
+}
 
 export function CareerIntelligenceWorkspace({
   initialAssessment,
@@ -33,6 +80,7 @@ export function CareerIntelligenceWorkspace({
   initialJobs,
   initialPreferences,
   analysisBatchSize,
+  initialFreshWatch,
 }: Props) {
   void initialAssessment;
   const [, setPlan] = useState<JobSearchPlan | null>(initialPlan);
@@ -56,96 +104,17 @@ export function CareerIntelligenceWorkspace({
       JSON.stringify(savedPreferences ?? emptyJobSearchPreferences),
     [preferences, savedPreferences],
   );
-  const [details, setDetails] = useState<JobMatchDetails | null>(null);
   const [resultQuery, setResultQuery] = useState("");
   const [filterPosted, setFilterPosted] = useState<
     "any" | "day" | "week" | "month"
   >("any");
   const [busy, setBusy] = useState<string | null>(null);
+  const [searchPhase, setSearchPhase] = useState<
+    null | "preparing" | "searching" | "loading_jobs" | "analysing" | "ranking"
+  >(null);
+  const [searchElapsedSec, setSearchElapsedSec] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cvMode, setCvMode] = useState<"one_page" | "two_page">("one_page");
-  const [cvContext, setCvContext] = useState("");
-  const [cvRecommendation, setCvRecommendation] = useState<{
-    recommendedMode: "one_page" | "two_page";
-    reason: string;
-    warnings: string[];
-  } | null>(null);
-  const [cvVariant, setCvVariant] = useState<{
-    id: string;
-    status: string;
-    mode: string;
-    recommendedMode: string;
-    recommendationReason: string;
-    warnings: string[];
-    targetTitle?: string;
-    jobAlignment?: string;
-    assessment?: {
-      factually_valid: boolean;
-      job_alignment: string;
-      supported_keywords: string[];
-      missing_keywords: string[];
-      unsupported_claims: string[];
-      warnings: string[];
-      generation_status: string;
-    } | null;
-    selectedProjects: string[];
-    selectedExperience: string[];
-    keywordAudit: Array<{
-      keyword: string;
-      support_state: string;
-      used: boolean;
-      omission_reason: string | null;
-      priority: string;
-    }>;
-    tailoredContent: {
-      targetTitle?: string;
-      target_title?: string;
-      summary:
-        | { text: string; factIds?: string[] }
-        | { text: string; evidence_refs?: unknown }
-        | null;
-      skills?: Array<{ category: string; items: string[] }>;
-      experience: Array<{
-        id?: string;
-        career_item_id?: string;
-        title?: string;
-        employer?: string;
-        bullets: Array<{ text: string }>;
-      }>;
-      projects: Array<{
-        id?: string;
-        career_item_id?: string;
-        name?: string;
-        display_title?: string;
-        technologies?: string[];
-        /** Preferred: continuous project paragraphs. */
-        paragraphs?: Array<{ text: string }>;
-        /** @deprecated Legacy tailored content used bullets for projects. */
-        bullets?: Array<{ text: string }>;
-      }>;
-      education?: Array<{
-        institution: string;
-        qualification: string;
-      }>;
-      references?: Array<{
-        id?: string;
-        name: string;
-        title?: string;
-        organization?: string;
-        email?: string | null;
-        phone?: string | null;
-      }>;
-      changeNotes?: string[];
-      change_notes?: Array<{ career_item_id: string; explanation: string }>;
-    } | null;
-    pageCount: number | null;
-    repairCount: number;
-    inputTokens: number | null;
-    outputTokens: number | null;
-    generationDurationMs: number | null;
-    errorMessage: string | null;
-  } | null>(null);
 
   const run = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -234,7 +203,6 @@ export function CareerIntelligenceWorkspace({
       }
     }
     setMatches(ranked);
-    setDetails(null);
     const failed = batch.results.filter((item) => item.error || !item.match);
     const ok = batch.results.length - failed.length;
     if (failed.length > 0) {
@@ -263,77 +231,100 @@ export function CareerIntelligenceWorkspace({
       if (prefsDirty) {
         throw new Error("Save your preference changes before searching.");
       }
-      setMessage("Searching for jobs…");
-      const result = await request<{
-        jobsFound: number;
-        partialFailure: boolean;
-        warnings: string[];
-        softNotice: string | null;
-        preparingMessage: string | null;
-        alsoSearchFor: string[];
-        plan: {
-          id: string;
-          status: string;
-          queryCount: number;
-          recommendedRoles: string[];
-          alsoSearchFor: string[];
-          updatedAt: string;
-        };
-      }>("/api/career-intelligence/search", {
-        method: "POST",
-        body: JSON.stringify({ excludedTitles }),
-      });
-      setRecommendedRoles(result.plan.recommendedRoles);
-      setPlan((current) =>
-        current
-          ? {
-              ...current,
-              id: result.plan.id,
-              status: result.plan.status as JobSearchPlan["status"],
-              updatedAt: result.plan.updatedAt,
-            }
-          : current,
-      );
-      const latestJobs = await request<DiscoveredJob[]>("/api/jobs");
-      setJobs(latestJobs);
-
-      const activeJobs = latestJobs.filter(
-        (job) => job.user_state !== "dismissed",
-      );
-      const analysableJobs = activeJobs.filter(
-        (job) => (job.description?.trim().length ?? 0) >= 80,
-      );
-      const listingIds = (
-        analysableJobs.length > 0 ? analysableJobs : activeJobs
-      )
-        .slice(0, resultLimit)
-        .map((job) => job.listing_id);
-
-      const notice = [result.preparingMessage, result.softNotice]
-        .filter(Boolean)
-        .join(" ");
-
-      if (listingIds.length === 0) {
+      const started = Date.now();
+      const tick = window.setInterval(() => {
+        setSearchElapsedSec(Math.floor((Date.now() - started) / 1000));
+      }, 500);
+      try {
+        setSearchPhase("preparing");
+        setSearchElapsedSec(0);
+        setMessage("Starting a fresh search…");
+        // Clear prior results immediately so the list does not stack old cards
+        // while the new search runs.
         setMatches([]);
-        setMessage(
-          result.jobsFound === 0
-            ? `${notice ? `${notice} ` : ""}No matching jobs found. Try adjusting preferences or broadening location / work arrangement.`
-            : `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s), but none were ready to analyse yet.`,
+        setJobs((current) =>
+          current.filter((job) => job.user_state === "saved"),
         );
-      } else {
-        setMessage(
-          `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s). Analysing the top ${listingIds.length} by relevance…`,
+        setSearchPhase("searching");
+        setMessage("Searching job sources…");
+        const result = await request<{
+          jobsFound: number;
+          partialFailure: boolean;
+          warnings: string[];
+          softNotice: string | null;
+          preparingMessage: string | null;
+          alsoSearchFor: string[];
+          plan: {
+            id: string;
+            status: string;
+            queryCount: number;
+            recommendedRoles: string[];
+            alsoSearchFor: string[];
+            updatedAt: string;
+          };
+        }>("/api/career-intelligence/search", {
+          method: "POST",
+          body: JSON.stringify({ excludedTitles }),
+        });
+        setRecommendedRoles(result.plan.recommendedRoles);
+        setPlan((current) =>
+          current
+            ? {
+                ...current,
+                id: result.plan.id,
+                status: result.plan.status as JobSearchPlan["status"],
+                updatedAt: result.plan.updatedAt,
+              }
+            : current,
         );
-        const analysed = await analyseListings(listingIds);
-        setMessage(
-          analysed && analysed.rankedCount > 0
-            ? `Found ${result.jobsFound} job(s). Showing ${Math.min(analysed.rankedCount, resultLimit)} analysed matches, ordered by relevance.`
-            : `Found ${result.jobsFound} job(s). Analysis finished for ${analysed?.ok ?? 0}/${analysed?.total ?? 0}; ranked results may still be catching up.`,
-        );
-      }
+        setSearchPhase("loading_jobs");
+        setMessage(`Found ${result.jobsFound} job(s). Loading your list…`);
+        const latestJobs = await request<DiscoveredJob[]>("/api/jobs");
+        setJobs(latestJobs);
 
-      if (result.warnings.length > 0) {
-        setError(result.warnings.slice(0, 4).join(" "));
+        const activeJobs = latestJobs.filter(
+          (job) => job.user_state !== "dismissed",
+        );
+        const analysableJobs = activeJobs.filter(
+          (job) => (job.description?.trim().length ?? 0) >= 80,
+        );
+        const listingIds = (
+          analysableJobs.length > 0 ? analysableJobs : activeJobs
+        )
+          .slice(0, resultLimit)
+          .map((job) => job.listing_id);
+
+        const notice = [result.preparingMessage, result.softNotice]
+          .filter(Boolean)
+          .join(" ");
+
+        if (listingIds.length === 0) {
+          setMatches([]);
+          setMessage(
+            result.jobsFound === 0
+              ? `${notice ? `${notice} ` : ""}No matching jobs found. Try adjusting preferences or broadening location / work arrangement.`
+              : `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s), but none were ready to analyse yet.`,
+          );
+        } else {
+          setSearchPhase("analysing");
+          setMessage(
+            `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s). Analysing the top ${listingIds.length} (AI extraction can take a minute)…`,
+          );
+          const analysed = await analyseListings(listingIds);
+          setSearchPhase("ranking");
+          setMessage(
+            analysed && analysed.rankedCount > 0
+              ? `Found ${result.jobsFound} job(s). Showing ${Math.min(analysed.rankedCount, resultLimit)} analysed matches, ordered by relevance.`
+              : `Found ${result.jobsFound} job(s). Analysis finished for ${analysed?.ok ?? 0}/${analysed?.total ?? 0}; ranked results may still be catching up.`,
+          );
+        }
+
+        if (result.warnings.length > 0) {
+          setError(result.warnings.slice(0, 4).join(" "));
+        }
+      } finally {
+        window.clearInterval(tick);
+        setSearchPhase(null);
       }
     });
 
@@ -344,7 +335,6 @@ export function CareerIntelligenceWorkspace({
         { method: "DELETE" },
       );
       setMatches([]);
-      setDetails(null);
       setMessage(
         `Cleared ${result.removed} stored match result(s). Find new jobs to rebuild rankings.`,
       );
@@ -371,89 +361,6 @@ export function CareerIntelligenceWorkspace({
         ),
       );
     });
-
-  const openDetails = (listingId: string) =>
-    run("details", async () => {
-      const result = await request<JobMatchDetails>(
-        `/api/career-intelligence/matches/${listingId}`,
-      );
-      setDetails(result);
-      setCvVariant(null);
-      setCvRecommendation(null);
-      setCvContext("");
-      try {
-        const recommendation = await request<{
-          recommendedMode: "one_page" | "two_page";
-          reason: string;
-          warnings: string[];
-        }>("/api/cv-tailoring/recommend", {
-          method: "POST",
-          body: JSON.stringify({ listingId }),
-        });
-        setCvRecommendation(recommendation);
-        setCvMode(recommendation.recommendedMode);
-      } catch {
-        // Recommendation is optional until analyse/evidence are ready.
-      }
-      try {
-        const existing = await request<{
-          variants: Array<{ id: string; status: string }>;
-        }>(`/api/cv-tailoring/listing/${listingId}`);
-        const reusable = existing.variants.find(
-          (item) =>
-            item.status === "ready" || item.status === "ready_to_render",
-        );
-        if (reusable) {
-          const loaded = await request<{ variant: NonNullable<typeof cvVariant> }>(
-            `/api/cv-tailoring/${reusable.id}`,
-          );
-          setCvVariant(loaded.variant);
-        }
-      } catch {
-        // No saved variant yet.
-      }
-    });
-
-  const generateCvContent = () => {
-    if (!details) return;
-    run("tailor-content", async () => {
-      setCvVariant(null);
-      const result = await request<{ variant: NonNullable<typeof cvVariant> }>(
-        "/api/cv-tailoring",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            listingId: details.card.listingId,
-            mode: cvMode,
-            tailoringContext: cvContext.trim() || null,
-            force: true,
-          }),
-        },
-      );
-      setCvVariant(result.variant);
-      setMessage(
-        result.variant.status === "ready_to_render"
-          ? "Validated CV content ready — review the preview, then generate the PDF."
-          : `CV status: ${result.variant.status}`,
-      );
-    });
-  };
-
-  const renderCvPdf = () => {
-    if (!cvVariant) return;
-    run("tailor-render", async () => {
-      const result = await request<{ variant: NonNullable<typeof cvVariant> }>(
-        `/api/cv-tailoring/${cvVariant.id}/render`,
-        { method: "POST", body: "{}" },
-      );
-      setCvVariant(result.variant);
-      setMessage(
-        result.variant.status === "ready"
-          ? `PDF ready (${result.variant.pageCount ?? "?"} page). You can download it.`
-          : `CV status: ${result.variant.status}`,
-      );
-    });
-  };
 
   const savedSearchSummary = useMemo(() => {
     if (!savedPreferences || savedPreferences.roles.length === 0) return null;
@@ -495,9 +402,49 @@ export function CareerIntelligenceWorkspace({
           }
           className="inline-flex h-10 items-center rounded-[10px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-[var(--zeno-shadow-sm)] hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
         >
-          {busy === "search" ? "Searching & analysing…" : "Find new jobs"}
+          {busy === "search"
+            ? searchPhase === "analysing"
+              ? `Analysing… ${searchElapsedSec}s`
+              : searchPhase === "loading_jobs"
+                ? `Loading jobs… ${searchElapsedSec}s`
+                : `Searching… ${searchElapsedSec}s`
+            : "Find new jobs"}
         </button>
       </header>
+
+      {busy === "search" ? (
+        <ProgressStepper
+          steps={[...JOB_SEARCH_STEPS]}
+          activeIndex={searchStepIndex(searchPhase)}
+          elapsedSec={searchElapsedSec}
+          hint={
+            searchPhase === "analysing"
+              ? "analysis is the slow step when Groq is rate-limited"
+              : searchPhase === "searching"
+                ? "checking LinkedIn, JSearch, TheirStack and ITPro"
+                : null
+          }
+        />
+      ) : null}
+
+      <FreshJobWatchPanel
+        initialStatus={initialFreshWatch}
+        defaultRole={
+          preferences.roles[0] ?? savedPreferences?.roles[0] ?? ""
+        }
+        defaultLocation={
+          preferences.locations[0] ??
+          savedPreferences?.locations[0] ??
+          (preferences.work_modes.includes("remote") ||
+          savedPreferences?.work_modes.includes("remote") ||
+          !preferences.work_modes.length
+            ? "Remote"
+            : "")
+        }
+        defaultWorkMode={
+          preferences.work_modes[0] ?? savedPreferences?.work_modes[0] ?? "any"
+        }
+      />
 
       {(message || error) && (
         <div className="space-y-2">
@@ -778,9 +725,9 @@ export function CareerIntelligenceWorkspace({
                   </p>
 
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {match.topMatched.slice(0, 6).map((skill) => (
+                    {[...new Set(match.topMatched)].slice(0, 6).map((skill, index) => (
                       <span
-                        key={skill}
+                        key={`${match.listingId}-matched-${index}`}
                         className="rounded-full bg-[var(--zeno-surface-sunken)] px-2.5 py-1 text-[11px] font-medium text-[var(--zeno-ink-muted)]"
                       >
                         {skill}
@@ -808,28 +755,13 @@ export function CareerIntelligenceWorkspace({
                       >
                         View job
                       </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openDetails(match.listingId)}
-                        className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] px-3 text-[12px] font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-violet-wash)]"
-                      >
-                        View job
-                      </button>
-                    )}
+                    ) : null}
                     <a
                       href={`/app/cvs/tailor/${match.listingId}`}
                       className="text-[12px] font-semibold text-[var(--zeno-primary)] hover:underline"
                     >
                       Tailor CV
                     </a>
-                    <button
-                      type="button"
-                      onClick={() => openDetails(match.listingId)}
-                      className="text-[12px] font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
-                    >
-                      Match details
-                    </button>
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -851,400 +783,6 @@ export function CareerIntelligenceWorkspace({
         )}
       </section>
 
-      {details && (
-        <section className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-950">
-              Match detail
-            </h2>
-            <button
-              type="button"
-              onClick={() => setDetails(null)}
-              className="text-sm font-semibold text-slate-600"
-            >
-              Close
-            </button>
-          </div>
-          <p className="text-sm text-slate-700">
-            Evidence fit {details.match.evidenceFitScore}% ·{" "}
-            {humanize(details.match.careerLevel)} · Confidence{" "}
-            {details.match.analysisConfidence}
-          </p>
-          <p className="text-sm text-slate-600">
-            Description quality: {humanize(details.analysis.descriptionQuality)}
-            {" · "}
-            Opportunity band: {humanize(details.analysis.opportunityBand)}
-            {details.card.stale ? " · Analysis is stale" : ""}
-          </p>
-          {details.match.hardConstraintReasons.length > 0 && (
-            <p className="text-sm text-rose-800">
-              {details.match.hardConstraintReasons.join(" ")}
-            </p>
-          )}
-          <MatchGroup
-            title="Matched"
-            items={details.match.matches.filter(
-              (item) => item.status === "matched",
-            )}
-            requirements={details.analysis.requirements}
-          />
-          <MatchGroup
-            title="Partial"
-            items={details.match.matches.filter(
-              (item) => item.status === "partial",
-            )}
-            requirements={details.analysis.requirements}
-          />
-          <MatchGroup
-            title="Gaps"
-            items={details.match.matches.filter((item) => item.status === "gap")}
-            requirements={details.analysis.requirements}
-          />
-          <MatchGroup
-            title="Unknown"
-            items={details.match.matches.filter(
-              (item) => item.status === "unknown",
-            )}
-            requirements={details.analysis.requirements}
-          />
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Score breakdown
-            </h3>
-            <p className="text-sm text-slate-600">
-              Policy {details.match.scoreBreakdown.policy_version}: numerator{" "}
-              {details.match.scoreBreakdown.numerator} / denominator{" "}
-              {details.match.scoreBreakdown.denominator}
-            </p>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-700">
-              {details.match.scoreBreakdown.contributions.map((item) => (
-                <li key={item.requirement_id}>
-                  {item.requirement_id.slice(0, 8)}… · {item.importance} ·{" "}
-                  {item.status} · weight {item.weight} × credit {item.credit} ={" "}
-                  {item.contribution}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-3 border-t border-slate-200 pt-4">
-            <h3 className="text-sm font-semibold text-slate-900">Tailor CV</h3>
-            {cvRecommendation && (
-              <p className="text-sm text-slate-600">
-                Recommended: {humanize(cvRecommendation.recommendedMode)}.{" "}
-                {cvRecommendation.reason}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-3 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="cv-mode"
-                  checked={cvMode === "one_page"}
-                  onChange={() => setCvMode("one_page")}
-                />
-                One page
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="cv-mode"
-                  checked={cvMode === "two_page"}
-                  onChange={() => setCvMode("two_page")}
-                />
-                Two pages
-              </label>
-            </div>
-            <label className="block text-sm text-slate-700">
-              Optional emphasis (not a factual source)
-              <textarea
-                value={cvContext}
-                onChange={(event) => setCvContext(event.target.value)}
-                maxLength={400}
-                rows={2}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                placeholder="e.g. Emphasize the Docker project and backend API work"
-              />
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={generateCvContent}
-                className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {busy === "tailor-content"
-                  ? "Generating content…"
-                  : "1. Generate content"}
-              </button>
-              <button
-                type="button"
-                disabled={
-                  busy !== null ||
-                  !cvVariant ||
-                  (cvVariant.status !== "ready_to_render" &&
-                    cvVariant.status !== "ready")
-                }
-                onClick={renderCvPdf}
-                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {busy === "tailor-render"
-                  ? "Rendering PDF…"
-                  : "2. Generate PDF"}
-              </button>
-              {cvVariant?.status === "ready" && (
-                <a
-                  href={`/api/cv-tailoring/${cvVariant.id}/download`}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800"
-                >
-                  Download PDF
-                </a>
-              )}
-            </div>
-            {cvVariant && (
-              <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                <p>
-                  Status: {humanize(cvVariant.status)}
-                  {cvVariant.pageCount
-                    ? ` · ${cvVariant.pageCount} page(s)`
-                    : ""}
-                  {cvVariant.generationDurationMs
-                    ? ` · ${Math.round(cvVariant.generationDurationMs / 1000)}s`
-                    : ""}
-                </p>
-                {(cvVariant.assessment || cvVariant.jobAlignment) && (
-                  <p>
-                    Factual validity:{" "}
-                    {cvVariant.assessment?.factually_valid === false
-                      ? "issues found"
-                      : "ok"}
-                    {" · "}
-                    Job alignment:{" "}
-                    {humanize(
-                      cvVariant.assessment?.job_alignment ??
-                        cvVariant.jobAlignment ??
-                        "unknown",
-                    )}
-                    {cvVariant.assessment?.generation_status
-                      ? ` · ${humanize(cvVariant.assessment.generation_status)}`
-                      : ""}
-                  </p>
-                )}
-                {cvVariant.assessment &&
-                  cvVariant.assessment.missing_keywords.length > 0 && (
-                    <p className="text-xs text-slate-600">
-                      Missing JD keywords (not blocking):{" "}
-                      {cvVariant.assessment.missing_keywords
-                        .slice(0, 8)
-                        .join(", ")}
-                    </p>
-                  )}
-                {cvVariant.errorMessage && (
-                  <p className="text-rose-800">{cvVariant.errorMessage}</p>
-                )}
-                {cvVariant.warnings.length > 0 && (
-                  <ul className="list-disc space-y-1 pl-5 text-amber-900">
-                    {cvVariant.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                )}
-                <p>
-                  Selected experience: {cvVariant.selectedExperience.length} ·
-                  projects: {cvVariant.selectedProjects.length}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Low job fit never blocks CV generation. Validation only checks
-                  that claims are truthful. Preview content, then render PDF.
-                </p>
-                {cvVariant.tailoredContent && (
-                  <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
-                    <h4 className="font-semibold text-slate-900">
-                      Content preview (validated)
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Same structured JSON used for the PDF — not a separate summary model.
-                    </p>
-                    {(cvVariant.tailoredContent.targetTitle ||
-                      cvVariant.tailoredContent.target_title ||
-                      cvVariant.targetTitle) && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          Target title
-                        </p>
-                        <p>
-                          {cvVariant.tailoredContent.targetTitle ??
-                            cvVariant.tailoredContent.target_title ??
-                            cvVariant.targetTitle}
-                        </p>
-                      </div>
-                    )}
-                    {cvVariant.tailoredContent.summary && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          Summary
-                        </p>
-                        <p>{cvVariant.tailoredContent.summary.text}</p>
-                      </div>
-                    )}
-                    {cvVariant.tailoredContent.skills &&
-                      cvVariant.tailoredContent.skills.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold uppercase text-slate-500">
-                            Skills
-                          </p>
-                          <ul className="mt-1 list-disc space-y-1 pl-5">
-                            {cvVariant.tailoredContent.skills.map((group) => (
-                              <li key={group.category}>
-                                <span className="font-medium">{group.category}:</span>{" "}
-                                {group.items.join(", ")}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    {cvVariant.tailoredContent.experience.map((item) => (
-                      <div key={item.id ?? item.career_item_id}>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          Experience
-                          {item.title ? ` · ${item.title}` : ""}
-                          {item.employer ? ` - ${item.employer}` : ""}
-                        </p>
-                        <ul className="mt-1 list-disc space-y-1 pl-5">
-                          {item.bullets.map((bullet, index) => (
-                            <li
-                              key={`${item.id ?? item.career_item_id}-${index}`}
-                            >
-                              {bullet.text}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                    {cvVariant.tailoredContent.projects.map((item) => {
-                      const paragraphs =
-                        item.paragraphs?.map((paragraph) => paragraph.text) ??
-                        item.bullets?.map((bullet) => bullet.text) ??
-                        [];
-                      return (
-                        <div key={item.id ?? item.career_item_id}>
-                          <p className="text-xs font-semibold uppercase text-slate-500">
-                            Project · {item.name ?? item.display_title}
-                          </p>
-                          {item.technologies && item.technologies.length > 0 && (
-                            <p className="text-xs text-slate-500">
-                              {item.technologies.join(", ")}
-                            </p>
-                          )}
-                          <div className="mt-1 space-y-2 text-sm text-slate-700">
-                            {paragraphs.map((text, index) => (
-                              <p
-                                key={`${item.id ?? item.career_item_id}-${index}`}
-                              >
-                                {text}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {(cvVariant.tailoredContent.references?.length ?? 0) > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          References
-                        </p>
-                        <div className="mt-1 grid grid-cols-1 gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                          {cvVariant.tailoredContent.references!.map((referee) => (
-                            <div key={referee.id ?? referee.name}>
-                              <p className="font-medium">{referee.name}</p>
-                              <p className="text-xs text-slate-500">
-                                {[referee.title, referee.organization]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {[referee.email, referee.phone]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {(cvVariant.tailoredContent.changeNotes?.length ?? 0) > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          Change notes
-                        </p>
-                        <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
-                          {cvVariant.tailoredContent.changeNotes!.map((note) => (
-                            <li key={note}>{note}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <ul className="list-disc space-y-1 pl-5">
-                  {cvVariant.keywordAudit
-                    .filter(
-                      (item) =>
-                        item.priority === "must_have" ||
-                        item.support_state === "unsupported",
-                    )
-                    .slice(0, 8)
-                    .map((item) => (
-                      <li key={`${item.keyword}-${item.support_state}`}>
-                        {item.support_state === "unsupported"
-                          ? item.omission_reason ??
-                            `${item.keyword} unsupported and omitted.`
-                          : item.used
-                            ? `Used supported keyword “${item.keyword}”.`
-                            : `Supported keyword “${item.keyword}” available but not used.`}
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-function MatchGroup({
-  title,
-  items,
-  requirements,
-}: {
-  title: string;
-  items: Array<{
-    requirement_id: string;
-    reason: string;
-    evidence_ids: string[];
-  }>;
-  requirements: Array<{ id: string; statement: string }>;
-}) {
-  if (items.length === 0) return null;
-  const byId = new Map(requirements.map((item) => [item.id, item.statement]));
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-      <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-700">
-        {items.map((item) => (
-          <li key={item.requirement_id}>
-            {byId.get(item.requirement_id) ?? item.requirement_id} —{" "}
-            {item.reason}
-            {item.evidence_ids.length > 0
-              ? ` (evidence ${item.evidence_ids
-                  .map((id) => id.slice(0, 8))
-                  .join(", ")})`
-              : ""}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

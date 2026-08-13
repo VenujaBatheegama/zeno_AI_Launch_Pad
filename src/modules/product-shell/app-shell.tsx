@@ -11,7 +11,9 @@ import type { UserProfile } from "@/modules/identity/domain/profile";
 
 const NAV = [
   { href: "/app/home", label: "Home", icon: "home" },
+  { href: "/app/recommendations", label: "Inbox", icon: "jobs" },
   { href: "/app/jobs", label: "Jobs", icon: "jobs" },
+  { href: "/app/applications", label: "Apps", icon: "cvs" },
   { href: "/app/cvs", label: "CVs", icon: "cvs" },
   { href: "/app/career-profile", label: "Profile", icon: "profile" },
   { href: "/app/settings", label: "Settings", icon: "settings" },
@@ -246,6 +248,9 @@ function isNavActive(pathname: string, href: string): boolean {
 
 function breadcrumbLabel(pathname: string): string {
   if (pathname.startsWith("/app/cvs")) return "CVs";
+  if (pathname.startsWith("/app/recommendations")) return "Inbox";
+  if (pathname.startsWith("/app/applications")) return "Applications";
+  if (pathname.startsWith("/app/packets")) return "Packet";
   if (pathname.startsWith("/app/jobs")) return "Jobs";
   if (pathname.startsWith("/app/career-profile")) return "Profile";
   if (pathname.startsWith("/app/settings")) return "Settings";

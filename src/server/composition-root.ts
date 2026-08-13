@@ -103,6 +103,35 @@ import { SupabaseTailoredCvStorage } from "@/modules/cv-tailoring/infrastructure
 import { getServerConfig } from "./config";
 import { getGroqKeyPool } from "./groq";
 import { createSupabaseClient } from "./supabase-client";
+import { getCampaignDashboard } from "@/modules/career-campaign/application/dashboard";
+import {
+  markApplicationSubmitted,
+  prepareApplicationPacket,
+  updateApplicationStatus,
+} from "@/modules/career-campaign/application/application-lifecycle";
+import {
+  deliverPendingNotifications,
+  InAppNotificationSender,
+} from "@/modules/career-campaign/application/notifications";
+import { recordRecommendationDecision } from "@/modules/career-campaign/application/recommendation-decisions";
+import { runCampaignCheck } from "@/modules/career-campaign/application/run-campaign-check";
+import {
+  aggregateCampaignGaps,
+  growthActionCopy,
+} from "@/modules/career-campaign/domain/gap-aggregation";
+import { applyFeedbackAdjustments } from "@/modules/career-campaign/domain/feedback-adjustment";
+import { GroqCoverLetterGenerator } from "@/modules/career-campaign/infrastructure/groq-cover-letter-generator";
+import { SupabaseCareerCampaignRepository } from "@/modules/career-campaign/infrastructure/supabase-career-campaign-repository";
+import { SupabaseFreshWatchRepository } from "@/modules/career-campaign/infrastructure/supabase-fresh-watch-repository";
+import { WhatsAppCloudNotificationSender } from "@/modules/career-campaign/infrastructure/whatsapp-cloud-sender";
+import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
+import {
+  enableFreshJobWatch,
+  getFreshJobWatchStatus,
+  pauseFreshJobWatch,
+} from "@/modules/career-campaign/application/manage-fresh-job-watch";
+import { processScheduledDiscoveryTick } from "@/modules/career-campaign/application/process-scheduled-discovery-tick";
+import type { FreshWatchCaps } from "@/modules/career-campaign/application/fresh-watch-ports";
 
 async function refreshPlanAfterPreferencesChange(userId: string): Promise<void> {
   const config = getServerConfig();
@@ -334,14 +363,22 @@ function createJobDiscoveryApplication(userId: string) {
       );
     },
     listJobs: async (command: Omit<ListJobsCommand, "userId"> = {}) => {
-      const profile = await repository.getSearchProfile(userId);
       const evidenceRepository = new SupabaseEvidenceRepository(
         createSupabaseClient(config),
       );
-      const careerRepo = new SupabaseCareerIntelligenceRepository(
-        createSupabaseClient(config),
-      );
-      const evidence = await evidenceRepository.getCurrent(userId).catch(() => null);
+      const parsed = {
+        userId,
+        includeDismissed: command.includeDismissed ?? false,
+        limit: command.limit ?? 50,
+        offset: command.offset ?? 0,
+      };
+      const [jobs, profile, evidence] = await Promise.all([
+        repository.listJobs(parsed),
+        repository.getSearchProfile(userId),
+        evidenceRepository.getCurrent(userId).catch(() => null),
+      ]);
+      // Skip live ESCO expansion on list — it was adding multi-second sequential
+      // network calls to every /api/jobs request. Ranking still uses local terms.
       const profileTerms = await buildMatchableProfileTerms({
         preferences: profile?.preferences ?? {
           roles: [],
@@ -354,10 +391,12 @@ function createJobDiscoveryApplication(userId: string) {
           excluded_interests: [],
         },
         evidence: evidence?.status === "verified" ? evidence.evidence : null,
-        escoResolver: createEscoResolver(config, careerRepo),
+        escoResolver: null,
       });
       return listDiscoveredJobs({ ...command, userId }, repository, {
         profileTerms,
+        profile,
+        jobs,
       });
     },
     setJobState: (command: Omit<SetJobStateCommand, "userId">) =>
@@ -506,14 +545,16 @@ function createCareerIntelligenceApplication(userId: string) {
     ) =>
       listRankedJobMatches(
         { ...command, userId },
-        deps,
+        // Listing matches must stay fast — live ESCO expansion belongs to
+        // plan/search flows, not every Jobs page render.
+        { ...deps, escoResolver: undefined },
       ),
     getMatchDetails: (
       command: Omit<GetJobMatchDetailsCommand, "userId">,
     ) =>
       getJobMatchDetails(
         { ...command, userId },
-        deps,
+        { ...deps, escoResolver: undefined },
       ),
     clearMatches: () =>
       clearMatchAnalysesForUser(
@@ -686,4 +727,477 @@ function createHybridJobSource(config: ReturnType<typeof getServerConfig>): {
     source: new HybridJobSource(sources),
     enabledKeys,
   };
+}
+
+export type CareerCampaignApplication = ReturnType<
+  typeof createCareerCampaignApplication
+>;
+
+export function getCareerCampaignApplication(
+  userId: string,
+): CareerCampaignApplication {
+  return createCareerCampaignApplication(userId);
+}
+
+function createCareerCampaignApplication(userId: string) {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const repository = new SupabaseCareerCampaignRepository(supabase);
+  const jobRepository = new SupabaseJobDiscoveryRepository(supabase);
+  const evidenceRepository = new SupabaseEvidenceRepository(supabase);
+  const coverLetterGenerator = new GroqCoverLetterGenerator(
+    getGroqKeyPool(),
+    config.GROQ_MODEL,
+    config.groqFallbackModels,
+  );
+  const now = () => new Date();
+  const careerApp = createCareerIntelligenceApplication(userId);
+  const cvApp = createCvTailoringApplication(userId);
+
+  return {
+    userId,
+    runCheck: async (input: {
+      trigger: "manual" | "cron";
+      idempotencyKey: string;
+    }) =>
+      runCampaignCheck(
+        {
+          userId,
+          trigger: input.trigger,
+          idempotencyKey: input.idempotencyKey,
+        },
+        {
+          repository,
+          createId: randomUUID,
+          now,
+          caps: {
+            analysisBatchSize: Math.min(
+              config.CAMPAIGN_ANALYSIS_BATCH_SIZE,
+              config.CAREER_ANALYSIS_BATCH_SIZE,
+            ),
+            maxRecommendations: config.CAMPAIGN_MAX_RECOMMENDATIONS_PER_RUN,
+            minScore: config.CAMPAIGN_RECOMMENDATION_MIN_SCORE,
+          },
+          whatsappOptedIn: async (uid) => {
+            if (!config.WHATSAPP_ENABLED) return false;
+            const link = await repository.getWhatsAppLink(uid);
+            return Boolean(link?.optedInAt && !link.optedOutAt);
+          },
+          executeSearch: async (uid) => {
+            const search = await careerApp.searchForJobs({});
+            const jobs = await jobRepository.listJobs({
+              userId: uid,
+              includeDismissed: false,
+              limit: 100,
+              offset: 0,
+            });
+            const profile = await jobRepository.getSearchProfile(uid);
+            const signals = await repository.listFeedbackSignals(uid);
+            const rankable = jobs.map((job) => ({
+              listingId: job.listing_id,
+              finalScore: 50,
+              workMode: job.work_mode,
+              location: job.location,
+              title: job.title,
+              organizationName: job.organization_name,
+            }));
+            const adjusted = applyFeedbackAdjustments(rankable, signals);
+            const orderedIds = adjusted.map((item) => item.listingId);
+            const fallbackIds = jobs.map((job) => job.listing_id);
+            return {
+              jobsFound: search.jobsFound,
+              listingIds: orderedIds.length ? orderedIds : fallbackIds,
+              searchProfileId: profile?.id ?? null,
+              partialFailure: search.partialFailure,
+              warnings: search.warnings,
+            };
+          },
+          analyseListings: async (uid, listingIds) => {
+            if (listingIds.length === 0) return [];
+            const batch = await careerApp.analyseBatch({ listingIds });
+            const jobs = await jobRepository.listJobs({
+              userId: uid,
+              includeDismissed: true,
+              limit: 200,
+              offset: 0,
+            });
+            const byListing = new Map(
+              jobs.map((job) => [job.listing_id, job]),
+            );
+            return batch.map((item) => {
+              const job = byListing.get(item.listingId);
+              const match = item.match;
+              if (!match) {
+                return {
+                  listingId: item.listingId,
+                  ok: false,
+                  error: item.error ?? "Analysis failed",
+                };
+              }
+              const reqById = new Map(
+                (item.analysis?.requirements ?? []).map((req) => [
+                  req.id,
+                  req.statement,
+                ]),
+              );
+              const topMatched = match.matches
+                .filter((row) => row.status === "matched")
+                .map((row) => reqById.get(row.requirement_id) ?? row.reason)
+                .slice(0, 5);
+              const primaryGaps = match.matches
+                .filter((row) => row.status === "gap")
+                .map((row) => reqById.get(row.requirement_id) ?? row.reason)
+                .slice(0, 5);
+              return {
+                listingId: item.listingId,
+                ok: true,
+                matchAnalysisId: match.id,
+                evidenceFitScore: match.evidenceFitScore,
+                careerLevel: match.careerLevel,
+                hardConstraintEligible: match.hardConstraintEligible,
+                analysisConfidence: match.analysisConfidence,
+                scoringPolicyVersion: match.scoringPolicyVersion,
+                matchingPolicyVersion: match.matchingPolicyVersion,
+                explanation: match.explanation,
+                topMatched,
+                primaryGaps,
+                rankingReasons: [],
+                title: job?.title,
+                organizationName: job?.organization_name ?? null,
+                applicationUrl: job?.application_url ?? null,
+                location: job?.location ?? null,
+                workMode: job?.work_mode ?? null,
+              };
+            });
+          },
+        },
+      ),
+    listRecommendations: (input?: {
+      statuses?: Array<
+        "pending_review" | "saved" | "accepted" | "rejected" | "expired"
+      >;
+      limit?: number;
+    }) =>
+      repository.listRecommendations({
+        userId,
+        statuses: input?.statuses,
+        limit: input?.limit,
+      }),
+    recordDecision: (
+      input: Omit<
+        Parameters<typeof recordRecommendationDecision>[0],
+        "userId"
+      >,
+    ) =>
+      recordRecommendationDecision(
+        { ...input, userId },
+        { repository, createId: randomUUID, now },
+      ),
+    getPacket: (packetId: string) => repository.getPacket(userId, packetId),
+    preparePacket: async (packetId: string) =>
+      prepareApplicationPacket(
+        { userId, packetId },
+        {
+          repository,
+          coverLetterGenerator,
+          now,
+          createTailoredCv: async ({ listingId }) => {
+            const variant = await cvApp.generateContent({ listingId });
+            return { id: variant.id };
+          },
+          loadPacketContext: async ({ listingId, recommendationId }) => {
+            const evidence = await evidenceRepository.getCurrent(userId);
+            if (!evidence || evidence.status !== "verified") {
+              throw new CareerCampaignError(
+                "EVIDENCE_REQUIRED",
+                "Verify your career profile before preparing an application packet.",
+              );
+            }
+            const details = await careerApp.getMatchDetails({ listingId });
+            const recommendation = await repository.getRecommendation(
+              userId,
+              recommendationId,
+            );
+            return {
+              evidenceSetId: evidence.id,
+              evidenceVersion: evidence.evidence.schema_version,
+              evidenceJson: evidence.evidence,
+              jobTitle: details.card.title,
+              organizationName: details.card.organizationName,
+              jobDescription:
+                details.analysis.requirements
+                  .map((req) => req.statement)
+                  .join("\n") || details.card.explanation,
+              matchedRequirements: details.card.topMatched,
+              missingRequirements: details.card.primaryGaps,
+              applicationUrl:
+                details.card.applicationUrl ??
+                recommendation?.fitSummarySnapshot.applicationUrl ??
+                null,
+              jobMatchAnalysisId: details.match.id,
+            };
+          },
+        },
+      ),
+    listApplications: (input?: {
+      statuses?: Array<
+        "ready" | "applied" | "interview" | "rejected" | "offer" | "withdrawn"
+      >;
+      limit?: number;
+    }) =>
+      repository.listApplications({
+        userId,
+        statuses: input?.statuses,
+        limit: input?.limit,
+      }),
+    getApplication: (applicationId: string) =>
+      repository.getApplication(userId, applicationId),
+    listApplicationEvents: (applicationId: string) =>
+      repository.listApplicationEvents(userId, applicationId),
+    markApplied: (
+      input: Omit<
+        Parameters<typeof markApplicationSubmitted>[0],
+        "userId"
+      >,
+    ) =>
+      markApplicationSubmitted(
+        { ...input, userId },
+        {
+          repository,
+          createId: randomUUID,
+          now,
+          followUpDays: config.CAMPAIGN_FOLLOW_UP_DAYS,
+        },
+      ),
+    updateStatus: (
+      input: Omit<Parameters<typeof updateApplicationStatus>[0], "userId">,
+    ) =>
+      updateApplicationStatus(
+        { ...input, userId },
+        { repository, createId: randomUUID, now },
+      ),
+    findDueFollowUps: () =>
+      repository.findDueFollowUps({
+        userId,
+        asOf: now().toISOString(),
+        limit: 50,
+      }),
+    listNotifications: (limit?: number) =>
+      repository.listNotifications({ userId, limit }),
+    deliverNotifications: () =>
+      deliverPendingNotifications({
+        repository,
+        now,
+        senders: {
+          in_app: new InAppNotificationSender(),
+          ...(config.WHATSAPP_ENABLED &&
+          config.WHATSAPP_ACCESS_TOKEN &&
+          config.WHATSAPP_PHONE_NUMBER_ID
+            ? {
+                whatsapp: new WhatsAppCloudNotificationSender({
+                  accessToken: config.WHATSAPP_ACCESS_TOKEN,
+                  phoneNumberId: config.WHATSAPP_PHONE_NUMBER_ID,
+                  templateName:
+                    config.WHATSAPP_TEMPLATE_RECOMMENDATION ??
+                    "zeno_recommendation",
+                  templateLanguage: config.WHATSAPP_TEMPLATE_LANGUAGE,
+                  publicBaseUrl: config.PUBLIC_APP_BASE_URL,
+                }),
+              }
+            : {}),
+        },
+      }),
+    getDashboard: () =>
+      getCampaignDashboard(userId, {
+        repository,
+        now,
+        countDiscoveredJobs: async (uid) => {
+          const jobs = await jobRepository.listJobs({
+            userId: uid,
+            includeDismissed: false,
+            limit: 100,
+            offset: 0,
+          });
+          return jobs.length;
+        },
+      }),
+    aggregateGaps: async () => {
+      const recs = await repository.listRecommendations({
+        userId,
+        statuses: ["pending_review", "saved", "accepted"],
+        limit: 50,
+      });
+      const evidence = await evidenceRepository.getCurrent(userId);
+      const supported = new Set(
+        (evidence?.evidence.skills ?? []).map((skill) =>
+          skill.name.trim().toLocaleLowerCase(),
+        ),
+      );
+      const gaps = aggregateCampaignGaps({
+        observations: recs.map((rec) => ({
+          listingId: rec.listingId,
+          gaps: rec.fitSummarySnapshot.primaryGaps,
+          evidenceFitScore: rec.scoreSnapshot.evidenceFitScore,
+        })),
+        supportedSkillKeys: supported,
+        minScore: config.CAMPAIGN_RECOMMENDATION_MIN_SCORE,
+        maxActions: 2,
+      });
+      const actions = [];
+      for (const gap of gaps) {
+        const copy = growthActionCopy(gap);
+        actions.push(
+          await repository.upsertGrowthAction({
+            id: randomUUID(),
+            userId,
+            gapKey: gap.gapKey,
+            gapLabel: gap.gapLabel,
+            frequency: gap.frequency,
+            affectedListingIds: gap.affectedListingIds,
+            ...copy,
+            status: "active",
+            createdAt: now().toISOString(),
+          }),
+        );
+      }
+      return actions;
+    },
+    listGrowthActions: () => repository.listGrowthActions(userId),
+    listRecentRuns: (limit = 5) => repository.listRecentRuns(userId, limit),
+    getFreshJobWatch: () =>
+      getFreshJobWatchStatus(userId, {
+        repository: new SupabaseFreshWatchRepository(supabase),
+      }),
+    enableFreshJobWatch: (input: {
+      primaryRole: string;
+      location: string;
+      workMode?: "onsite" | "hybrid" | "remote" | "any";
+      minScore?: number;
+    }) =>
+      enableFreshJobWatch(
+        { userId, ...input },
+        {
+          repository: new SupabaseFreshWatchRepository(supabase),
+          createId: randomUUID,
+          now,
+          caps: freshWatchCapsFromConfig(config),
+        },
+      ),
+    pauseFreshJobWatch: () =>
+      pauseFreshJobWatch(
+        { userId },
+        {
+          repository: new SupabaseFreshWatchRepository(supabase),
+          now,
+        },
+      ),
+    repository,
+  };
+}
+
+function freshWatchCapsFromConfig(
+  config: ReturnType<typeof getServerConfig>,
+): FreshWatchCaps {
+  return {
+    linkedInIntervalMs: config.FRESH_LINKEDIN_INTERVAL_MINUTES * 60_000,
+    linkedInRecencySeconds: config.FRESH_LINKEDIN_RECENCY_SECONDS,
+    broadIntervalMs: config.FRESH_BROAD_INTERVAL_HOURS * 60 * 60_000,
+    maxCanonicalSearchesPerTick: config.FRESH_MAX_CANONICAL_SEARCHES_PER_TICK,
+    linkedInMaxPages: config.FRESH_LINKEDIN_MAX_PAGES,
+    linkedInMaxResults: config.FRESH_LINKEDIN_MAX_RESULTS,
+    maxDescriptionFetchesPerTick: config.FRESH_MAX_DESCRIPTION_FETCHES_PER_TICK,
+    maxGroqAnalysesPerTick: config.FRESH_MAX_GROQ_ANALYSES_PER_TICK,
+    maxAnalysesPerUser: config.FRESH_MAX_ANALYSES_PER_USER,
+    providerCooldownMs: config.FRESH_PROVIDER_COOLDOWN_MINUTES * 60_000,
+    schedulerLeaseMs: config.FRESH_SCHEDULER_LEASE_SECONDS * 1000,
+    initialAlertCap: config.FRESH_INITIAL_ALERT_CAP,
+    minScore: config.CAMPAIGN_RECOMMENDATION_MIN_SCORE,
+  };
+}
+
+/** Cron-only helper: enumerate users and run checks with shared repository. */
+export function getCareerCampaignCronServices() {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const repository = new SupabaseCareerCampaignRepository(supabase);
+  const freshRepository = new SupabaseFreshWatchRepository(supabase);
+  return { config, repository, freshRepository };
+}
+
+export async function runScheduledDiscoveryTick() {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const campaignRepository = new SupabaseCareerCampaignRepository(supabase);
+  const freshRepository = new SupabaseFreshWatchRepository(supabase);
+  const linkedInEnabled =
+    config.LINKEDIN_FRESH_ENABLED !== false &&
+    config.jobSources.includes("linkedin");
+  const linkedIn = new LinkedInGuestJobSource({
+    baseUrl: config.LINKEDIN_BASE_URL,
+    timeoutMs: config.LINKEDIN_TIMEOUT_MS,
+    maxPages: config.FRESH_LINKEDIN_MAX_PAGES,
+    pageSize: config.FRESH_LINKEDIN_MAX_RESULTS,
+    enrichDescriptions: false,
+  });
+
+  return processScheduledDiscoveryTick({
+    repository: freshRepository,
+    campaignRepository,
+    createId: randomUUID,
+    now: () => new Date(),
+    caps: freshWatchCapsFromConfig(config),
+    linkedInEnabled,
+    linkedIn: {
+      searchFreshCards: (input) => linkedIn.searchFreshCards(input),
+      fetchJobDescription: (id) => linkedIn.fetchJobDescription(id),
+    },
+    analyseListing: async ({ userId, listingId }) => {
+      const careerApp = createCareerIntelligenceApplication(userId);
+      const [item] = await careerApp.analyseBatch({ listingIds: [listingId] });
+      if (!item?.match) {
+        return {
+          listingId,
+          ok: false,
+          extractionCacheHit: item?.cacheHit,
+          llmCalls: item?.cacheHit ? 0 : 1,
+          error: item?.error,
+        };
+      }
+      return {
+        listingId,
+        ok: true,
+        matchAnalysisId: item.match.id,
+        evidenceFitScore: item.match.evidenceFitScore,
+        careerLevel: item.match.careerLevel,
+        hardConstraintEligible: item.match.hardConstraintEligible,
+        analysisConfidence: item.match.analysisConfidence,
+        scoringPolicyVersion: item.match.scoringPolicyVersion,
+        matchingPolicyVersion: item.match.matchingPolicyVersion,
+        explanation: item.match.explanation,
+        extractionCacheHit: item.cacheHit,
+        llmCalls: item.cacheHit ? 0 : 1,
+      };
+    },
+    runBroadCampaign: async ({ userId, runId }) => {
+      const day = new Date().toISOString().slice(0, 10);
+      const result = await getCareerCampaignApplication(userId).runCheck({
+        trigger: "cron",
+        idempotencyKey: `broad_watch:${day}:${userId}:${runId.slice(0, 8)}`,
+      });
+      return {
+        recommended: result.run.recommendedCount,
+        status: result.run.status,
+      };
+    },
+    deliverNotifications: async () => {
+      const result = await deliverPendingNotifications(
+        {
+          repository: campaignRepository,
+          senders: { in_app: new InAppNotificationSender() },
+          now: () => new Date(),
+        },
+      );
+      return result.delivered;
+    },
+  });
 }

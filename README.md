@@ -26,11 +26,14 @@ roles.
 Requirements: Node.js 22+ and pnpm.
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_slice_0.sql` through `0009_esco_replace_smart_search.sql`
+2. Run `supabase/migrations/0001_slice_0.sql` through `0011_fresh_job_watch.sql`
    in order (or apply pending migrations with the Supabase CLI). Migration
    `0009` adds the ESCO resolution cache, updates planned-query sources to
    `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
-   Skill Analyser / capability-profile tables.
+   Skill Analyser / capability-profile tables. Migration `0010` adds the
+   proactive campaign tables (recommendations, packets, applications, runs,
+   notification outbox). Migration `0011` adds Fresh Job Watch (canonical
+   LinkedIn searches, watches, provider sightings, and provider health).
 3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
 4. Configure hybrid job sources via `JOB_SOURCES` (default
@@ -112,6 +115,14 @@ unknown rather than being inferred.
 6. Analyse discovered jobs; confirm evidence-fit ranking uses verified evidence.
 7. Open match details and confirm gaps/unknowns stay distinct from matched items.
 8. Tailor a CV for a matched listing and confirm grounding validation still applies.
+
+## Fresh Job Watch
+
+Find new jobs remains a one-time search. Enabling **Fresh Job Watch** on
+`/app/jobs` starts proactive monitoring: a narrow LinkedIn guest check about
+every 15 minutes for one primary role, and a broad hybrid campaign about twice
+daily. See `docs/fresh-job-watch.md` for canonical searches, deduplication,
+Groq cooldown behaviour, and the Vercel Hobby cron limitation.
 
 ## Verification
 

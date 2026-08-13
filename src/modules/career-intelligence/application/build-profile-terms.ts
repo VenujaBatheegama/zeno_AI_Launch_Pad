@@ -38,27 +38,52 @@ export async function buildMatchableProfileTerms(input: {
   const deduped = dedupeSeeds(seeds);
   const terms: MatchableProfileTerm[] = [];
 
-  for (const seed of deduped) {
+  // Resolve ESCO labels concurrently (bounded) — sequential calls made list/match slow.
+  const resolved = await mapPool(deduped, 4, async (seed) => {
     let labels = [seed.term];
     let escoUri: string | undefined;
     if (input.escoResolver) {
       try {
-        const resolved = await input.escoResolver.resolveSkillLabels(seed.term);
-        labels = resolved.labels.length > 0 ? resolved.labels : [seed.term];
-        escoUri = resolved.conceptUri;
+        const result = await input.escoResolver.resolveSkillLabels(seed.term);
+        labels = result.labels.length > 0 ? result.labels : [seed.term];
+        escoUri = result.conceptUri;
       } catch {
         labels = [seed.term];
       }
     }
-    terms.push({
+    return {
       originalTerm: seed.term,
       category: seed.category,
       escoUri,
       labels,
-    });
-  }
+    } satisfies MatchableProfileTerm;
+  });
+  terms.push(...resolved);
 
   return terms;
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await mapper(items[index]!);
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 function dedupeSeeds(

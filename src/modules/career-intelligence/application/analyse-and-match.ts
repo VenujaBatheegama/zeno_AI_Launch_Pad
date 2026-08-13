@@ -505,10 +505,18 @@ export async function analyseAndMatchBatch(
   let cacheMisses = 0;
   const extractionErrors = new Map<string, { category: ExtractionFailureCategory; message: string }>();
 
+  let groqUnavailable = false;
   await mapWithConcurrency([...byHash.keys()], concurrency, async (descriptionHash) => {
     const group = byHash.get(descriptionHash) ?? [];
     const sample = group[0];
     if (!sample) return;
+    if (groqUnavailable) {
+      extractionErrors.set(descriptionHash, {
+        category: "rate_limited",
+        message: EXTRACTION_USER_MESSAGES.rate_limited,
+      });
+      return;
+    }
 
     const before = await dependencies.repository.getRequirementExtraction({
       descriptionHash,
@@ -532,6 +540,7 @@ export async function analyseAndMatchBatch(
       });
     } catch (error) {
       const category = classifyExtractionError(error);
+      if (category === "rate_limited") groqUnavailable = true;
       extractionErrors.set(descriptionHash, {
         category,
         message:

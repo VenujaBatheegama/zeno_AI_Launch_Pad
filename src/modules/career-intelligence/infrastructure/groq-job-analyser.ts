@@ -2,10 +2,13 @@ import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { ZodError } from "zod";
 
 import {
+  GroqCapacityUnavailableError,
   GroqKeyPool,
   GroqKeysExhaustedError,
   isGroqRateLimited,
+  isGroqTokensPerMinuteLimit,
   isGroqToolFailure,
+  parseRetryMs,
 } from "@/lib/ai/groq-key-pool";
 
 import type { JobRequirementExtractor } from "../application/ports";
@@ -23,10 +26,10 @@ import {
 
 /**
  * Reasoning models spend completion budget on CoT; leave room for the JSON body.
- * Cap below free-tier TPM (8000): Groq reserves input + max_output against TPM
- * before the call, so 8192 alone already exceeds the limit.
+ * Cap well below free-tier TPM (8000): Groq reserves input + max_output against
+ * TPM before the call. 4096 left almost no room for a second extract/minute.
  */
-const EXTRACTION_MAX_OUTPUT_TOKENS = 4096;
+const EXTRACTION_MAX_OUTPUT_TOKENS = 2048;
 
 const EXTRACTION_SYSTEM = `Extract structured job requirements from one vacancy description.
 Rules:
@@ -83,7 +86,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
     description: string;
     requirementIds: string[];
   }): Promise<ExtractedJobAnalysis> {
-    if (Date.now() < this.cooldownUntil) {
+    if (Date.now() < this.cooldownUntil || this.keyPool.isSharedCooldownActive()) {
       throw new CareerIntelligenceError(
         "AI_UNAVAILABLE",
         EXTRACTION_USER_MESSAGES.rate_limited,
@@ -91,58 +94,124 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
     }
 
     const description = normalizeJobDescription(input.description);
-    const models = [this.primaryModel, this.fallbackModel].filter(
-      (value): value is string => Boolean(value),
-    );
     let attempts = 0;
-    let usedFallback = false;
     let lastError: unknown;
 
-    for (const modelId of models) {
-      if (attempts >= this.maxAttempts) break;
+    try {
       attempts += 1;
-      if (modelId !== this.primaryModel) usedFallback = true;
+      const extracted = await this.extractOnce(this.primaryModel, {
+        title: input.title,
+        description,
+        requirementIds: input.requirementIds,
+      });
+      this.lastStats = {
+        model: this.primaryModel,
+        attempts,
+        usedFallback: false,
+      };
+      return extracted;
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        JSON.stringify({
+          scope: "job-extract",
+          event: "extract_failed",
+          model: this.primaryModel,
+          attempt: attempts,
+          reason: summarizeExtractError(error),
+        }),
+      );
 
-      try {
-        const extracted = await this.extractOnce(modelId, {
-          title: input.title,
-          description,
-          requirementIds: input.requirementIds,
-        });
-        this.lastStats = { model: modelId, attempts, usedFallback };
-        return extracted;
-      } catch (error) {
-        lastError = error;
-        console.warn(
-          `[job-extract] model=${modelId} attempt=${attempts} failed: ${summarizeExtractError(error)}`,
-        );
-        if (isGroqRateLimited(error)) {
-          const retryMs = parseRetryMsSafe(error);
-          this.cooldownUntil = Date.now() + retryMs;
+      if (
+        error instanceof GroqCapacityUnavailableError ||
+        isGroqRateLimited(error)
+      ) {
+        const retryMs =
+          error instanceof GroqCapacityUnavailableError
+            ? (error.meta?.retryAfterMs ?? parseRetryMs(error))
+            : parseRetryMs(error);
+        if (
+          !(error instanceof GroqCapacityUnavailableError) &&
+          isGroqTokensPerMinuteLimit(error) &&
+          retryMs <= 5_000
+        ) {
+          await sleep(retryMs + 100);
+        } else {
+          this.cooldownUntil = Date.now() + Math.min(retryMs, 5 * 60_000);
           throw new CareerIntelligenceError(
             "AI_UNAVAILABLE",
             EXTRACTION_USER_MESSAGES.rate_limited,
             { cause: error },
           );
         }
-        // Schema/config hard failures: do not burn the second attempt on the same broken setup.
-        if (isConfigurationError(error)) {
-          throw new CareerIntelligenceError(
-            "AI_UNAVAILABLE",
-            EXTRACTION_USER_MESSAGES.configuration_error,
-            { cause: error },
+      } else if (isConfigurationError(error)) {
+        throw new CareerIntelligenceError(
+          "AI_UNAVAILABLE",
+          EXTRACTION_USER_MESSAGES.configuration_error,
+          { cause: error },
+        );
+      } else if (isSchemaOrStructuredFailure(error) && this.maxAttempts > 1) {
+        attempts += 1;
+        try {
+          const repaired = await this.extractOnce(
+            this.primaryModel,
+            {
+              title: input.title,
+              description,
+              requirementIds: input.requirementIds,
+            },
+            boundedValidationHint(error),
           );
+          this.lastStats = {
+            model: this.primaryModel,
+            attempts,
+            usedFallback: false,
+          };
+          return repaired;
+        } catch (repairError) {
+          lastError = repairError;
+          if (
+            repairError instanceof GroqCapacityUnavailableError ||
+            isGroqRateLimited(repairError)
+          ) {
+            this.cooldownUntil =
+              Date.now() + Math.min(parseRetryMs(repairError), 5 * 60_000);
+            throw new CareerIntelligenceError(
+              "AI_UNAVAILABLE",
+              EXTRACTION_USER_MESSAGES.rate_limited,
+              { cause: repairError },
+            );
+          }
         }
-        // Do not repeat the identical primary request after schema-invalid/malformed output.
-        // Fall through once to a compatible fallback model only.
-        continue;
+      } else if (
+        this.fallbackModel &&
+        this.maxAttempts > 1 &&
+        !isSchemaOrStructuredFailure(error) &&
+        !isGroqRateLimited(error)
+      ) {
+        attempts += 1;
+        try {
+          const extracted = await this.extractOnce(this.fallbackModel, {
+            title: input.title,
+            description,
+            requirementIds: input.requirementIds,
+          });
+          this.lastStats = {
+            model: this.fallbackModel,
+            attempts,
+            usedFallback: true,
+          };
+          return extracted;
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
       }
     }
 
     this.lastStats = {
-      model: models[Math.min(attempts, models.length) - 1] ?? this.primaryModel,
+      model: this.primaryModel,
       attempts,
-      usedFallback,
+      usedFallback: false,
     };
     const category = classifyExtractionError(lastError);
     throw new CareerIntelligenceError(
@@ -159,26 +228,30 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
       description: string;
       requirementIds: string[];
     },
+    repairHint?: string,
   ): Promise<ExtractedJobAnalysis> {
     try {
-      // Do not rotate keys on 429 or JSON failures during extraction — free-tier
-      // keys often share an org TPM/TPD budget; cascading only burns quota.
-      // Fall through to a gpt-oss fallback model instead.
       return await this.keyPool.withKey(
         async (apiKey) => {
+          const prompt = [
+            "Extract atomic requirements and opportunity level.",
+            repairHint
+              ? `Previous output failed validation: ${repairHint}. Return only schema-valid JSON.`
+              : null,
+            `Title: ${input.title}`,
+            "<JOB_DESCRIPTION>",
+            input.description,
+            "</JOB_DESCRIPTION>",
+          ]
+            .filter(Boolean)
+            .join("\n");
           const { output } = await generateText({
             model: this.keyPool.createModel(apiKey, modelId),
             temperature: 0,
             maxRetries: 0,
             maxOutputTokens: EXTRACTION_MAX_OUTPUT_TOKENS,
             system: EXTRACTION_SYSTEM,
-            prompt: [
-              "Extract atomic requirements and opportunity level.",
-              `Title: ${input.title}`,
-              "<JOB_DESCRIPTION>",
-              input.description,
-              "</JOB_DESCRIPTION>",
-            ].join("\n"),
+            prompt,
             output: Output.object({
               schema: strictJobRequirementsExtractionSchema,
             }),
@@ -194,6 +267,7 @@ export class GroqJobRequirementExtractor implements JobRequirementExtractor {
       );
     } catch (error) {
       if (error instanceof GroqKeysExhaustedError) throw error;
+      if (error instanceof GroqCapacityUnavailableError) throw error;
       if (
         error instanceof ZodError ||
         error instanceof NoStructuredOutputError ||
@@ -213,6 +287,27 @@ class NoStructuredOutputError extends Error {
   }
 }
 
+function isSchemaOrStructuredFailure(error: unknown): boolean {
+  if (error instanceof ZodError) return true;
+  const category = classifyExtractionError(error);
+  return (
+    category === "schema_validation_failed" ||
+    category === "structured_output_failed"
+  );
+}
+
+function boundedValidationHint(error: unknown): string {
+  if (error instanceof ZodError) {
+    return error.issues
+      .slice(0, 3)
+      .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+      .join("; ")
+      .slice(0, 240);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/gu, " ").slice(0, 240);
+}
+
 function isConfigurationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   // json_validate_failed / Failed to validate JSON are output failures, not config.
@@ -224,15 +319,10 @@ function isConfigurationError(error: unknown): boolean {
   );
 }
 
-function parseRetryMsSafe(error: unknown): number {
-  const message = error instanceof Error ? error.message : String(error);
-  const match = message.match(/try again in (\d+)m([\d.]+)s/i);
-  if (match) {
-    return (Number(match[1]) * 60 + Number(match[2])) * 1000;
-  }
-  const seconds = message.match(/try again in ([\d.]+)s/i);
-  if (seconds) return Number(seconds[1]) * 1000;
-  return 60_000;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function summarizeExtractError(error: unknown): string {

@@ -46,81 +46,86 @@ function job(
   };
 }
 
+function match(
+  overrides: Partial<RankedJobMatchCard> &
+    Pick<RankedJobMatchCard, "listingId" | "title" | "evidenceFitScore">,
+): RankedJobMatchCard {
+  return {
+    listingId: overrides.listingId,
+    jobId: overrides.jobId ?? "job-id",
+    title: overrides.title,
+    organizationName: overrides.organizationName ?? "Acme",
+    applicationUrl: overrides.applicationUrl ?? null,
+    userState: overrides.userState ?? "discovered",
+    evidenceFitScore: overrides.evidenceFitScore,
+    careerLevel: overrides.careerLevel ?? "aligned",
+    confidence: overrides.confidence ?? "medium",
+    topMatched: overrides.topMatched ?? [],
+    primaryGaps: overrides.primaryGaps ?? [],
+    explanation: overrides.explanation ?? "Fit note",
+    stale: overrides.stale ?? false,
+    eligible: overrides.eligible ?? true,
+    queryProvenance: overrides.queryProvenance ?? [],
+    preferredMatches: overrides.preferredMatches ?? [],
+    verifiedMatches: overrides.verifiedMatches ?? [],
+  };
+}
+
 describe("buildMatchedJobRows", () => {
-  it("uses stored jobs only and omits dismissed rows", () => {
+  it("only includes analysed matches, not every discovered job", () => {
+    const listingMatched = "11111111-1111-4111-8111-111111111111";
+    const listingExtra = "22222222-2222-4222-8222-222222222222";
     const jobs = [
-      job({
-        listing_id: "11111111-1111-4111-8111-111111111111",
-        title: "Intern",
-      }),
-      job({
-        listing_id: "22222222-2222-4222-8222-222222222222",
-        title: "Gone",
-        user_state: "dismissed",
-      }),
+      job({ listing_id: listingMatched, title: "Analysed role" }),
+      job({ listing_id: listingExtra, title: "Unanalysed discovery" }),
     ];
-    const rows = buildMatchedJobRows(jobs, []);
+    const rows = buildMatchedJobRows(jobs, [
+      match({
+        listingId: listingMatched,
+        title: "Analysed role",
+        evidenceFitScore: 72,
+      }),
+    ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.listingId).toBe("11111111-1111-4111-8111-111111111111");
-    expect(rows[0]?.fitScore).toBeNull();
-    expect(rows[0]?.analysed).toBe(false);
+    expect(rows[0]?.listingId).toBe(listingMatched);
+    expect(rows[0]?.analysed).toBe(true);
+    expect(rows[0]?.fitScore).toBe(72);
   });
 
-  it("attaches match scores when available and sorts by fit", () => {
+  it("omits dismissed matches and sorts by fit", () => {
     const listingA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const listingB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const listingC = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const jobs = [
       job({ listing_id: listingA, title: "A" }),
       job({ listing_id: listingB, title: "B" }),
+      job({ listing_id: listingC, title: "C" }),
     ];
-    const matches = [
-      {
+    const rows = buildMatchedJobRows(jobs, [
+      match({
         listingId: listingA,
-        jobId: "job-a",
         title: "A",
-        organizationName: "Acme",
-        applicationUrl: null,
-        userState: "discovered",
         evidenceFitScore: 40,
-        careerLevel: "aligned",
-        confidence: "medium",
-        topMatched: [],
-        primaryGaps: [],
-        explanation: "Some fit",
-        stale: false,
-        eligible: true,
-        queryProvenance: [],
         preferredMatches: ["React"],
-        verifiedMatches: [],
-      },
-      {
+      }),
+      match({
         listingId: listingB,
-        jobId: "job-b",
         title: "B",
-        organizationName: "Acme",
-        applicationUrl: null,
-        userState: "discovered",
         evidenceFitScore: 90,
-        careerLevel: "aligned",
-        confidence: "high",
-        topMatched: [],
-        primaryGaps: [],
-        explanation: "Strong fit",
-        stale: false,
-        eligible: true,
-        queryProvenance: [],
-        preferredMatches: [],
         verifiedMatches: ["TypeScript"],
-      },
-    ] as RankedJobMatchCard[];
-
-    const rows = buildMatchedJobRows(jobs, matches);
+      }),
+      match({
+        listingId: listingC,
+        title: "C",
+        evidenceFitScore: 99,
+        userState: "dismissed",
+      }),
+    ]);
     expect(rows.map((row) => row.listingId)).toEqual([listingB, listingA]);
-    expect(rows[0]?.fitScore).toBe(90);
     expect(rows[0]?.verifiedMatches).toEqual(["TypeScript"]);
   });
 
-  it("does not invent missing company or location fields", () => {
+  it("does not invent missing company or location fields from empty jobs", () => {
     const listingId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const rows = buildMatchedJobRows(
       [
@@ -136,7 +141,14 @@ describe("buildMatchedJobRows", () => {
           description: null,
         }),
       ],
-      [],
+      [
+        match({
+          listingId,
+          title: "Engineer",
+          evidenceFitScore: 55,
+          explanation: "",
+        }),
+      ],
     );
     expect(rows[0]).toMatchObject({
       company: null,

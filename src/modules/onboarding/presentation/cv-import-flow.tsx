@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Stage =
   | "choose"
@@ -37,6 +37,8 @@ export function CvImportFlow() {
   const [stage, setStage] = useState<Stage>("choose");
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [statusHint, setStatusHint] = useState<string | null>(null);
 
   const onFile = useCallback((next: File | null) => {
     setError(null);
@@ -59,15 +61,40 @@ export function CvImportFlow() {
     setFile(next);
   }, []);
 
+  const isWorking = stage !== "choose" && stage !== "summary";
+
+  useEffect(() => {
+    if (!isWorking) {
+      setElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    setElapsedSec(0);
+    const id = window.setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [isWorking]);
+
   async function startImport() {
     if (!file) return;
     setError(null);
+    setStatusHint("Uploading your file…");
     setStage("uploading");
     const timers = [
-      window.setTimeout(() => setStage("reading"), 400),
-      window.setTimeout(() => setStage("identifying"), 1200),
-      window.setTimeout(() => setStage("organizing"), 2200),
-      window.setTimeout(() => setStage("preparing"), 3200),
+      window.setTimeout(() => {
+        setStage("reading");
+        setStatusHint("Extracting text from your document…");
+      }, 400),
+      window.setTimeout(() => {
+        setStage("identifying");
+        setStatusHint("Asking Zeno to understand your experience…");
+      }, 1600),
+      window.setTimeout(() => {
+        setStage("organizing");
+        setStatusHint("Structuring projects, skills and roles…");
+      }, 4000),
+      // Stay on organizing until the API returns; only then move to preparing.
     ];
 
     try {
@@ -78,6 +105,10 @@ export function CvImportFlow() {
       if (!response.ok) {
         throw new Error(payload.error || "Upload failed.");
       }
+
+      for (const timer of timers) window.clearTimeout(timer);
+      setStage("preparing");
+      setStatusHint("Saving your draft profile…");
 
       await fetch("/api/onboarding/progress", {
         method: "PATCH",
@@ -101,38 +132,87 @@ export function CvImportFlow() {
         evidenceSetId: payload.id,
       });
       setStage("summary");
+      setStatusHint(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed.");
       setStage("choose");
+      setStatusHint(null);
     } finally {
       for (const timer of timers) window.clearTimeout(timer);
     }
   }
 
-  if (stage !== "choose" && stage !== "summary") {
+  if (isWorking) {
+    const progressStage =
+      stage === "uploading" || stage === "reading"
+        ? "reading"
+        : stage === "identifying"
+          ? "identifying"
+          : stage === "preparing"
+            ? "preparing"
+            : "organizing";
     const activeIndex = Math.max(
       0,
-      STAGES.findIndex((item) => item.key === stage),
+      STAGES.findIndex((item) => item.key === progressStage),
     );
+    const liveHint =
+      elapsedSec >= 45
+        ? "Still extracting — Groq rate limits often pause here for a bit"
+        : elapsedSec >= 20
+          ? "Model is still working — hang tight"
+          : (statusHint ?? "Working…");
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <h1 className="text-2xl font-semibold">Working through your CV</h1>
         <p className="mt-2 text-sm text-[var(--zeno-ink-muted)]">
-          This usually takes a short moment. Nothing is confirmed until you review it.
+          AI extraction can take 20–60 seconds when the model is busy. Keep this
+          tab open — progress updates as work continues.
         </p>
+        <div className="mt-4 flex items-center gap-3 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-4 py-3">
+          <span
+            className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--zeno-primary)] border-t-transparent"
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--zeno-ink)]">
+              {liveHint}
+            </p>
+            <p className="text-xs text-[var(--zeno-ink-faint)]">
+              Elapsed {elapsedSec}s
+              {elapsedSec >= 15
+                ? " · still extracting — this is normal"
+                : ""}
+            </p>
+          </div>
+        </div>
         <ol className="mt-8 space-y-3">
-          {STAGES.map((item, index) => (
-            <li
-              key={item.key}
-              className={`rounded-[var(--zeno-radius-sm)] border px-4 py-3 text-sm ${
-                index <= activeIndex
-                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-ink)]"
-                  : "border-[var(--zeno-border)] text-[var(--zeno-ink-faint)]"
-              }`}
-            >
-              {item.label}
-            </li>
-          ))}
+          {STAGES.map((item, index) => {
+            const done = index < activeIndex;
+            const active = index === activeIndex;
+            return (
+              <li
+                key={item.key}
+                className={`rounded-[var(--zeno-radius-sm)] border px-4 py-3 text-sm transition ${
+                  active
+                    ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
+                    : done
+                      ? "border-[var(--zeno-border)] bg-white text-[var(--zeno-ink)]"
+                      : "border-[var(--zeno-border)] text-[var(--zeno-ink-faint)]"
+                }`}
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span>{item.label}</span>
+                  {active ? (
+                    <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-[var(--zeno-primary)]" />
+                  ) : done ? (
+                    <span className="text-xs font-medium text-emerald-700">
+                      Done
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       </div>
     );

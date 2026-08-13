@@ -5,10 +5,63 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { RankedJobMatchCard } from "@/modules/career-intelligence/application/ports";
 import type { DiscoveredJob } from "@/modules/job-discovery/domain/job";
+import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
+import { sanitizeJobTitleForCv } from "../domain/content-plan";
 import type { TailoredResume } from "../domain/tailored-resume";
 import { CvBlockLibrary } from "./cv-block-library";
 import { CvPropertiesPanel } from "./cv-properties-panel";
 import { EditableCvA4Preview } from "./editable-cv-a4-preview";
+
+const CV_GENERATE_STEPS = [
+  {
+    id: "prepare",
+    title: "Prepare",
+    description: "Load verified evidence",
+  },
+  {
+    id: "requirements",
+    title: "Requirements",
+    description: "Read the job brief",
+  },
+  {
+    id: "select",
+    title: "Select",
+    description: "Pick strongest proof",
+  },
+  {
+    id: "write",
+    title: "Write",
+    description: "Draft tailored content",
+  },
+  {
+    id: "validate",
+    title: "Validate",
+    description: "Check factual claims",
+  },
+] as const;
+
+const CV_RENDER_STEPS = [
+  {
+    id: "lock",
+    title: "Lock",
+    description: "Freeze latest edits",
+  },
+  {
+    id: "layout",
+    title: "Layout",
+    description: "Fit the page budget",
+  },
+  {
+    id: "render",
+    title: "Render",
+    description: "Build the PDF",
+  },
+  {
+    id: "save",
+    title: "Save",
+    description: "Store your download",
+  },
+] as const;
 
 type PublicVariant = {
   id: string;
@@ -36,6 +89,21 @@ type PublicVariant = {
   }>;
 };
 
+function withCleanTargetTitle(variant: PublicVariant): PublicVariant {
+  const content = variant.tailoredContent;
+  if (!content?.targetTitle) return variant;
+  const cleaned = sanitizeJobTitleForCv(content.targetTitle);
+  if (cleaned === content.targetTitle) return variant;
+  return {
+    ...variant,
+    targetTitle: cleaned,
+    tailoredContent: {
+      ...content,
+      targetTitle: cleaned,
+    },
+  };
+}
+
 type SaveState = "idle" | "unsaved" | "saving" | "saved" | "error";
 
 type Props = {
@@ -54,6 +122,9 @@ export function CvTailorWorkspace({ listingId }: Props) {
     reason: string;
   } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [busyElapsedSec, setBusyElapsedSec] = useState(0);
+  const [busyStepIndex, setBusyStepIndex] = useState(0);
+  const [loadingHint, setLoadingHint] = useState("Loading job and draft…");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -90,36 +161,155 @@ export function CvTailorWorkspace({ listingId }: Props) {
     setLoading(true);
     setError(null);
     setPrerequisite(null);
+    setLoadingHint("Checking for an existing CV…");
     try {
-      const [jobsRes, matchesRes, listingRes, recommendRes] = await Promise.all([
-        fetch("/api/jobs", { credentials: "same-origin" }),
-        fetch("/api/career-intelligence/matches", { credentials: "same-origin" }),
-        fetch(`/api/cv-tailoring/listing/${listingId}`, {
+      // Fast path: if a ready draft already exists, open it first.
+      // Skip recommend + heavy match-detail work until the editor is usable.
+      const listingRes = await fetch(`/api/cv-tailoring/listing/${listingId}`, {
+        credentials: "same-origin",
+      });
+      const listingBody = listingRes.ok
+        ? ((await listingRes.json()) as {
+            variants?: Array<{ id: string; status: string; mode?: string }>;
+          })
+        : null;
+      const variants = listingBody?.variants ?? [];
+      const readyVariant = variants.find(
+        (item) =>
+          item.status === "ready_to_render" || item.status === "ready",
+      );
+
+      if (readyVariant) {
+        setLoadingHint("Loading existing CV draft…");
+        const variantRes = await fetch(`/api/cv-tailoring/${readyVariant.id}`, {
           credentials: "same-origin",
-        }),
+        });
+        if (variantRes.ok) {
+          const loaded = (await variantRes.json()) as {
+            variant: PublicVariant;
+          };
+          const cleanedVariant = withCleanTargetTitle(loaded.variant);
+          setVariant(cleanedVariant);
+          draftRef.current = cleanedVariant.tailoredContent;
+          setDraft(cleanedVariant.tailoredContent);
+          setMode(cleanedVariant.mode);
+          setRecommendation({
+            recommendedMode: cleanedVariant.recommendedMode,
+            reason: cleanedVariant.recommendationReason,
+          });
+          setLoading(false);
+          // Fill job chrome in the background — not required to edit.
+          void (async () => {
+            try {
+              const detailsRes = await fetch(
+                `/api/career-intelligence/matches/${listingId}`,
+                { credentials: "same-origin" },
+              );
+              if (!detailsRes.ok) return;
+              const details = (await detailsRes.json()) as {
+                card: RankedJobMatchCard;
+              };
+              setMatch(details.card);
+              setJob({
+                job_id: details.card.jobId,
+                listing_id: details.card.listingId,
+                title: details.card.title,
+                organization_name: details.card.organizationName,
+                organization_logo_url: null,
+                description: null,
+                location: null,
+                city: null,
+                region: null,
+                country: null,
+                employment_type: null,
+                work_mode: null,
+                experience_level: null,
+                salary_min: null,
+                salary_max: null,
+                salary_currency: null,
+                salary_period: null,
+                published_at: null,
+                closing_at: null,
+                publisher: null,
+                source_name: "listing",
+                source_url: null,
+                application_url: details.card.applicationUrl,
+                application_is_direct: null,
+                first_seen_at: new Date().toISOString(),
+                last_seen_at: new Date().toISOString(),
+                user_state: details.card.userState,
+              });
+            } catch {
+              // Non-fatal — editor already has the draft.
+            }
+          })();
+          return;
+        }
+      }
+
+      setLoadingHint("Loading job details…");
+      const [recommendRes, detailsRes] = await Promise.all([
         fetch("/api/cv-tailoring/recommend", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ listingId }),
         }),
+        fetch(`/api/career-intelligence/matches/${listingId}`, {
+          credentials: "same-origin",
+        }),
       ]);
 
-      if (!jobsRes.ok) {
-        throw new Error("Could not load jobs for this account.");
-      }
-      const jobs = (await jobsRes.json()) as DiscoveredJob[];
-      const found = jobs.find((item) => item.listing_id === listingId) ?? null;
-      if (!found) {
-        setPrerequisite("That job was not found in your discovered jobs.");
-        setJob(null);
-        return;
-      }
-      setJob(found);
+      setLoadingHint("Preparing editor…");
 
-      if (matchesRes.ok) {
-        const matches = (await matchesRes.json()) as RankedJobMatchCard[];
-        setMatch(matches.find((item) => item.listingId === listingId) ?? null);
+      if (detailsRes.ok) {
+        const details = (await detailsRes.json()) as {
+          card: RankedJobMatchCard;
+        };
+        setMatch(details.card);
+        setJob({
+          job_id: details.card.jobId,
+          listing_id: details.card.listingId,
+          title: details.card.title,
+          organization_name: details.card.organizationName,
+          organization_logo_url: null,
+          description: null,
+          location: null,
+          city: null,
+          region: null,
+          country: null,
+          employment_type: null,
+          work_mode: null,
+          experience_level: null,
+          salary_min: null,
+          salary_max: null,
+          salary_currency: null,
+          salary_period: null,
+          published_at: null,
+          closing_at: null,
+          publisher: null,
+          source_name: "listing",
+          source_url: null,
+          application_url: details.card.applicationUrl,
+          application_is_direct: null,
+          first_seen_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          user_state: details.card.userState,
+        });
+      } else {
+        setLoadingHint("Looking up discovered job…");
+        const jobsRes = await fetch("/api/jobs", { credentials: "same-origin" });
+        if (!jobsRes.ok) {
+          throw new Error("Could not load jobs for this account.");
+        }
+        const jobs = (await jobsRes.json()) as DiscoveredJob[];
+        const found = jobs.find((item) => item.listing_id === listingId) ?? null;
+        if (!found) {
+          setPrerequisite("That job was not found in your discovered jobs.");
+          setJob(null);
+          return;
+        }
+        setJob(found);
       }
 
       let recommendError: string | null = null;
@@ -140,35 +330,30 @@ export function CvTailorWorkspace({ listingId }: Props) {
         }
       }
 
-      let loadedVariant: PublicVariant | null = null;
-      if (listingRes.ok) {
-        const body = (await listingRes.json()) as {
-          variants?: Array<{ id: string; status: string }>;
-        };
-        const reusable =
-          body.variants?.find(
-            (item) =>
-              item.status === "ready_to_render" || item.status === "ready",
-          ) ?? body.variants?.[0];
-        if (reusable) {
-          const variantRes = await fetch(`/api/cv-tailoring/${reusable.id}`, {
-            credentials: "same-origin",
-          });
-          if (variantRes.ok) {
-            const loaded = (await variantRes.json()) as {
-              variant: PublicVariant;
-            };
-            loadedVariant = loaded.variant;
-            setVariant(loaded.variant);
-            draftRef.current = loaded.variant.tailoredContent;
-            setDraft(loaded.variant.tailoredContent);
-            setMode(loaded.variant.mode);
-          }
+      const reusable = variants.find(
+        (item) =>
+          item.status === "ready_to_render" ||
+          item.status === "ready" ||
+          item.status === "failed",
+      );
+      if (reusable) {
+        setLoadingHint("Loading draft…");
+        const variantRes = await fetch(`/api/cv-tailoring/${reusable.id}`, {
+          credentials: "same-origin",
+        });
+        if (variantRes.ok) {
+          const loaded = (await variantRes.json()) as {
+            variant: PublicVariant;
+          };
+          const cleanedVariant = withCleanTargetTitle(loaded.variant);
+          setVariant(cleanedVariant);
+          draftRef.current = cleanedVariant.tailoredContent;
+          setDraft(cleanedVariant.tailoredContent);
+          setMode(cleanedVariant.mode);
         }
       }
 
-      // Block on prerequisites only when there is no existing editable draft.
-      if (!loadedVariant?.tailoredContent && recommendError) {
+      if (recommendError && !draftRef.current) {
         setPrerequisite(recommendError);
       }
     } catch (loadError) {
@@ -179,6 +364,37 @@ export function CvTailorWorkspace({ listingId }: Props) {
       setLoading(false);
     }
   }, [listingId]);
+
+  useEffect(() => {
+    if (!busy) {
+      setBusyElapsedSec(0);
+      setBusyStepIndex(0);
+      return;
+    }
+    const started = Date.now();
+    setBusyStepIndex(0);
+    const tick = window.setInterval(() => {
+      setBusyElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+
+    // Advance through early stages on a timer; hold on the long AI/render step.
+    const holdIndex =
+      busy === "render" ? 2 : 3; /* write / render is the long step */
+    const delays =
+      busy === "render" ? [500, 1600, 3200] : [500, 1600, 3200, 6000];
+    const timers = delays.map((ms, index) =>
+      window.setTimeout(() => {
+        setBusyStepIndex((current) =>
+          Math.min(Math.max(current, index + 1), holdIndex),
+        );
+      }, ms),
+    );
+
+    return () => {
+      window.clearInterval(tick);
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [busy]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount/listing fetch
@@ -362,6 +578,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         throw new Error(body.error ?? "CV generation failed.");
       }
       if (!body.variant) throw new Error("Generation returned no variant.");
+      setBusyStepIndex(CV_GENERATE_STEPS.length - 1);
       draftRef.current = body.variant.tailoredContent;
       setVariant(body.variant);
       setDraft(body.variant.tailoredContent);
@@ -411,6 +628,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         throw new Error(body.error ?? "PDF render failed.");
       }
       if (!body.variant) throw new Error("Render returned no variant.");
+      setBusyStepIndex(CV_RENDER_STEPS.length - 1);
       setVariant(body.variant);
       setSaveState("saved");
       setMessage(
@@ -483,7 +701,22 @@ export function CvTailorWorkspace({ listingId }: Props) {
   }
 
   if (loading) {
-    return <p className="text-sm text-[var(--zeno-ink-muted)]">Loading…</p>;
+    return (
+      <div className="flex items-center gap-3 rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-6">
+        <span
+          className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--zeno-primary)] border-t-transparent"
+          aria-hidden
+        />
+        <div>
+          <p className="text-sm font-medium text-[var(--zeno-ink)]">
+            {loadingHint}
+          </p>
+          <p className="text-xs text-[var(--zeno-ink-faint)]">
+            Preparing the tailor workspace…
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (prerequisite) {
@@ -627,6 +860,27 @@ export function CvTailorWorkspace({ listingId }: Props) {
           ) : null}
         </div>
       </div>
+
+      {busy === "generate" || busy === "regenerate" || busy === "render" ? (
+        <div className="shrink-0 border-b border-[var(--zeno-border)] bg-[var(--zeno-violet-wash)] px-4 py-4">
+          <ProgressStepper
+            steps={
+              busy === "render"
+                ? [...CV_RENDER_STEPS]
+                : [...CV_GENERATE_STEPS]
+            }
+            activeIndex={busyStepIndex}
+            elapsedSec={busyElapsedSec}
+            hint={
+              busy === "render"
+                ? "building a print-ready PDF"
+                : busyElapsedSec >= 20
+                  ? "AI drafting can take a while when rate-limited"
+                  : "using only your verified career evidence"
+            }
+          />
+        </div>
+      ) : null}
 
       {(message || error || saveError) && (
         <div className="shrink-0 space-y-1 border-b border-[var(--zeno-border)] px-4 py-2">

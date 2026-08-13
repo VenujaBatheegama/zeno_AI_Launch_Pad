@@ -109,12 +109,123 @@ export function recommendCvMode(input: {
   };
 }
 
+/**
+ * Turn a vacancy posting title into a CV-safe role name.
+ * Keeps the role (e.g. Software Engineer) but drops location tags,
+ * seniority ranges, and other job-board fluff that should not appear
+ * as the candidate's professional title.
+ */
+export function sanitizeJobTitleForCv(jobTitle: string): string {
+  let title = jobTitle.trim();
+  if (!title) return "Software Engineer";
+
+  // Drop parenthetical tags: (Maryland), (Remote), (Hybrid - NYC), etc.
+  title = title.replace(/\s*\([^)]*\)\s*/gu, " ");
+
+  // Drop bracketed tags: [Contract], [On-site]
+  title = title.replace(/\s*\[[^\]]*\]\s*/gu, " ");
+
+  // Split on common posting separators and keep the role-like head.
+  const parts = title
+    .split(/\s*[-–—|/·•]\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (isPostingFluffSegment(part)) continue;
+    // Stop once we already have a role and hit more fluff-looking remainder.
+    if (kept.length > 0 && looksLikeLocationOrMeta(part)) continue;
+    kept.push(part);
+    // One solid role phrase is enough for a CV title line.
+    if (kept.length >= 1 && /\b(engineer|developer|analyst|scientist|designer|manager|specialist|architect|consultant|administrator|technician|programmer)\b/iu.test(part)) {
+      break;
+    }
+  }
+
+  title = (kept.length > 0 ? kept.join(" ") : parts[0] ?? title)
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
+  // Strip trailing meta still glued without separators.
+  title = title
+    .replace(
+      /\b(?:mid(?:\s*[-/]?\s*to\s*[-/]?\s*|\s+)(?:senior|experienced)|entry[\s-]*level|experienced\s+level|seniority)\b.*$/iu,
+      "",
+    )
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
+  // Cap length for CV header.
+  if (title.length > 60) {
+    title = title.slice(0, 60).replace(/\s+\S*$/u, "").trim();
+  }
+
+  return title || "Software Engineer";
+}
+
+function isPostingFluffSegment(part: string): boolean {
+  const normalized = part.toLocaleLowerCase();
+  if (
+    /^(?:remote|hybrid|onsite|on[\s-]?site|contract|permanent|full[\s-]?time|part[\s-]?time|temporary|urgent|immediate)$/iu.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /^(?:mid(?:ior)?|senior|junior|lead|principal|staff|entry)[\s-]*(?:to[\s-]*(?:mid|senior|experienced|expert))?[\s-]*(?:level)?$/iu.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:mid|junior|senior|entry)?\s*(?:to\s+)?(?:mid|senior|experienced|expert)?\s*level\b/iu.test(
+      normalized,
+    ) &&
+    !/\b(engineer|developer|analyst|scientist|designer|manager)\b/iu.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  return looksLikeLocationOrMeta(part);
+}
+
+function looksLikeLocationOrMeta(part: string): boolean {
+  const normalized = part.trim();
+  if (!normalized) return true;
+  // Pure location-ish: Maryland, New York, NY, USA, Colombo, Sri Lanka
+  if (/^[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?$/u.test(normalized)) {
+    if (
+      !/\b(engineer|developer|analyst|scientist|designer|manager|specialist|architect|consultant|administrator|technician|programmer|software|backend|frontend|full[\s-]?stack|data|devops|product|qa|security|cloud|mobile|platform|systems?|it|ai|ml)\b/iu.test(
+        normalized,
+      )
+    ) {
+      // Short proper nouns without role words are usually places/companies.
+      if (normalized.split(/\s+/u).length <= 3 && normalized.length <= 40) {
+        return true;
+      }
+    }
+  }
+  if (/^[A-Z]{2,3}$/u.test(normalized)) return true; // NY, MD, UK
+  if (/\b(?:area|region|office|hq|headquarters)\b/iu.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
 export function deriveTargetTitle(input: {
   jobTitle: string;
   earlyCareer: boolean;
 }): string {
-  const title = input.jobTitle.trim() || "Software Engineer";
+  const title = sanitizeJobTitleForCv(input.jobTitle);
   if (/junior|intern|associate|graduate|trainee|aspiring/iu.test(title)) {
+    return title;
+  }
+  // Don't stamp "Junior" onto clearly senior / lead postings after cleanup.
+  if (/^(?:senior|lead|principal|staff|director|head)\b/iu.test(title)) {
     return title;
   }
   if (input.earlyCareer) {

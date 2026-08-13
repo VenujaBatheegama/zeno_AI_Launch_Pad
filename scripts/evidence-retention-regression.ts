@@ -79,7 +79,7 @@ async function main() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const groqModel = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+  const groqModel = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 
   if (!demoUserId || !supabaseUrl || !serviceKey) {
     throw new Error("Missing DEMO_USER_ID / SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
