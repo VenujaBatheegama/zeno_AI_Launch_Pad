@@ -26,11 +26,16 @@ roles.
 Requirements: Node.js 22+ and pnpm.
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_slice_0.sql` through `0009_esco_replace_smart_search.sql`
+2. Run `supabase/migrations/0001_slice_0.sql` through `0011_fresh_job_watch.sql`
    in order (or apply pending migrations with the Supabase CLI). Migration
    `0009` adds the ESCO resolution cache, updates planned-query sources to
    `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
-   Skill Analyser / capability-profile tables.
+   Skill Analyser / capability-profile tables. Migration `0010` adds the
+   proactive campaign tables (recommendations, packets, applications, runs,
+   notification outbox). Migration `0011` adds canonical LinkedIn searches and
+   the original one-watch-per-user table. Migration `0014` adds multi-campaign
+   `job_search_campaigns`, Instant Search sessions, and campaign listing
+   attribution. Apply `0014` after `0011`–`0013`.
 3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
 4. Configure hybrid job sources via `JOB_SOURCES` (default
@@ -112,6 +117,14 @@ unknown rather than being inferred.
 6. Analyse discovered jobs; confirm evidence-fit ranking uses verified evidence.
 7. Open match details and confirm gaps/unknowns stay distinct from matched items.
 8. Tailor a CV for a matched listing and confirm grounding validation still applies.
+
+## Jobs: Instant Search and Job Campaigns
+
+`/app/jobs` is the Jobs control centre. **Instant Search** (`/app/jobs/search`)
+is a one-off hybrid search. **Job Campaigns** are named monitors; Zeno checks
+LinkedIn about every 15 minutes and runs a broader search about every 12 hours.
+See `docs/job-campaigns.md` for isolation, canonical searches, token budget,
+and the 15-minute scheduler (GitHub Actions; Vercel Hobby is daily-only).
 
 ## Verification
 

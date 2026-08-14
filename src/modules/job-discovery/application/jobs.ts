@@ -36,12 +36,24 @@ export type ClearDiscoveredJobsCommand = z.input<typeof clearJobsCommandSchema>;
 export async function listDiscoveredJobs(
   command: ListJobsCommand,
   repository: JobDiscoveryRepository,
-  options?: { profileTerms?: MatchableProfileTerm[] },
+  options?: {
+    profileTerms?: MatchableProfileTerm[];
+    /** When provided, skips a second profile fetch. */
+    profile?: Awaited<
+      ReturnType<JobDiscoveryRepository["getSearchProfile"]>
+    >;
+    /** When provided, skips a second jobs fetch. */
+    jobs?: DiscoveredJob[];
+  },
 ): Promise<DiscoveredJob[]> {
   const parsed = listJobsCommandSchema.parse(command);
   const [jobs, profile] = await Promise.all([
-    repository.listJobs(parsed),
-    repository.getSearchProfile(parsed.userId),
+    options?.jobs
+      ? Promise.resolve(options.jobs)
+      : repository.listJobs(parsed),
+    options && "profile" in options
+      ? Promise.resolve(options.profile ?? null)
+      : repository.getSearchProfile(parsed.userId),
   ]);
   const preferences = profile?.preferences ?? emptyJobSearchPreferences;
   const filtered = jobs.filter(

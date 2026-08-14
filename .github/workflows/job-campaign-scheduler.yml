@@ -1,0 +1,26 @@
+name: Job campaign scheduler
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke campaign discovery tick
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Set repository secrets APP_URL and CRON_SECRET to enable 15-minute job campaign checks."
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            "${APP_URL%/}/api/cron/campaign"

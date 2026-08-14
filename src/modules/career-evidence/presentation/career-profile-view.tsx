@@ -17,15 +17,24 @@ import { UploadForm } from "./upload-form";
 
 type Props = {
   initialEvidenceSet: CareerEvidenceSet | null;
+  handoff?: CareerProfileHandoff | null;
 };
 
 type ConfirmationMap = Record<string, boolean>;
+
+export type CareerProfileHandoff = {
+  title: string;
+  objective: string;
+  expectedEvidence: string[];
+  startDate: string | null;
+  endDate: string | null;
+};
 
 /**
  * Card-based career profile editor — experience, projects, education, skills,
  * certifications, and referees — with inline Edit / Confirm / Remove.
  */
-export function CareerProfileView({ initialEvidenceSet }: Props) {
+export function CareerProfileView({ initialEvidenceSet, handoff }: Props) {
   const [evidenceSet, setEvidenceSet] = useState(initialEvidenceSet);
   const [showUpdateFromCv, setShowUpdateFromCv] = useState(false);
 
@@ -61,6 +70,7 @@ export function CareerProfileView({ initialEvidenceSet }: Props) {
         onChanged={setEvidenceSet}
         onUpdateFromCv={() => setShowUpdateFromCv((open) => !open)}
         updateFromCvOpen={showUpdateFromCv}
+        handoff={handoff}
       />
       {showUpdateFromCv ? (
         <UploadForm
@@ -95,11 +105,13 @@ function ProfileOverview({
   onChanged,
   onUpdateFromCv,
   updateFromCvOpen,
+  handoff,
 }: {
   evidenceSet: CareerEvidenceSet;
   onChanged: (next: CareerEvidenceSet) => void;
   onUpdateFromCv: () => void;
   updateFromCvOpen: boolean;
+  handoff?: CareerProfileHandoff | null;
 }) {
   const [evidence, setEvidence] = useState(evidenceSet.evidence);
   const evidenceRef = useRef(evidence);
@@ -134,6 +146,38 @@ function ProfileOverview({
     dirtyRef.current = true;
     evidenceRef.current = next;
     setEvidence(next);
+  }
+
+  function addHandoffProject() {
+    if (!handoff) return;
+    if (evidence.projects.some((item) => item.name === handoff.title)) {
+      const existing = evidence.projects.find((item) => item.name === handoff.title);
+      if (existing) setEditingId(existing.id);
+      return;
+    }
+    const id = crypto.randomUUID();
+    commit({
+      ...evidence,
+      projects: [
+        ...evidence.projects,
+        {
+          id,
+          origin: "user_edited",
+          source_quote: null,
+          name: handoff.title,
+          role: null,
+          start_date: handoff.startDate?.slice(0, 7) ?? null,
+          end_date: handoff.endDate?.slice(0, 7) ?? null,
+          bullets: [
+            handoff.objective,
+            ...handoff.expectedEvidence,
+          ].filter(Boolean),
+          technologies: [],
+        },
+      ],
+    });
+    setConfirmations((current) => ({ ...current, [id]: false }));
+    setEditingId(id);
   }
 
   function setConfirmed(id: string, value: boolean) {
@@ -540,6 +584,22 @@ function ProfileOverview({
             })
           )}
         </ProfileSection>
+
+        {handoff ? (
+          <div className="rounded-[12px] border border-dashed border-[var(--zeno-border-hover)] bg-white px-4 py-3">
+            <p className="text-[13px] text-[var(--zeno-ink-muted)]">
+              Prefill an unverified project from your completed Growth work. You still need to
+              review and confirm every claim.
+            </p>
+            <button
+              type="button"
+              onClick={addHandoffProject}
+              className="mt-2 inline-flex h-9 items-center rounded-[10px] border border-[var(--zeno-border)] px-3 text-[13px] font-semibold text-[var(--zeno-ink)]"
+            >
+              Add “{handoff.title}” as a draft project
+            </button>
+          </div>
+        ) : null}
 
         <ProfileSection
           title="Projects"

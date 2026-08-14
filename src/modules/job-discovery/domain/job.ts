@@ -61,7 +61,7 @@ export const jobSearchPreferencesSchema = z
     work_modes: z.array(workModeSchema).max(3),
     employment_types: z.array(employmentTypeSchema).max(5),
     experience_levels: z.array(experienceLevelSchema).max(5),
-    excluded_keywords: preferenceList,
+    excluded_keywords: preferenceList.default([]),
     /** Explicit future interests (skills/activities/subject areas). Not inferred from CV. */
     preferred_interests: preferenceList.default([]),
     /** Explicit work the user does not want. Not inferred from CV. */
@@ -183,6 +183,23 @@ export const discoveredJobSchema = z
   .strict();
 
 export type DiscoveredJob = z.infer<typeof discoveredJobSchema>;
+
+/** Enough text for list ranking/preview without shipping full JDs to the browser. */
+export const JOB_LIST_DESCRIPTION_PREVIEW_CHARS = 1200;
+
+export function withJobDescriptionPreview(job: DiscoveredJob): DiscoveredJob {
+  const description = job.description;
+  if (
+    !description ||
+    description.length <= JOB_LIST_DESCRIPTION_PREVIEW_CHARS
+  ) {
+    return job;
+  }
+  return {
+    ...job,
+    description: `${description.slice(0, JOB_LIST_DESCRIPTION_PREVIEW_CHARS)}…`,
+  };
+}
 
 export type DiscoveryPage = {
   jobs: DiscoveredJob[];

@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+
 export const EXTRACTION_FAILURE_CATEGORIES = [
   "insufficient_description",
   "rate_limited",
@@ -34,6 +36,15 @@ export const EXTRACTION_USER_MESSAGES: Record<
 export function classifyExtractionError(
   error: unknown,
 ): ExtractionFailureCategory {
+  if (error instanceof ZodError) return "schema_validation_failed";
+  if (
+    error &&
+    typeof error === "object" &&
+    "name" in error &&
+    error.name === "GroqCapacityUnavailableError"
+  ) {
+    return "rate_limited";
+  }
   const message = error instanceof Error ? error.message : String(error);
   const body =
     error && typeof error === "object" && "responseBody" in error

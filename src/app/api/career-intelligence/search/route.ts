@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({
       jobsFound: result.jobsFound,
+      listingIds: result.listingIds,
       partialFailure: result.partialFailure,
       warnings: result.warnings,
       softNotice: result.softNotice,

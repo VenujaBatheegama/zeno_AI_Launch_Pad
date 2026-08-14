@@ -108,8 +108,8 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
           Choose from matched jobs
         </h1>
         <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-          Select one opportunity. Zeno will build the CV from your verified
-          evidence only.
+          Only jobs Zeno has analysed for you. Search on Jobs first if this list
+          is empty.
         </p>
       </header>
 
@@ -138,10 +138,11 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
       ) : filtered.length === 0 ? (
         <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-6">
           <p className="text-sm font-semibold text-[var(--zeno-ink)]">
-            No searched jobs yet
+            No matched jobs yet
           </p>
           <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-            Search and analyse jobs first, then return here to tailor a CV.
+            Run Find new jobs and wait for analysis to finish, then return here
+            to tailor a CV.
           </p>
           <Link
             href="/app/matching"

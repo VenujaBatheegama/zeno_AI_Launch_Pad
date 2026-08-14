@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { jobSearchCriteriaSchema } from "../domain/job";
 import {
   LinkedInGuestJobSource,
+  buildGuestSearchUrl,
+  looksLikeLinkedInBlockPage,
   parseLinkedInGuestHtml,
   parseLinkedInJobDetailHtml,
 } from "./linkedin-guest-job-source";
@@ -94,6 +96,8 @@ describe("LinkedInGuestJobSource", () => {
     expect(firstUrl).toContain("keywords=Software");
     expect(firstUrl).toContain("location=Sri");
     expect(firstUrl).toContain("geoId=100446352");
+    expect(firstUrl).toContain("f_TPR=r2592000");
+    expect(firstUrl).not.toContain("sortBy=");
     expect(result.jobs.length).toBeGreaterThanOrEqual(2);
     expect(result.jobs.every((job) => job.publisher === "linkedin.com")).toBe(
       true,
@@ -177,6 +181,140 @@ describe("LinkedInGuestJobSource", () => {
       }),
     );
     expect(result.jobs).toHaveLength(0);
+  });
+
+  it("forms a one-hour freshness query with newest sorting", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(SAMPLE_HTML, { status: 200 }));
+    const source = new LinkedInGuestJobSource({
+      timeoutMs: 1000,
+      maxPages: 4,
+      pageSize: 25,
+      enrichDescriptions: true,
+      enrichLimit: 10,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    const result = await source.searchFreshCards({
+      keywords: "Backend Developer",
+      location: "Sri Lanka",
+      recencySeconds: 3600,
+      maxPages: 1,
+      pageSize: 10,
+      sortBy: "DD",
+    });
+    const url = String(fetch.mock.calls[0]?.[0]);
+    expect(url).toContain("f_TPR=r3600");
+    expect(url).toContain("sortBy=DD");
+    expect(url).toContain("start=0");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.jobs.every((job) => !job.description)).toBe(true);
+  });
+
+  it("does not fetch job-detail pages during a fresh card search", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(SAMPLE_HTML, { status: 200 }));
+    await new LinkedInGuestJobSource({
+      timeoutMs: 1000,
+      enrichDescriptions: true,
+      enrichLimit: 10,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    }).searchFreshCards({
+      keywords: "Software Engineer",
+      location: "Sri Lanka",
+      recencySeconds: 3600,
+    });
+    expect(
+      fetch.mock.calls.every(
+        (call) => !String(call[0]).includes("/jobs-guest/jobs/api/jobPosting/"),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns no jobs for an empty guest page", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("  ", { status: 200 }));
+    const result = await new LinkedInGuestJobSource({
+      timeoutMs: 1000,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    }).searchFreshCards({
+      keywords: "Software Engineer",
+      location: "Sri Lanka",
+      recencySeconds: 3600,
+    });
+    expect(result.jobs).toEqual([]);
+  });
+
+  it("fails safely on unexpected block-page HTML", async () => {
+    const html = `<html><body>${"join now authwall challenge-form ".repeat(40)}</body></html>`;
+    expect(looksLikeLinkedInBlockPage(html)).toBe(true);
+    const fetch = vi.fn().mockResolvedValue(new Response(html, { status: 200 }));
+    await expect(
+      new LinkedInGuestJobSource({
+        timeoutMs: 1000,
+        fetch: fetch as unknown as typeof globalThis.fetch,
+      }).searchFreshCards({
+        keywords: "Software Engineer",
+        location: "Sri Lanka",
+        recencySeconds: 3600,
+      }),
+    ).rejects.toMatchObject({ code: "SOURCE_UNAVAILABLE" });
+  });
+
+  it("cools down on 429 without retrying", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 429 }));
+    const source = new LinkedInGuestJobSource({
+      timeoutMs: 1000,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    await expect(
+      source.searchFreshCards({
+        keywords: "Software Engineer",
+        location: "Sri Lanka",
+        recencySeconds: 3600,
+      }),
+    ).rejects.toMatchObject({ code: "SOURCE_RATE_LIMITED" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("suspends on 403 without retrying", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("blocked", { status: 403 }));
+    await expect(
+      new LinkedInGuestJobSource({
+        timeoutMs: 1000,
+        fetch: fetch as unknown as typeof globalThis.fetch,
+      }).searchFreshCards({
+        keywords: "Software Engineer",
+        location: "Sri Lanka",
+        recencySeconds: 3600,
+      }),
+    ).rejects.toMatchObject({ code: "SOURCE_FORBIDDEN" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out as SOURCE_UNAVAILABLE", async () => {
+    const fetch = vi.fn().mockImplementation(() => {
+      throw new DOMException("The operation was aborted.", "TimeoutError");
+    });
+    await expect(
+      new LinkedInGuestJobSource({
+        timeoutMs: 50,
+        fetch: fetch as unknown as typeof globalThis.fetch,
+      }).searchFreshCards({
+        keywords: "Software Engineer",
+        location: "Sri Lanka",
+        recencySeconds: 3600,
+      }),
+    ).rejects.toMatchObject({ code: "SOURCE_UNAVAILABLE" });
+  });
+
+  it("builds the freshness URL with an overlapping one-hour window", () => {
+    const url = buildGuestSearchUrl("https://www.linkedin.com", {
+      keywords: "Backend Developer",
+      location: "Sri Lanka",
+      start: 0,
+      recencySeconds: 3600,
+      sortBy: "DD",
+    });
+    expect(url).toContain("keywords=Backend+Developer");
+    expect(url).toContain("f_TPR=r3600");
+    expect(url).toContain("sortBy=DD");
   });
 
   it("isolates guest failures as SOURCE_UNAVAILABLE", async () => {

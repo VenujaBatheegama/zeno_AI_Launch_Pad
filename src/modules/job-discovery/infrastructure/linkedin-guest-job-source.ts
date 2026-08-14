@@ -68,6 +68,7 @@ export class LinkedInGuestJobSource implements JobSource {
           location,
           geoId,
           start,
+          recencySeconds: 2_592_000,
         });
 
         let response: Response;
@@ -95,6 +96,12 @@ export class LinkedInGuestJobSource implements JobSource {
             "LinkedIn guest search is temporarily rate limited. Try again later.",
           );
         }
+        if (response.status === 403) {
+          throw new JobDiscoveryError(
+            "SOURCE_FORBIDDEN",
+            "LinkedIn guest search is temporarily unavailable.",
+          );
+        }
         if (!response.ok) {
           throw new JobDiscoveryError(
             "SOURCE_UNAVAILABLE",
@@ -103,6 +110,12 @@ export class LinkedInGuestJobSource implements JobSource {
         }
 
         const html = await response.text();
+        if (looksLikeLinkedInBlockPage(html)) {
+          throw new JobDiscoveryError(
+            "SOURCE_UNAVAILABLE",
+            "LinkedIn guest search returned an unexpected response. Try again.",
+          );
+        }
         const pageJobs = parseLinkedInGuestHtml(html);
         if (pageJobs.length === 0) break;
         collected.push(...pageJobs);
@@ -141,6 +154,121 @@ export class LinkedInGuestJobSource implements JobSource {
       partialFailure: false,
     };
   }
+
+  /**
+   * Narrow freshness poll: one primary role, overlapping recency window,
+   * newest-first, cards only — never fetch job-detail HTML here.
+   */
+  async searchFreshCards(input: {
+    keywords: string;
+    location: string;
+    recencySeconds: number;
+    maxPages?: number;
+    pageSize?: number;
+    sortBy?: "DD";
+  }): Promise<JobSourceResult> {
+    const baseUrl = (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(
+      /\/+$/u,
+      "",
+    );
+    const maxPages = Math.min(this.options.maxPages ?? 1, input.maxPages ?? 1);
+    const pageSize = Math.min(
+      this.options.pageSize ?? 10,
+      input.pageSize ?? 10,
+    );
+    const keywords = input.keywords.trim();
+    if (!keywords) {
+      return { jobs: [], nextCursor: null, partialFailure: false };
+    }
+    const location = input.location.trim() || "Sri Lanka";
+    const geoId = linkedInGeoIdForLocations([location]);
+    const collected: NormalizedExternalJob[] = [];
+
+    for (let page = 0; page < Math.max(1, maxPages); page += 1) {
+      const start = page * 25;
+      const url = buildGuestSearchUrl(baseUrl, {
+        keywords,
+        location,
+        geoId,
+        start,
+        recencySeconds: input.recencySeconds,
+        sortBy: input.sortBy ?? "DD",
+      });
+
+      let response: Response;
+      try {
+        response = await (this.options.fetch ?? globalThis.fetch)(url, {
+          method: "GET",
+          headers: {
+            Accept: "text/html,application/xhtml+xml",
+            "User-Agent":
+              "Mozilla/5.0 (compatible; ZenoCareerAgent/0.1; +https://localhost)",
+          },
+          signal: AbortSignal.timeout(this.options.timeoutMs),
+        });
+      } catch (error) {
+        throw new JobDiscoveryError(
+          "SOURCE_UNAVAILABLE",
+          "We couldn't reach LinkedIn guest search right now. Try again.",
+          { cause: error },
+        );
+      }
+
+      if (response.status === 429) {
+        throw new JobDiscoveryError(
+          "SOURCE_RATE_LIMITED",
+          "LinkedIn guest search is temporarily rate limited. Try again later.",
+        );
+      }
+      if (response.status === 403) {
+        throw new JobDiscoveryError(
+          "SOURCE_FORBIDDEN",
+          "LinkedIn guest search is temporarily unavailable.",
+        );
+      }
+      if (!response.ok) {
+        throw new JobDiscoveryError(
+          "SOURCE_UNAVAILABLE",
+          "LinkedIn guest search returned an unexpected response. Try again.",
+        );
+      }
+
+      const html = await response.text();
+      if (looksLikeLinkedInBlockPage(html)) {
+        throw new JobDiscoveryError(
+          "SOURCE_UNAVAILABLE",
+          "LinkedIn guest search returned an unexpected response. Try again.",
+        );
+      }
+      const pageJobs = parseLinkedInGuestHtml(html);
+      if (pageJobs.length === 0) break;
+      collected.push(...pageJobs);
+      if (collected.length >= pageSize) break;
+      if (pageJobs.length < 5) break;
+    }
+
+    const byId = new Map<string, NormalizedExternalJob>();
+    for (const job of collected) {
+      if (!byId.has(job.external_id)) byId.set(job.external_id, job);
+    }
+
+    return {
+      jobs: [...byId.values()].slice(0, pageSize),
+      nextCursor: null,
+      partialFailure: false,
+    };
+  }
+
+  async fetchJobDescription(externalId: string): Promise<string | null> {
+    const baseUrl = (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(
+      /\/+$/u,
+      "",
+    );
+    return fetchLinkedInJobDescription(baseUrl, externalId, {
+      timeoutMs: this.options.timeoutMs,
+      fetch: this.options.fetch ?? globalThis.fetch,
+    });
+  }
 }
 
 export function buildGuestSearchUrl(
@@ -150,6 +278,8 @@ export function buildGuestSearchUrl(
     location: string;
     start: number;
     geoId?: string | null;
+    recencySeconds?: number;
+    sortBy?: "DD" | null;
   },
 ): string {
   const url = new URL(
@@ -161,9 +291,23 @@ export function buildGuestSearchUrl(
     url.searchParams.set("geoId", options.geoId);
   }
   url.searchParams.set("start", String(options.start));
-  // ~ past month; guest filter is relative seconds.
-  url.searchParams.set("f_TPR", "r2592000");
+  const recencySeconds = options.recencySeconds ?? 2_592_000;
+  url.searchParams.set("f_TPR", `r${recencySeconds}`);
+  if (options.sortBy) {
+    url.searchParams.set("sortBy", options.sortBy);
+  }
   return url.toString();
+}
+
+export function looksLikeLinkedInBlockPage(html: string): boolean {
+  if (!html.trim()) return false;
+  const lower = html.toLocaleLowerCase();
+  const hasCards = /urn:li:jobposting:/iu.test(html);
+  if (hasCards) return false;
+  return (
+    /authwall|captcha|challenge-form|security check|join now/iu.test(lower) &&
+    html.length > 400
+  );
 }
 
 export function parseLinkedInGuestHtml(html: string): NormalizedExternalJob[] {

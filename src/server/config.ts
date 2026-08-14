@@ -2,6 +2,12 @@ import "server-only";
 
 import { z } from "zod";
 
+import {
+  assertSupportedGroqModelConfig,
+  GROQ_DEFAULT_FALLBACK_MODELS,
+  GROQ_DEFAULT_PRIMARY_MODEL,
+} from "./groq-models";
+
 const jobSourceKeySchema = z.enum([
   "linkedin",
   "jsearch",
@@ -22,12 +28,121 @@ const configSchema = z
     GROQ_API_KEY_3: z.string().min(1).optional(),
     // Optional comma-separated override/addition: key1,key2,key3
     GROQ_API_KEYS: z.string().optional(),
-    GROQ_MODEL: z.string().min(1),
+    GROQ_MODEL: z.string().min(1).default(GROQ_DEFAULT_PRIMARY_MODEL),
     // Comma-separated models tried after GROQ_MODEL hits rate limits / failures.
-    // Prefer json_schema-capable models (openai/gpt-oss-*). Llama lacks strict schema.
+    // Prefer json_schema-capable models (openai/gpt-oss-*).
     GROQ_FALLBACK_MODELS: z
       .string()
-      .default("openai/gpt-oss-120b"),
+      .default(GROQ_DEFAULT_FALLBACK_MODELS.join(",")),
+    // Campaign / proactive agent
+    CRON_SECRET: z.string().min(16).optional(),
+    CAMPAIGN_ANALYSIS_BATCH_SIZE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(10),
+    CAMPAIGN_MAX_RECOMMENDATIONS_PER_RUN: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
+    CAMPAIGN_RECOMMENDATION_MIN_SCORE: z.coerce
+      .number()
+      .min(0)
+      .max(100)
+      .default(55),
+    CAMPAIGN_FOLLOW_UP_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+    CAMPAIGN_CRON_USER_BATCH_SIZE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(10),
+    FRESH_LINKEDIN_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(5)
+      .max(180)
+      .default(15),
+    FRESH_LINKEDIN_RECENCY_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(900)
+      .max(86_400)
+      .default(3600),
+    FRESH_BROAD_INTERVAL_HOURS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(48)
+      .default(12),
+    FRESH_MAX_CANONICAL_SEARCHES_PER_TICK: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(25)
+      .default(5),
+    FRESH_LINKEDIN_MAX_PAGES: z.coerce.number().int().min(1).max(2).default(1),
+    FRESH_LINKEDIN_MAX_RESULTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(25)
+      .default(10),
+    FRESH_MAX_DESCRIPTION_FETCHES_PER_TICK: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(25)
+      .default(8),
+    FRESH_MAX_GROQ_ANALYSES_PER_TICK: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .default(8),
+    FRESH_MAX_ANALYSES_PER_USER: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(3),
+    FRESH_PROVIDER_COOLDOWN_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(5)
+      .max(240)
+      .default(30),
+    FRESH_SCHEDULER_LEASE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(30)
+      .max(600)
+      .default(120),
+    FRESH_INITIAL_ALERT_CAP: z.coerce.number().int().min(0).max(10).default(3),
+    LINKEDIN_FRESH_ENABLED: z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => value !== "false"),
+    WHATSAPP_ENABLED: z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => value === "true"),
+    WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
+    WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
+    WHATSAPP_VERIFY_TOKEN: z.string().min(1).optional(),
+    WHATSAPP_APP_SECRET: z.string().min(1).optional(),
+    WHATSAPP_TEMPLATE_RECOMMENDATION: z.string().min(1).optional(),
+    WHATSAPP_TEMPLATE_LANGUAGE: z.string().min(2).default("en"),
+    PUBLIC_APP_BASE_URL: z.string().url().optional(),
+    GROWTH_MARKET_MIN_ANALYSED_JOBS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
     CAREER_EXTRACTION_CONCURRENCY: z.coerce
       .number()
       .int()
@@ -161,6 +276,11 @@ const configSchema = z
           .filter((value) => value !== config.GROQ_MODEL),
       ),
     ];
+
+    assertSupportedGroqModelConfig({
+      primary: config.GROQ_MODEL,
+      fallbacks: groqFallbackModels,
+    });
 
     const fromList = (config.GROQ_API_KEYS ?? "")
       .split(",")

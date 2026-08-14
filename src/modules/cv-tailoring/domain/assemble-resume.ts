@@ -180,7 +180,7 @@ export function assembleTailoredResume(input: {
   );
 
   const resume = {
-    targetTitle: input.draft.targetTitle.trim() || input.plan.targetTitle,
+    targetTitle: input.plan.targetTitle,
     contact: {
       fullName,
       email: profile && profile.type === "profile" ? profile.email : null,

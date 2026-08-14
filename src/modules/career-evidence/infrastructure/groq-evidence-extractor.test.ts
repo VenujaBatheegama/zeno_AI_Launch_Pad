@@ -83,7 +83,7 @@ describe("Groq evidence extraction through the AI SDK", () => {
     mocks.generateText
       .mockRejectedValueOnce(
         new Error(
-          "Rate limit reached for model `llama-3.3-70b-versatile` on tokens per day (TPD)",
+          "Rate limit reached for model `openai/gpt-oss-20b` on tokens per day (TPD)",
         ),
       )
       .mockResolvedValueOnce({
@@ -98,8 +98,8 @@ describe("Groq evidence extraction through the AI SDK", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const result = await new GroqEvidenceExtractor(
       "test-api-key",
-      "llama-3.3-70b-versatile",
-      ["openai/gpt-oss-20b"],
+      "openai/gpt-oss-20b",
+      ["openai/gpt-oss-120b"],
     ).extract("Ada Lovelace");
     warn.mockRestore();
 
@@ -128,7 +128,7 @@ describe("Groq evidence extraction through the AI SDK", () => {
     const result = await new GroqEvidenceExtractor(
       "test-api-key",
       "openai/gpt-oss-20b",
-      ["llama-3.3-70b-versatile"],
+      ["openai/gpt-oss-120b"],
     ).extract("Ada Lovelace");
     warn.mockRestore();
 
@@ -179,30 +179,21 @@ describe("Groq evidence extraction through the AI SDK", () => {
     expect(mocks.generateText).toHaveBeenCalledTimes(1);
   });
 
-  it("rotates to another API key when the first key is rate-limited", async () => {
-    mocks.generateText
-      .mockRejectedValueOnce(
-        new Error(
-          "Rate limit reached for model `openai/gpt-oss-20b` on tokens per day (TPD)",
-        ),
-      )
-      .mockResolvedValueOnce({
-        toolCalls: [
-          {
-            toolName: "recordCareerEvidence",
-            input: extracted,
-          },
-        ],
-      });
+  it("does not rotate keys after a shared quota 429", async () => {
+    mocks.generateText.mockRejectedValueOnce(
+      new Error(
+        "Rate limit reached for model `openai/gpt-oss-20b` on tokens per day (TPD)",
+      ),
+    );
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const result = await new GroqEvidenceExtractor(
-      ["key-one", "key-two"],
-      "openai/gpt-oss-20b",
-    ).extract("Ada Lovelace");
+    await expect(
+      new GroqEvidenceExtractor(
+        ["key-one", "key-two"],
+        "openai/gpt-oss-20b",
+      ).extract("Ada Lovelace"),
+    ).rejects.toMatchObject({ code: "AI_EXTRACTION_FAILED" });
     warn.mockRestore();
-
-    expect(result).toEqual(extracted);
-    expect(mocks.generateText).toHaveBeenCalledTimes(2);
+    expect(mocks.generateText).toHaveBeenCalledTimes(1);
   });
 });
