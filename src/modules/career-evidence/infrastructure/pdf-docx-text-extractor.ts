@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
+import { CanvasFactory } from "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
-
 import type {
   CvFile,
   CvTextExtractor,
@@ -17,8 +17,10 @@ export class PdfDocxTextExtractor implements CvTextExtractor {
         return result.value;
       }
 
-      const parser = new PDFParse({ data: file.bytes });
-      try {
+const parser = new PDFParse({
+  data: file.bytes,
+  CanvasFactory,
+});      try {
         const result = await parser.getText();
         return result.text;
       } finally {
