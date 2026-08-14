@@ -85,13 +85,15 @@ export async function processLinkedInFreshSearch(
   }
 
   const members = await deps.repository.listMembers(search.id);
-  const watches = await Promise.all(
+  const campaigns = await Promise.all(
     members.map(async (member) => ({
       member,
-      watch: await deps.repository.getWatchByUserId(member.userId),
+      campaign: await deps.repository.getCampaignById(member.campaignId),
     })),
   );
-  const active = watches.filter((row) => row.watch?.status === "active");
+  const active = campaigns.filter(
+    (row) => row.campaign?.status === "active" && !row.campaign.archivedAt,
+  );
   if (active.length === 0) {
     log("linkedin_query_skipped", {
       searchId: search.id,
@@ -208,6 +210,18 @@ export async function processLinkedInFreshSearch(
     });
     if (!sighting.isNew) {
       empty.repeated += 1;
+      if (sighting.listingId) {
+        for (const row of active) {
+          if (!row.campaign) continue;
+          await deps.repository.attachCampaignListing({
+            campaignId: row.campaign.id,
+            listingId: sighting.listingId,
+            discoverySource: "linkedin_fresh",
+            seenAt: nowIso,
+            originatingRunId: command.runId,
+          });
+        }
+      }
       continue;
     }
     empty.newlyPersisted += 1;
@@ -271,25 +285,30 @@ export async function processLinkedInFreshSearch(
   log("full_descriptions_fetched", { count: empty.descriptionsFetched });
 
   let analysesThisTick = 0;
+  const analysedByUserListing = new Map<string, FreshAnalysisResult>();
   for (const row of active) {
-    const watch = row.watch;
-    if (!watch) continue;
+    const campaign = row.campaign;
+    if (!campaign) continue;
     let analysesForUser = 0;
     const skip = await deps.campaignRepository.listRejectedOrAppliedListingIds(
-      watch.userId,
+      campaign.userId,
     );
     const activeRecs =
       await deps.campaignRepository.listListingIdsWithActiveRecommendations(
-        watch.userId,
+        campaign.userId,
       );
 
     for (const item of newSightings) {
-      if (watch.initialAlertsRemaining <= 0 && analysesForUser >= 0) {
-        // still allow later jobs after the initial window is spent, unless cap is 0
-      }
+      const attached = await deps.repository.attachCampaignListing({
+        campaignId: campaign.id,
+        listingId: item.listingId,
+        discoverySource: "linkedin_fresh",
+        seenAt: nowIso,
+        originatingRunId: command.runId,
+      });
       if (skip.has(item.listingId) || activeRecs.has(item.listingId)) {
         log("recommendation_suppressed", {
-          userId: watch.userId,
+          userId: campaign.userId,
           listingId: item.listingId,
           reason: "already_recommended_or_closed",
         });
@@ -310,43 +329,61 @@ export async function processLinkedInFreshSearch(
       }
 
       await deps.repository.attachUserJob({
-        userId: watch.userId,
+        userId: campaign.userId,
         listingId: item.listingId,
         seenAt: nowIso,
       });
 
+      const analysisKey = `${campaign.userId}:${item.listingId}`;
+      const cachedAnalysis = analysedByUserListing.get(analysisKey);
       log("llm_analyses_requested", {
-        userId: watch.userId,
+        userId: campaign.userId,
         listingId: item.listingId,
+        reused: Boolean(cachedAnalysis),
       });
-      const analysis = await deps.analyseListing({
-        userId: watch.userId,
-        listingId: item.listingId,
-      });
-      const llm = analysis.llmCalls ?? (analysis.extractionCacheHit ? 0 : 1);
+      const analysis =
+        cachedAnalysis ??
+        (await deps.analyseListing({
+          userId: campaign.userId,
+          listingId: item.listingId,
+        }));
+      if (!cachedAnalysis) analysedByUserListing.set(analysisKey, analysis);
+      const llm = cachedAnalysis
+        ? 0
+        : (analysis.llmCalls ?? (analysis.extractionCacheHit ? 0 : 1));
       empty.llmCalls += llm;
-      if (analysis.extractionCacheHit) empty.llmCallsSaved += 1;
-      analysesThisTick += 1;
-      analysesForUser += 1;
+      if (analysis.extractionCacheHit || cachedAnalysis) empty.llmCallsSaved += 1;
+      if (!cachedAnalysis) {
+        analysesThisTick += 1;
+        analysesForUser += 1;
+      }
 
-      const minScore = watch.minScore ?? deps.caps.minScore;
+      const minScore = campaign.minimumScore ?? deps.caps.minScore;
       if (
         !analysis.ok ||
         !analysis.matchAnalysisId ||
         (analysis.evidenceFitScore ?? 0) < minScore ||
         analysis.hardConstraintEligible === false
       ) {
+        await deps.repository.updateCampaignListingQualification({
+          campaignId: campaign.id,
+          listingId: item.listingId,
+          qualification:
+            analysis.hardConstraintEligible === false
+              ? "ineligible"
+              : "below_threshold",
+        });
         log("recommendation_suppressed", {
-          userId: watch.userId,
+          userId: campaign.userId,
           listingId: item.listingId,
           reason: "weak_or_ineligible",
           score: analysis.evidenceFitScore ?? 0,
         });
         continue;
       }
-      if (watch.initialAlertsRemaining <= 0) {
+      if (campaign.initialAlertsRemaining <= 0) {
         log("recommendation_suppressed", {
-          userId: watch.userId,
+          userId: campaign.userId,
           listingId: item.listingId,
           reason: "initial_alert_cap",
         });
@@ -356,10 +393,11 @@ export async function processLinkedInFreshSearch(
       const { recommendation, created } =
         await deps.campaignRepository.upsertRecommendation({
           id: deps.createId(),
-          userId: watch.userId,
+          userId: campaign.userId,
           listingId: item.listingId,
           jobMatchAnalysisId: analysis.matchAnalysisId,
           campaignRunId: null,
+          jobSearchCampaignId: campaign.id,
           scoreSnapshot: {
             evidenceFitScore: analysis.evidenceFitScore ?? 0,
             careerLevel: analysis.careerLevel ?? "unknown",
@@ -393,9 +431,15 @@ export async function processLinkedInFreshSearch(
         });
       if (!created) continue;
 
+      await deps.repository.updateCampaignListingQualification({
+        campaignId: campaign.id,
+        listingId: item.listingId,
+        qualification: "qualifying",
+      });
+
       const { created: queued } = await deps.campaignRepository.enqueueNotification({
         id: deps.createId(),
-        userId: watch.userId,
+        userId: campaign.userId,
         eventType: "recommendation_created",
         channel: "in_app",
         relatedEntityType: "job_recommendation",
@@ -406,27 +450,38 @@ export async function processLinkedInFreshSearch(
           firstSeenAt: item.firstSeenAt,
           publishedAt: item.publishedAt,
           freshness: "newly_discovered",
+          campaignId: campaign.id,
         },
         idempotencyKey: `rec:${recommendation.id}:in_app`,
         scheduledAt: nowIso,
       });
       if (queued) {
         empty.recommendationsCreated += 1;
-        await deps.repository.updateWatch(watch.id, {
-          initialAlertsRemaining: Math.max(0, watch.initialAlertsRemaining - 1),
+        await deps.repository.updateCampaign(campaign.id, {
+          initialAlertsRemaining: Math.max(0, campaign.initialAlertsRemaining - 1),
           lastDiscoveryAt: nowIso,
         });
-        watch.initialAlertsRemaining = Math.max(0, watch.initialAlertsRemaining - 1);
+        campaign.initialAlertsRemaining = Math.max(
+          0,
+          campaign.initialAlertsRemaining - 1,
+        );
         log("recommendation_created", {
-          userId: watch.userId,
+          userId: campaign.userId,
           recommendationId: recommendation.id,
+          campaignId: campaign.id,
         });
         log("notification_queued", {
-          userId: watch.userId,
+          userId: campaign.userId,
           recommendationId: recommendation.id,
         });
       }
+      void attached;
     }
+
+    await deps.repository.updateCampaign(campaign.id, {
+      lastLinkedInSearchAt: nowIso,
+      nextLinkedInSearchAt: addMs(nowIso, deps.caps.linkedInIntervalMs),
+    });
   }
 
   await finishSearch(deps.repository, search.id, nowIso, deps.caps.linkedInIntervalMs, {

@@ -53,6 +53,7 @@ export type ScheduledDiscoveryTickDependencies = {
   }) => Promise<LinkedInFreshSearchResult>;
   runBroadCampaign: (input: {
     userId: string;
+    campaignId: string;
     runId: string;
   }) => Promise<{ recommended: number; status: string }>;
   deliverNotifications?: () => Promise<number>;
@@ -141,24 +142,25 @@ export async function processScheduledDiscoveryTick(
     }
   }
 
-  const claimedWatches = await deps.repository.claimDueBroadWatches({
+  const claimedCampaigns = await deps.repository.claimDueBroadCampaigns({
     now: nowIso,
     leaseOwner: runId,
     leaseExpiresAt,
     limit: Math.min(3, deps.caps.maxCanonicalSearchesPerTick),
   });
-  summary.broad.claimed = claimedWatches.length;
-  log("broad_campaign_due", { count: claimedWatches.length, runId });
+  summary.broad.claimed = claimedCampaigns.length;
+  log("broad_campaign_due", { count: claimedCampaigns.length, runId });
 
-  for (const watch of claimedWatches) {
+  for (const campaign of claimedCampaigns) {
     try {
       const result = await deps.runBroadCampaign({
-        userId: watch.userId,
+        userId: campaign.userId,
+        campaignId: campaign.id,
         runId,
       });
       summary.broad.processed += 1;
       summary.broad.recommended += result.recommended;
-      await deps.repository.updateWatch(watch.id, {
+      await deps.repository.updateCampaign(campaign.id, {
         lastBroadSearchAt: nowIso,
         nextBroadSearchAt: new Date(
           Date.parse(nowIso) + deps.caps.broadIntervalMs,
@@ -166,13 +168,14 @@ export async function processScheduledDiscoveryTick(
         lastError: result.status === "failed" ? "broad_failed" : null,
       });
       log("broad_campaign_completed", {
-        userId: watch.userId,
+        userId: campaign.userId,
+        campaignId: campaign.id,
         status: result.status,
         recommended: result.recommended,
       });
     } catch (error) {
       summary.broad.failed += 1;
-      await deps.repository.updateWatch(watch.id, {
+      await deps.repository.updateCampaign(campaign.id, {
         lastError:
           error instanceof Error ? error.message.slice(0, 300) : "failed",
         nextBroadSearchAt: new Date(
@@ -180,7 +183,7 @@ export async function processScheduledDiscoveryTick(
         ).toISOString(),
       });
     } finally {
-      await deps.repository.releaseBroadWatchLease(watch.id);
+      await deps.repository.releaseBroadCampaignLease(campaign.id);
     }
   }
 

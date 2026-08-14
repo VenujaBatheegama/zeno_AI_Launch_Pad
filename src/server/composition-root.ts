@@ -125,13 +125,42 @@ import { SupabaseCareerCampaignRepository } from "@/modules/career-campaign/infr
 import { SupabaseFreshWatchRepository } from "@/modules/career-campaign/infrastructure/supabase-fresh-watch-repository";
 import { WhatsAppCloudNotificationSender } from "@/modules/career-campaign/infrastructure/whatsapp-cloud-sender";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
+import type { JobSearchCampaign } from "@/modules/career-campaign/domain/job-campaign";
 import {
   enableFreshJobWatch,
   getFreshJobWatchStatus,
   pauseFreshJobWatch,
 } from "@/modules/career-campaign/application/manage-fresh-job-watch";
+import {
+  archiveJobCampaign,
+  createJobCampaign,
+  getJobCampaignForUser,
+  getJobsWorkspaceOverview,
+  listJobCampaigns,
+  pauseJobCampaign,
+  resumeJobCampaign,
+  updateJobCampaign,
+} from "@/modules/career-campaign/application/manage-job-campaigns";
+import { runJobCampaignNow } from "@/modules/career-campaign/application/run-job-campaign";
 import { processScheduledDiscoveryTick } from "@/modules/career-campaign/application/process-scheduled-discovery-tick";
+import { processLinkedInFreshSearch } from "@/modules/career-campaign/application/process-linkedin-fresh-search";
 import type { FreshWatchCaps } from "@/modules/career-campaign/application/fresh-watch-ports";
+import { askCareerFriend } from "@/modules/career-friend/application/conversation";
+import {
+  setSprintMilestone,
+  startCareerSprint,
+  submitCareerSprintEvidence,
+} from "@/modules/career-friend/application/sprints";
+import type { CareerSnapshot } from "@/modules/career-friend/domain/schemas";
+import { GroqCareerAdvisor } from "@/modules/career-friend/infrastructure/groq-career-advisor";
+import { SupabaseCareerFriendRepository } from "@/modules/career-friend/infrastructure/supabase-career-friend-repository";
+import {
+  getCareerGrowthApplication,
+  processDueGrowthAssessments,
+  requestGrowthAssessmentSafely,
+} from "./career-growth-application";
+
+export { getCareerGrowthApplication, processDueGrowthAssessments };
 
 async function refreshPlanAfterPreferencesChange(userId: string): Promise<void> {
   const config = getServerConfig();
@@ -497,7 +526,24 @@ function createCareerIntelligenceApplication(userId: string) {
           pageSize: config.JSEARCH_PAGE_SIZE,
           queryBudget: config.CAREER_SEARCH_QUERY_BUDGET,
         },
-        deps,
+        {
+          ...deps,
+          recordInstantSession: async (input) => {
+            if (command.origin === "campaign") return;
+            const freshRepository = new SupabaseFreshWatchRepository(supabase);
+            await freshRepository.archiveInstantSearchSessions(input.userId);
+            await freshRepository.createInstantSearchSession({
+              id: randomUUID(),
+              userId: input.userId,
+              status: "active",
+              jobsFound: input.jobsFound,
+              analysedCount: 0,
+              listingIds: input.listingIds,
+              startedAt: input.startedAt,
+              completedAt: new Date().toISOString(),
+            });
+          },
+        },
       );
     },
     executeSearch: (
@@ -739,6 +785,99 @@ export function getCareerCampaignApplication(
   return createCareerCampaignApplication(userId);
 }
 
+export type CareerFriendApplication = ReturnType<
+  typeof createCareerFriendApplication
+>;
+
+export function getCareerFriendApplication(userId: string) {
+  return createCareerFriendApplication(userId);
+}
+
+function createCareerFriendApplication(userId: string) {
+  const config = getServerConfig();
+  const supabase = createSupabaseClient(config);
+  const repository = new SupabaseCareerFriendRepository(supabase);
+  const campaign = createCareerCampaignApplication(userId);
+  const evidenceRepository = new SupabaseEvidenceRepository(supabase);
+  const advisor = new GroqCareerAdvisor(getGroqKeyPool(), config.GROQ_MODEL);
+  const now = () => new Date();
+
+  const getSnapshot = async (): Promise<CareerSnapshot> => {
+    const [dashboard, evidence, sprints] = await Promise.all([
+      campaign.getDashboard(),
+      evidenceRepository.getCurrent(userId),
+      repository.listSprints(userId),
+    ]);
+    const verified = evidence?.status === "verified" ? evidence.evidence : null;
+    return {
+      profile: {
+        name: verified?.profile.full_name ?? null,
+        headline: verified?.profile.summary ?? null,
+        skills: (verified?.skills ?? []).map((item) => item.name),
+        projects: (verified?.projects ?? []).map((item) => item.name),
+      },
+      opportunities: {
+        pendingRecommendations: dashboard.needsAttention.pendingRecommendations,
+        discoveredJobs: dashboard.funnel.jobsDiscovered,
+        applications: dashboard.funnel.applied,
+        interviews: dashboard.funnel.interviews,
+      },
+      growthSignals: dashboard.growthActions.map((item) => ({
+        id: item.id,
+        label: item.gapLabel,
+        frequency: item.frequency,
+        whyItMatters: item.whyItMatters,
+      })),
+      activeSprints: sprints
+        .filter((item) => item.status === "active" || item.status === "paused")
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          gapType: item.gapType,
+          completedMilestones: item.milestones.filter((milestone) => milestone.completed).length,
+          totalMilestones: item.milestones.length,
+        })),
+    };
+  };
+
+  return {
+    userId,
+    getSnapshot,
+    listSprints: () => repository.listSprints(userId),
+    startSprint: async (growthActionId: string) => {
+      const action = (await campaign.listGrowthActions()).find(
+        (item) => item.id === growthActionId,
+      );
+      if (!action) {
+        throw new CareerCampaignError("NOT_FOUND", "Growth signal was not found.");
+      }
+      return startCareerSprint(
+        { userId, action },
+        { repository, createId: randomUUID, now },
+      );
+    },
+    setMilestone: (input: {
+      sprintId: string;
+      milestoneId: string;
+      completed: boolean;
+    }) => setSprintMilestone({ userId, ...input }, { repository, now }),
+    submitEvidence: (input: {
+      sprintId: string;
+      evidenceUrl?: string;
+      evidenceNote?: string;
+    }) => submitCareerSprintEvidence({ userId, ...input }, { repository, now }),
+    ask: async (input: {
+      conversationId?: string;
+      clientMessageId: string;
+      message: string;
+    }) =>
+      askCareerFriend(
+        { userId, ...input, snapshot: await getSnapshot() },
+        { repository, advisor, createId: randomUUID, now },
+      ),
+  };
+}
+
 function createCareerCampaignApplication(userId: string) {
   const config = getServerConfig();
   const supabase = createSupabaseClient(config);
@@ -784,7 +923,7 @@ function createCareerCampaignApplication(userId: string) {
             return Boolean(link?.optedInAt && !link.optedOutAt);
           },
           executeSearch: async (uid) => {
-            const search = await careerApp.searchForJobs({});
+            const search = await careerApp.searchForJobs({ origin: "campaign" });
             const jobs = await jobRepository.listJobs({
               userId: uid,
               includeDismissed: false,
@@ -1091,6 +1230,183 @@ function createCareerCampaignApplication(userId: string) {
           now,
         },
       ),
+    listJobCampaigns: () =>
+      listJobCampaigns(userId, {
+        repository: new SupabaseFreshWatchRepository(supabase),
+      }),
+    getJobsOverview: () =>
+      getJobsWorkspaceOverview(userId, {
+        repository: new SupabaseFreshWatchRepository(supabase),
+      }),
+    createJobCampaign: async (input: {
+      name?: string;
+      primaryRole: string;
+      location: string;
+      workMode?: "onsite" | "hybrid" | "remote" | "any";
+      employmentTypes?: JobSearchCampaign["employmentTypes"];
+      experienceLevels?: JobSearchCampaign["experienceLevels"];
+      minimumScore?: number;
+      preferredTechnologies?: string[];
+      targetReadyDate?: string | null;
+      weeklyHoursAvailable?: JobSearchCampaign["weeklyHoursAvailable"];
+    }) => {
+      const campaign = await createJobCampaign(
+        { userId, ...input },
+        {
+          repository: new SupabaseFreshWatchRepository(supabase),
+          createId: randomUUID,
+          now,
+          caps: freshWatchCapsFromConfig(config),
+        },
+      );
+      await requestGrowthAssessmentSafely({
+        userId,
+        campaignId: campaign.id,
+        mode: "preliminary",
+      });
+      return campaign;
+    },
+    getJobCampaign: (campaignId: string) =>
+      getJobCampaignForUser(
+        { userId, campaignId },
+        { repository: new SupabaseFreshWatchRepository(supabase) },
+      ),
+    updateJobCampaign: async (
+      campaignId: string,
+      input: {
+        name?: string;
+        primaryRole?: string;
+        location?: string;
+        workMode?: "onsite" | "hybrid" | "remote" | "any";
+        employmentTypes?: JobSearchCampaign["employmentTypes"];
+        experienceLevels?: JobSearchCampaign["experienceLevels"];
+        minimumScore?: number;
+        preferredTechnologies?: string[];
+        targetReadyDate?: string | null;
+        weeklyHoursAvailable?: JobSearchCampaign["weeklyHoursAvailable"];
+      },
+    ) => {
+      const campaign = await updateJobCampaign(
+        { userId, campaignId, ...input },
+        {
+          repository: new SupabaseFreshWatchRepository(supabase),
+          createId: randomUUID,
+          now,
+          caps: freshWatchCapsFromConfig(config),
+        },
+      );
+      await requestGrowthAssessmentSafely({
+        userId,
+        campaignId: campaign.id,
+        mode: "preliminary",
+      });
+      return campaign;
+    },
+    pauseJobCampaign: (campaignId: string) =>
+      pauseJobCampaign(
+        { userId, campaignId },
+        { repository: new SupabaseFreshWatchRepository(supabase), now },
+      ),
+    resumeJobCampaign: (campaignId: string) =>
+      resumeJobCampaign(
+        { userId, campaignId },
+        {
+          repository: new SupabaseFreshWatchRepository(supabase),
+          createId: randomUUID,
+          now,
+          caps: freshWatchCapsFromConfig(config),
+        },
+      ),
+    archiveJobCampaign: (campaignId: string) =>
+      archiveJobCampaign(
+        { userId, campaignId },
+        { repository: new SupabaseFreshWatchRepository(supabase), now },
+      ),
+    listCampaignListings: (campaignId: string) =>
+      new SupabaseFreshWatchRepository(supabase).listCampaignListings(campaignId),
+    listCampaignRuns: (campaignId: string) =>
+      new SupabaseFreshWatchRepository(supabase).listCampaignRuns(campaignId),
+    getLatestInstantSearch: () =>
+      new SupabaseFreshWatchRepository(supabase).getLatestInstantSearchSession(
+        userId,
+      ),
+    updateInstantSearchAnalysed: (sessionId: string, analysedCount: number) =>
+      new SupabaseFreshWatchRepository(supabase).updateInstantSearchSession(
+        sessionId,
+        { analysedCount },
+      ),
+    runJobCampaignNow: async (campaignId: string) => {
+      const freshRepository = new SupabaseFreshWatchRepository(supabase);
+      const linkedInEnabled =
+        config.LINKEDIN_FRESH_ENABLED !== false &&
+        config.jobSources.includes("linkedin");
+      const linkedIn = new LinkedInGuestJobSource({
+        baseUrl: config.LINKEDIN_BASE_URL,
+        timeoutMs: config.LINKEDIN_TIMEOUT_MS,
+        maxPages: config.FRESH_LINKEDIN_MAX_PAGES,
+        pageSize: config.FRESH_LINKEDIN_MAX_RESULTS,
+        enrichDescriptions: false,
+      });
+      const result = await runJobCampaignNow(
+        { userId, campaignId },
+        {
+          repository: freshRepository,
+          campaignRepository: repository,
+          createId: randomUUID,
+          now,
+          caps: freshWatchCapsFromConfig(config),
+          linkedInEnabled,
+          linkedIn: {
+            searchFreshCards: (input) => linkedIn.searchFreshCards(input),
+            fetchJobDescription: (id) => linkedIn.fetchJobDescription(id),
+          },
+          analyseListing: async ({ userId: uid, listingId }) => {
+            const career = createCareerIntelligenceApplication(uid);
+            const [item] = await career.analyseBatch({ listingIds: [listingId] });
+            if (!item?.match) {
+              return {
+                listingId,
+                ok: false,
+                extractionCacheHit: item?.cacheHit,
+                llmCalls: item?.cacheHit ? 0 : 1,
+                error: item?.error,
+              };
+            }
+            return {
+              listingId,
+              ok: true,
+              matchAnalysisId: item.match.id,
+              evidenceFitScore: item.match.evidenceFitScore,
+              careerLevel: item.match.careerLevel,
+              hardConstraintEligible: item.match.hardConstraintEligible,
+              analysisConfidence: item.match.analysisConfidence,
+              scoringPolicyVersion: item.match.scoringPolicyVersion,
+              matchingPolicyVersion: item.match.matchingPolicyVersion,
+              explanation: item.match.explanation,
+              extractionCacheHit: item.cacheHit,
+              llmCalls: item.cacheHit ? 0 : 1,
+            };
+          },
+          runBroadSearch: async ({ userId: uid, campaignId: id, runId }) => {
+            const check = await getCareerCampaignApplication(uid).runCheck({
+              trigger: "cron",
+              idempotencyKey: `campaign_broad:${id}:${runId.slice(0, 8)}`,
+            });
+            return {
+              recommended: check.run.recommendedCount,
+              status: check.run.status,
+              listingIds: [],
+            };
+          },
+        },
+      );
+      await requestGrowthAssessmentSafely({
+        userId,
+        campaignId,
+        mode: "market_refined",
+      });
+      return result;
+    },
     repository,
   };
 }
@@ -1140,7 +1456,41 @@ export async function runScheduledDiscoveryTick() {
     enrichDescriptions: false,
   });
 
-  return processScheduledDiscoveryTick({
+  const analyseListing = async ({
+    userId,
+    listingId,
+  }: {
+    userId: string;
+    listingId: string;
+  }) => {
+    const careerApp = createCareerIntelligenceApplication(userId);
+    const [item] = await careerApp.analyseBatch({ listingIds: [listingId] });
+    if (!item?.match) {
+      return {
+        listingId,
+        ok: false,
+        extractionCacheHit: item?.cacheHit,
+        llmCalls: item?.cacheHit ? 0 : 1,
+        error: item?.error,
+      };
+    }
+    return {
+      listingId,
+      ok: true,
+      matchAnalysisId: item.match.id,
+      evidenceFitScore: item.match.evidenceFitScore,
+      careerLevel: item.match.careerLevel,
+      hardConstraintEligible: item.match.hardConstraintEligible,
+      analysisConfidence: item.match.analysisConfidence,
+      scoringPolicyVersion: item.match.scoringPolicyVersion,
+      matchingPolicyVersion: item.match.matchingPolicyVersion,
+      explanation: item.match.explanation,
+      extractionCacheHit: item.cacheHit,
+      llmCalls: item.cacheHit ? 0 : 1,
+    };
+  };
+
+  const discovery = await processScheduledDiscoveryTick({
     repository: freshRepository,
     campaignRepository,
     createId: randomUUID,
@@ -1151,38 +1501,67 @@ export async function runScheduledDiscoveryTick() {
       searchFreshCards: (input) => linkedIn.searchFreshCards(input),
       fetchJobDescription: (id) => linkedIn.fetchJobDescription(id),
     },
-    analyseListing: async ({ userId, listingId }) => {
-      const careerApp = createCareerIntelligenceApplication(userId);
-      const [item] = await careerApp.analyseBatch({ listingIds: [listingId] });
-      if (!item?.match) {
-        return {
-          listingId,
-          ok: false,
-          extractionCacheHit: item?.cacheHit,
-          llmCalls: item?.cacheHit ? 0 : 1,
-          error: item?.error,
-        };
+    analyseListing,
+    processLinkedInSearch: async ({ canonicalSearchId, runId }) => {
+      const result = await processLinkedInFreshSearch(
+        { canonicalSearchId, runId },
+        {
+          repository: freshRepository,
+          campaignRepository,
+          linkedIn: {
+            searchFreshCards: (input) => linkedIn.searchFreshCards(input),
+            fetchJobDescription: (id) => linkedIn.fetchJobDescription(id),
+          },
+          analyseListing,
+          createId: randomUUID,
+          now: () => new Date(),
+          caps: freshWatchCapsFromConfig(config),
+          linkedInEnabled,
+        },
+      );
+      if (
+        result.llmCalls > 0 ||
+        result.recommendationsCreated > 0 ||
+        result.newlyPersisted > 0
+      ) {
+        const members = await freshRepository.listMembers(canonicalSearchId);
+        await Promise.all(
+          members.map((member) =>
+            requestGrowthAssessmentSafely({
+              userId: member.userId,
+              campaignId: member.campaignId,
+              mode: "market_refined",
+            }),
+          ),
+        );
       }
-      return {
-        listingId,
-        ok: true,
-        matchAnalysisId: item.match.id,
-        evidenceFitScore: item.match.evidenceFitScore,
-        careerLevel: item.match.careerLevel,
-        hardConstraintEligible: item.match.hardConstraintEligible,
-        analysisConfidence: item.match.analysisConfidence,
-        scoringPolicyVersion: item.match.scoringPolicyVersion,
-        matchingPolicyVersion: item.match.matchingPolicyVersion,
-        explanation: item.match.explanation,
-        extractionCacheHit: item.cacheHit,
-        llmCalls: item.cacheHit ? 0 : 1,
-      };
+      return result;
     },
-    runBroadCampaign: async ({ userId, runId }) => {
+    runBroadCampaign: async ({ userId, campaignId, runId }) => {
       const day = new Date().toISOString().slice(0, 10);
       const result = await getCareerCampaignApplication(userId).runCheck({
         trigger: "cron",
-        idempotencyKey: `broad_watch:${day}:${userId}:${runId.slice(0, 8)}`,
+        idempotencyKey: `broad_watch:${day}:${campaignId}:${runId.slice(0, 8)}`,
+      });
+      const jobs = await new SupabaseJobDiscoveryRepository(supabase).listJobs({
+        userId,
+        includeDismissed: false,
+        limit: 50,
+        offset: 0,
+      });
+      for (const job of jobs.slice(0, 20)) {
+        await freshRepository.attachCampaignListing({
+          campaignId,
+          listingId: job.listing_id,
+          discoverySource: "broad_hybrid",
+          seenAt: new Date().toISOString(),
+          originatingRunId: runId,
+        });
+      }
+      await requestGrowthAssessmentSafely({
+        userId,
+        campaignId,
+        mode: "market_refined",
       });
       return {
         recommended: result.run.recommendedCount,
@@ -1200,4 +1579,6 @@ export async function runScheduledDiscoveryTick() {
       return result.delivered;
     },
   });
+  const growth = await processDueGrowthAssessments(8);
+  return { ...discovery, growth };
 }

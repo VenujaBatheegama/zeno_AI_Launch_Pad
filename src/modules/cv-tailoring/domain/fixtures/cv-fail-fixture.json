@@ -1,0 +1,97 @@
+{
+  "plan": {
+    "mode": "one_page",
+    "recommendedMode": "one_page",
+    "recommendationReason": "Concise verified evidence.",
+    "targetTitle": "Software Engineer",
+    "jobAlignment": "medium",
+    "sectionOrder": ["summary", "skills", "projects"],
+    "allowSummary": true,
+    "requireSummary": true,
+    "summaryMaxChars": 400,
+    "experienceItemIds": [],
+    "projectItemIds": ["project-1"],
+    "educationItemIds": [],
+    "skillItemIds": ["skill-1", "skill-2"],
+    "certificationItemIds": [],
+    "achievementItemIds": [],
+    "referenceItemIds": [],
+    "bulletsPerExperience": 3,
+    "bulletsPerProject": 2,
+    "paragraphsPerProject": 1,
+    "projectSourceFacts": 2,
+    "projectParagraphWords": { "min": 18, "max": 80 },
+    "bulletMaxChars": 220,
+    "skillMax": 12,
+    "earlyCareer": true,
+    "projectSelection": {
+      "selectedIds": ["project-1"],
+      "ranked": [],
+      "includedFifth": false,
+      "fifthReasons": [],
+      "warnings": []
+    },
+    "keywordAudit": [],
+    "warnings": []
+  },
+  "snapshot": {
+    "evidenceSetId": "evidence-1",
+    "facts": [
+      {
+        "id": "project-1:identity:name",
+        "careerItemId": "project-1",
+        "kind": "identity",
+        "label": "name",
+        "text": "Career Agent"
+      },
+      {
+        "id": "project-1:bullet:0",
+        "careerItemId": "project-1",
+        "kind": "bullet",
+        "label": "bullet",
+        "text": "Built a career application that discovers roles and prepares evidence-grounded application materials."
+      }
+    ],
+    "items": [
+      {
+        "type": "profile",
+        "id": "profile",
+        "full_name": "Test Candidate",
+        "email": null,
+        "phone": null,
+        "location": null,
+        "summary": null,
+        "linkedin_url": null,
+        "github_url": null,
+        "portfolio_url": null,
+        "factIds": []
+      },
+      {
+        "type": "project",
+        "id": "project-1",
+        "name": "Career Agent",
+        "role": "Developer",
+        "start_date": "2026-01",
+        "end_date": null,
+        "bullets": [
+          "Built a career application that discovers roles and prepares evidence-grounded application materials."
+        ],
+        "technologies": ["TypeScript", "Next.js"],
+        "factIds": ["project-1:identity:name", "project-1:bullet:0"]
+      },
+      {
+        "type": "skill",
+        "id": "skill-1",
+        "name": "Postman API Fundamentals Student Expert certification label that is way too long",
+        "factIds": ["skill-1:skill:name"]
+      },
+      {
+        "type": "skill",
+        "id": "skill-2",
+        "name": "TypeScript",
+        "factIds": ["skill-2:skill:name"]
+      }
+    ]
+  },
+  "keywordAudit": []
+}

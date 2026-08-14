@@ -4,24 +4,39 @@ import { CareerCampaignError } from "../domain/errors";
 import type {
   CanonicalJobSearch,
   CanonicalSearchMember,
-  FreshJobWatch,
   ProviderHealth,
   ProviderJobSighting,
 } from "../domain/fresh-watch";
 import type {
+  CampaignListingSighting,
+  InstantSearchSession,
+  JobSearchCampaign,
+  JobSearchCampaignRun,
+} from "../domain/job-campaign";
+import type {
+  CampaignPatch,
   FreshWatchRepository,
   ObserveProviderJobInput,
 } from "../application/fresh-watch-ports";
 
-type WatchRow = {
+type CampaignRow = {
   id: string;
   user_id: string;
-  status: FreshJobWatch["status"];
+  name: string;
+  status: JobSearchCampaign["status"];
   primary_role: string;
   location: string;
-  work_mode: FreshJobWatch["workMode"];
-  min_score: number | null;
+  work_mode: JobSearchCampaign["workMode"];
+  employment_types: string[] | null;
+  experience_levels: string[] | null;
+  minimum_score: number;
+  preferred_technologies: string[] | null;
+  target_ready_date: string | null;
+  weekly_hours_available: number | null;
+  criteria_version: number;
   canonical_search_id: string;
+  last_linkedin_search_at: string | null;
+  next_linkedin_search_at: string | null;
   last_broad_search_at: string | null;
   next_broad_search_at: string | null;
   last_discovery_at: string | null;
@@ -29,6 +44,7 @@ type WatchRow = {
   initial_alerts_remaining: number;
   created_at: string;
   updated_at: string;
+  archived_at: string | null;
 };
 
 type SearchRow = {
@@ -37,7 +53,7 @@ type SearchRow = {
   provider: string;
   primary_role: string;
   location: string;
-  work_mode: FreshJobWatch["workMode"];
+  work_mode: JobSearchCampaign["workMode"];
   employment_type: string | null;
   recency_strategy: string;
   next_due_at: string;
@@ -54,72 +70,136 @@ type SearchRow = {
 export class SupabaseFreshWatchRepository implements FreshWatchRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  async getWatchByUserId(userId: string) {
+  async listCampaignsByUserId(userId: string) {
     const { data, error } = await this.client
-      .from("fresh_job_watches")
+      .from("job_search_campaigns")
       .select("*")
       .eq("user_id", userId)
-      .maybeSingle();
-    if (error) throw persistenceError("Fresh Job Watch could not be loaded.", error);
-    return data ? mapWatch(data as WatchRow) : null;
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false });
+    if (error) throw persistenceError("Job campaigns could not be loaded.", error);
+    return ((data ?? []) as CampaignRow[]).map(mapCampaign);
   }
 
-  async upsertWatch(watch: FreshJobWatch) {
+  async getCampaignById(campaignId: string) {
     const { data, error } = await this.client
-      .from("fresh_job_watches")
-      .upsert(toWatchRow(watch), { onConflict: "user_id" })
+      .from("job_search_campaigns")
+      .select("*")
+      .eq("id", campaignId)
+      .maybeSingle();
+    if (error) throw persistenceError("Job campaign could not be loaded.", error);
+    return data ? mapCampaign(data as CampaignRow) : null;
+  }
+
+  async countActiveCampaigns(userId: string) {
+    const { count, error } = await this.client
+      .from("job_search_campaigns")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "active");
+    if (error) throw persistenceError("Active campaigns could not be counted.", error);
+    return count ?? 0;
+  }
+
+  async insertCampaign(campaign: JobSearchCampaign) {
+    const { data, error } = await this.client
+      .from("job_search_campaigns")
+      .insert(toCampaignRow(campaign))
       .select()
       .single();
     if (error || !data) {
-      throw persistenceError("Fresh Job Watch could not be saved.", error);
+      throw persistenceError("Job campaign could not be saved.", error);
     }
-    return mapWatch(data as WatchRow);
+    await this.client.from("job_search_campaign_criteria").insert({
+      campaign_id: campaign.id,
+      version: campaign.criteriaVersion,
+      primary_role: campaign.primaryRole,
+      location: campaign.location,
+      work_mode: campaign.workMode,
+      employment_types: campaign.employmentTypes,
+      experience_levels: campaign.experienceLevels,
+      minimum_score: campaign.minimumScore,
+      preferred_technologies: campaign.preferredTechnologies,
+      target_ready_date: campaign.targetReadyDate,
+      weekly_hours_available: campaign.weeklyHoursAvailable,
+      created_at: campaign.createdAt,
+    });
+    return mapCampaign(data as CampaignRow);
   }
 
-  async listActiveWatches() {
+  async updateCampaign(campaignId: string, patch: CampaignPatch) {
     const { data, error } = await this.client
-      .from("fresh_job_watches")
-      .select("*")
-      .eq("status", "active");
-    if (error) throw persistenceError("Fresh Job Watch list failed.", error);
-    return ((data ?? []) as WatchRow[]).map(mapWatch);
+      .from("job_search_campaigns")
+      .update(toCampaignPatch(patch))
+      .eq("id", campaignId)
+      .select()
+      .single();
+    if (error || !data) {
+      throw persistenceError("Job campaign could not be updated.", error);
+    }
+    const mapped = mapCampaign(data as CampaignRow);
+    if (patch.criteriaVersion && patch.primaryRole && patch.location) {
+      await this.client.from("job_search_campaign_criteria").upsert({
+        campaign_id: campaignId,
+        version: mapped.criteriaVersion,
+        primary_role: mapped.primaryRole,
+        location: mapped.location,
+        work_mode: mapped.workMode,
+        employment_types: mapped.employmentTypes,
+        experience_levels: mapped.experienceLevels,
+        minimum_score: mapped.minimumScore,
+        preferred_technologies: mapped.preferredTechnologies,
+        target_ready_date: mapped.targetReadyDate,
+        weekly_hours_available: mapped.weeklyHoursAvailable,
+        created_at: mapped.updatedAt,
+      });
+    }
+    return mapped;
   }
 
-  async claimDueBroadWatches(input: {
+  async getWatchByUserId(userId: string) {
+    const campaigns = await this.listCampaignsByUserId(userId);
+    return campaigns[0] ?? null;
+  }
+
+  async claimDueBroadCampaigns(input: {
     now: string;
     leaseOwner: string;
     leaseExpiresAt: string;
     limit: number;
   }) {
-    const { data, error } = await this.client.rpc("claim_due_broad_watches", {
+    const { data, error } = await this.client.rpc("claim_due_broad_campaigns", {
       p_now: input.now,
       p_lease_owner: input.leaseOwner,
       p_lease_expires_at: input.leaseExpiresAt,
       p_limit: input.limit,
     });
-    if (error) throw persistenceError("Due broad watches could not be claimed.", error);
-    return ((data ?? []) as WatchRow[]).map(mapWatch);
+    if (error) throw persistenceError("Due campaigns could not be claimed.", error);
+    return ((data ?? []) as CampaignRow[]).map(mapCampaign);
   }
 
-  async releaseBroadWatchLease(watchId: string) {
+  async releaseBroadCampaignLease(campaignId: string) {
     const { error } = await this.client
-      .from("fresh_job_watches")
+      .from("job_search_campaigns")
       .update({ broad_lease_owner: null, broad_lease_expires_at: null })
-      .eq("id", watchId);
-    if (error) throw persistenceError("Broad watch lease could not be released.", error);
+      .eq("id", campaignId);
+    if (error) throw persistenceError("Campaign lease could not be released.", error);
   }
 
-  async updateWatch(watchId: string, patch: Record<string, unknown>) {
-    const { data, error } = await this.client
-      .from("fresh_job_watches")
-      .update(toWatchPatch(patch))
-      .eq("id", watchId)
-      .select()
-      .single();
-    if (error || !data) {
-      throw persistenceError("Fresh Job Watch could not be updated.", error);
-    }
-    return mapWatch(data as WatchRow);
+  async tryClaimCampaignRunLease(input: {
+    campaignId: string;
+    now: string;
+    leaseOwner: string;
+    leaseExpiresAt: string;
+  }) {
+    const { data, error } = await this.client.rpc("try_claim_campaign_run_lease", {
+      p_campaign_id: input.campaignId,
+      p_now: input.now,
+      p_lease_owner: input.leaseOwner,
+      p_lease_expires_at: input.leaseExpiresAt,
+    });
+    if (error) throw persistenceError("Campaign run lease could not be claimed.", error);
+    return Boolean(data);
   }
 
   async getCanonicalSearchByKey(key: string) {
@@ -194,7 +274,7 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
   }
 
   async replaceMembership(input: {
-    watchId: string;
+    campaignId: string;
     userId: string;
     canonicalSearchId: string;
     attachedAt: string;
@@ -202,15 +282,23 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
     const { error: delError } = await this.client
       .from("canonical_search_members")
       .delete()
-      .eq("watch_id", input.watchId);
-    if (delError) throw persistenceError("Watch membership could not be moved.", delError);
+      .eq("campaign_id", input.campaignId);
+    if (delError) throw persistenceError("Campaign membership could not be moved.", delError);
     const { error } = await this.client.from("canonical_search_members").insert({
       canonical_search_id: input.canonicalSearchId,
-      watch_id: input.watchId,
+      campaign_id: input.campaignId,
       user_id: input.userId,
       attached_at: input.attachedAt,
     });
-    if (error) throw persistenceError("Watch membership could not be saved.", error);
+    if (error) throw persistenceError("Campaign membership could not be saved.", error);
+  }
+
+  async detachMembership(campaignId: string) {
+    const { error } = await this.client
+      .from("canonical_search_members")
+      .delete()
+      .eq("campaign_id", campaignId);
+    if (error) throw persistenceError("Campaign membership could not be removed.", error);
   }
 
   async listMembers(canonicalSearchId: string): Promise<CanonicalSearchMember[]> {
@@ -221,12 +309,12 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
     if (error) throw persistenceError("Search members could not be listed.", error);
     return ((data ?? []) as Array<{
       canonical_search_id: string;
-      watch_id: string;
+      campaign_id: string;
       user_id: string;
       attached_at: string;
     }>).map((row) => ({
       canonicalSearchId: row.canonical_search_id,
-      watchId: row.watch_id,
+      campaignId: row.campaign_id,
       userId: row.user_id,
       attachedAt: row.attached_at,
     }));
@@ -236,12 +324,13 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
     const members = await this.listMembers(canonicalSearchId);
     if (members.length === 0) return 0;
     const { data, error } = await this.client
-      .from("fresh_job_watches")
+      .from("job_search_campaigns")
       .select("id")
       .eq("status", "active")
+      .is("archived_at", null)
       .in(
         "id",
-        members.map((member) => member.watchId),
+        members.map((member) => member.campaignId),
       );
     if (error) throw persistenceError("Active members could not be counted.", error);
     return (data ?? []).length;
@@ -351,6 +440,320 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
     if (error) throw persistenceError("Job could not be attached to the user.", error);
   }
 
+  async attachCampaignListing(input: {
+    campaignId: string;
+    listingId: string;
+    discoverySource: CampaignListingSighting["discoverySource"];
+    seenAt: string;
+    originatingRunId: string | null;
+  }) {
+    const { data: existing, error: readError } = await this.client
+      .from("campaign_listing_sightings")
+      .select("*")
+      .eq("campaign_id", input.campaignId)
+      .eq("listing_id", input.listingId)
+      .maybeSingle();
+    if (readError) {
+      throw persistenceError("Campaign listing could not be loaded.", readError);
+    }
+    if (existing) {
+      const { data, error } = await this.client
+        .from("campaign_listing_sightings")
+        .update({ last_seen_at: input.seenAt })
+        .eq("campaign_id", input.campaignId)
+        .eq("listing_id", input.listingId)
+        .select()
+        .single();
+      if (error || !data) {
+        throw persistenceError("Campaign listing could not be updated.", error);
+      }
+      return mapCampaignListing(data as CampaignListingRow, false);
+    }
+    const { data, error } = await this.client
+      .from("campaign_listing_sightings")
+      .insert({
+        campaign_id: input.campaignId,
+        listing_id: input.listingId,
+        discovery_source: input.discoverySource,
+        first_seen_at: input.seenAt,
+        last_seen_at: input.seenAt,
+        originating_run_id: input.originatingRunId,
+        qualification: "pending",
+      })
+      .select()
+      .single();
+    if (error || !data) {
+      throw persistenceError("Campaign listing could not be saved.", error);
+    }
+    return mapCampaignListing(data as CampaignListingRow, true);
+  }
+
+  async listCampaignListings(campaignId: string) {
+    const { data, error } = await this.client
+      .from("campaign_listing_sightings")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("last_seen_at", { ascending: false });
+    if (error) throw persistenceError("Campaign listings could not be loaded.", error);
+    return ((data ?? []) as CampaignListingRow[]).map((row) =>
+      mapCampaignListing(row, false),
+    );
+  }
+
+  async listCampaignListingIdsForUser(userId: string) {
+    const { data, error } = await this.client
+      .from("campaign_listing_sightings")
+      .select("listing_id, job_search_campaigns!inner(user_id)")
+      .eq("job_search_campaigns.user_id", userId);
+    if (error) throw persistenceError("Campaign listings could not be listed.", error);
+    return [
+      ...new Set(
+        ((data ?? []) as Array<{ listing_id: string }>).map((row) => row.listing_id),
+      ),
+    ];
+  }
+
+  async countNewCampaignListings(campaignId: string) {
+    const { count, error } = await this.client
+      .from("campaign_listing_sightings")
+      .select("listing_id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("qualification", "pending");
+    if (error) throw persistenceError("New campaign listings could not be counted.", error);
+    return count ?? 0;
+  }
+
+  async countQualifyingCampaignListings(campaignId: string) {
+    const { count, error } = await this.client
+      .from("campaign_listing_sightings")
+      .select("listing_id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("qualification", "qualifying");
+    if (error) {
+      throw persistenceError("Qualifying listings could not be counted.", error);
+    }
+    return count ?? 0;
+  }
+
+  async updateCampaignListingQualification(input: {
+    campaignId: string;
+    listingId: string;
+    qualification: CampaignListingSighting["qualification"];
+  }) {
+    const { error } = await this.client
+      .from("campaign_listing_sightings")
+      .update({ qualification: input.qualification })
+      .eq("campaign_id", input.campaignId)
+      .eq("listing_id", input.listingId);
+    if (error) {
+      throw persistenceError("Campaign listing qualification could not be saved.", error);
+    }
+  }
+
+  async createInstantSearchSession(session: InstantSearchSession) {
+    const { error } = await this.client.from("job_search_sessions").insert({
+      id: session.id,
+      user_id: session.userId,
+      status: session.status,
+      jobs_found: session.jobsFound,
+      analysed_count: session.analysedCount,
+      started_at: session.startedAt,
+      completed_at: session.completedAt,
+    });
+    if (error) throw persistenceError("Instant Search session could not be saved.", error);
+    if (session.listingIds.length > 0) {
+      const { error: listError } = await this.client
+        .from("job_search_session_listings")
+        .insert(
+          session.listingIds.map((listingId) => ({
+            session_id: session.id,
+            listing_id: listingId,
+          })),
+        );
+      if (listError) {
+        throw persistenceError("Instant Search results could not be saved.", listError);
+      }
+    }
+    return session;
+  }
+
+  async archiveInstantSearchSessions(userId: string) {
+    const { error } = await this.client
+      .from("job_search_sessions")
+      .update({ status: "archived" })
+      .eq("user_id", userId)
+      .eq("status", "active");
+    if (error) throw persistenceError("Instant Search sessions could not be archived.", error);
+  }
+
+  async getLatestInstantSearchSession(userId: string) {
+    const { data, error } = await this.client
+      .from("job_search_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw persistenceError("Instant Search session could not be loaded.", error);
+    if (!data) return null;
+    const row = data as SessionRow;
+    const { data: listings, error: listError } = await this.client
+      .from("job_search_session_listings")
+      .select("listing_id")
+      .eq("session_id", row.id);
+    if (listError) {
+      throw persistenceError("Instant Search listings could not be loaded.", listError);
+    }
+    return {
+      id: row.id,
+      userId: row.user_id,
+      status: row.status,
+      jobsFound: row.jobs_found,
+      analysedCount: row.analysed_count,
+      listingIds: ((listings ?? []) as Array<{ listing_id: string }>).map(
+        (item) => item.listing_id,
+      ),
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+    };
+  }
+
+  async updateInstantSearchSession(
+    sessionId: string,
+    patch: Partial<InstantSearchSession>,
+  ) {
+    const mapped: Record<string, unknown> = {};
+    if (patch.jobsFound !== undefined) mapped.jobs_found = patch.jobsFound;
+    if (patch.analysedCount !== undefined) mapped.analysed_count = patch.analysedCount;
+    if (patch.completedAt !== undefined) mapped.completed_at = patch.completedAt;
+    if (patch.status !== undefined) mapped.status = patch.status;
+    if (Object.keys(mapped).length > 0) {
+      const { error } = await this.client
+        .from("job_search_sessions")
+        .update(mapped)
+        .eq("id", sessionId);
+      if (error) throw persistenceError("Instant Search session could not be updated.", error);
+    }
+    if (patch.listingIds) {
+      await this.client
+        .from("job_search_session_listings")
+        .delete()
+        .eq("session_id", sessionId);
+      if (patch.listingIds.length > 0) {
+        const { error } = await this.client.from("job_search_session_listings").insert(
+          patch.listingIds.map((listingId) => ({
+            session_id: sessionId,
+            listing_id: listingId,
+          })),
+        );
+        if (error) {
+          throw persistenceError("Instant Search listings could not be updated.", error);
+        }
+      }
+    }
+    const session = await this.getLatestInstantSearchSessionById(sessionId);
+    if (!session) throw persistenceError("Instant Search session could not be reloaded.", null);
+    return session;
+  }
+
+  private async getLatestInstantSearchSessionById(sessionId: string) {
+    const { data, error } = await this.client
+      .from("job_search_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as SessionRow;
+    const { data: listings } = await this.client
+      .from("job_search_session_listings")
+      .select("listing_id")
+      .eq("session_id", sessionId);
+    return {
+      id: row.id,
+      userId: row.user_id,
+      status: row.status,
+      jobsFound: row.jobs_found,
+      analysedCount: row.analysed_count,
+      listingIds: ((listings ?? []) as Array<{ listing_id: string }>).map(
+        (item) => item.listing_id,
+      ),
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+    };
+  }
+
+  async insertCampaignRun(run: JobSearchCampaignRun) {
+    const { error } = await this.client.from("job_search_campaign_runs").insert({
+      id: run.id,
+      campaign_id: run.campaignId,
+      origin: run.origin,
+      status: run.status,
+      discovered: run.discovered,
+      analysed: run.analysed,
+      qualifying: run.qualifying,
+      started_at: run.startedAt,
+      completed_at: run.completedAt,
+      error: run.error,
+    });
+    if (error) throw persistenceError("Campaign run could not be saved.", error);
+    return run;
+  }
+
+  async updateCampaignRun(
+    runId: string,
+    patch: Partial<JobSearchCampaignRun>,
+  ) {
+    const mapped: Record<string, unknown> = {};
+    if (patch.status !== undefined) mapped.status = patch.status;
+    if (patch.discovered !== undefined) mapped.discovered = patch.discovered;
+    if (patch.analysed !== undefined) mapped.analysed = patch.analysed;
+    if (patch.qualifying !== undefined) mapped.qualifying = patch.qualifying;
+    if (patch.completedAt !== undefined) mapped.completed_at = patch.completedAt;
+    if (patch.error !== undefined) mapped.error = patch.error;
+    const { data, error } = await this.client
+      .from("job_search_campaign_runs")
+      .update(mapped)
+      .eq("id", runId)
+      .select()
+      .single();
+    if (error || !data) throw persistenceError("Campaign run could not be updated.", error);
+    const row = data as CampaignRunRow;
+    return {
+      id: row.id,
+      campaignId: row.campaign_id,
+      origin: row.origin,
+      status: row.status,
+      discovered: row.discovered,
+      analysed: row.analysed,
+      qualifying: row.qualifying,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      error: row.error,
+    };
+  }
+
+  async listCampaignRuns(campaignId: string, limit = 10) {
+    const { data, error } = await this.client
+      .from("job_search_campaign_runs")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+    if (error) throw persistenceError("Campaign runs could not be loaded.", error);
+    return ((data ?? []) as CampaignRunRow[]).map((row) => ({
+      id: row.id,
+      campaignId: row.campaign_id,
+      origin: row.origin,
+      status: row.status,
+      discovered: row.discovered,
+      analysed: row.analysed,
+      qualifying: row.qualifying,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      error: row.error,
+    }));
+  }
+
   async setJobDescriptionIfEmpty(input: {
     listingId: string;
     description: string;
@@ -422,16 +825,58 @@ export class SupabaseFreshWatchRepository implements FreshWatchRepository {
   }
 }
 
-function mapWatch(row: WatchRow): FreshJobWatch {
+type CampaignListingRow = {
+  campaign_id: string;
+  listing_id: string;
+  discovery_source: CampaignListingSighting["discoverySource"];
+  first_seen_at: string;
+  last_seen_at: string;
+  originating_run_id: string | null;
+  qualification: CampaignListingSighting["qualification"];
+};
+
+type SessionRow = {
+  id: string;
+  user_id: string;
+  status: InstantSearchSession["status"];
+  jobs_found: number;
+  analysed_count: number;
+  started_at: string;
+  completed_at: string | null;
+};
+
+type CampaignRunRow = {
+  id: string;
+  campaign_id: string;
+  origin: JobSearchCampaignRun["origin"];
+  status: JobSearchCampaignRun["status"];
+  discovered: number;
+  analysed: number;
+  qualifying: number;
+  started_at: string;
+  completed_at: string | null;
+  error: string | null;
+};
+
+function mapCampaign(row: CampaignRow): JobSearchCampaign {
   return {
     id: row.id,
     userId: row.user_id,
+    name: row.name,
     status: row.status,
     primaryRole: row.primary_role,
     location: row.location,
     workMode: row.work_mode,
-    minScore: row.min_score,
+    employmentTypes: (row.employment_types ?? []) as JobSearchCampaign["employmentTypes"],
+    experienceLevels: (row.experience_levels ?? []) as JobSearchCampaign["experienceLevels"],
+    minimumScore: Number(row.minimum_score),
+    preferredTechnologies: row.preferred_technologies ?? [],
+    targetReadyDate: row.target_ready_date ?? null,
+    weeklyHoursAvailable: (row.weekly_hours_available as JobSearchCampaign["weeklyHoursAvailable"]) ?? null,
+    criteriaVersion: row.criteria_version,
     canonicalSearchId: row.canonical_search_id,
+    lastLinkedInSearchAt: row.last_linkedin_search_at,
+    nextLinkedInSearchAt: row.next_linkedin_search_at,
     lastBroadSearchAt: row.last_broad_search_at,
     nextBroadSearchAt: row.next_broad_search_at,
     lastDiscoveryAt: row.last_discovery_at,
@@ -439,37 +884,61 @@ function mapWatch(row: WatchRow): FreshJobWatch {
     initialAlertsRemaining: row.initial_alerts_remaining,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    archivedAt: row.archived_at,
   };
 }
 
-function toWatchRow(watch: FreshJobWatch) {
+function toCampaignRow(campaign: JobSearchCampaign) {
   return {
-    id: watch.id,
-    user_id: watch.userId,
-    status: watch.status,
-    primary_role: watch.primaryRole,
-    location: watch.location,
-    work_mode: watch.workMode,
-    min_score: watch.minScore,
-    canonical_search_id: watch.canonicalSearchId,
-    last_broad_search_at: watch.lastBroadSearchAt,
-    next_broad_search_at: watch.nextBroadSearchAt,
-    last_discovery_at: watch.lastDiscoveryAt,
-    last_error: watch.lastError,
-    initial_alerts_remaining: watch.initialAlertsRemaining,
-    created_at: watch.createdAt,
-    updated_at: watch.updatedAt,
+    id: campaign.id,
+    user_id: campaign.userId,
+    name: campaign.name,
+    status: campaign.status,
+    primary_role: campaign.primaryRole,
+    location: campaign.location,
+    work_mode: campaign.workMode,
+    employment_types: campaign.employmentTypes,
+    experience_levels: campaign.experienceLevels,
+    minimum_score: campaign.minimumScore,
+    preferred_technologies: campaign.preferredTechnologies,
+    target_ready_date: campaign.targetReadyDate,
+    weekly_hours_available: campaign.weeklyHoursAvailable,
+    criteria_version: campaign.criteriaVersion,
+    canonical_search_id: campaign.canonicalSearchId,
+    last_linkedin_search_at: campaign.lastLinkedInSearchAt,
+    next_linkedin_search_at: campaign.nextLinkedInSearchAt,
+    last_broad_search_at: campaign.lastBroadSearchAt,
+    next_broad_search_at: campaign.nextBroadSearchAt,
+    last_discovery_at: campaign.lastDiscoveryAt,
+    last_error: campaign.lastError,
+    initial_alerts_remaining: campaign.initialAlertsRemaining,
+    created_at: campaign.createdAt,
+    updated_at: campaign.updatedAt,
+    archived_at: campaign.archivedAt,
   };
 }
 
-function toWatchPatch(patch: Record<string, unknown>) {
+function toCampaignPatch(patch: CampaignPatch) {
   const mapped: Record<string, unknown> = {};
+  if ("name" in patch) mapped.name = patch.name;
   if ("status" in patch) mapped.status = patch.status;
   if ("primaryRole" in patch) mapped.primary_role = patch.primaryRole;
   if ("location" in patch) mapped.location = patch.location;
   if ("workMode" in patch) mapped.work_mode = patch.workMode;
-  if ("minScore" in patch) mapped.min_score = patch.minScore;
+  if ("employmentTypes" in patch) mapped.employment_types = patch.employmentTypes;
+  if ("experienceLevels" in patch) mapped.experience_levels = patch.experienceLevels;
+  if ("minimumScore" in patch) mapped.minimum_score = patch.minimumScore;
+  if ("preferredTechnologies" in patch) {
+    mapped.preferred_technologies = patch.preferredTechnologies;
+  }
+  if ("targetReadyDate" in patch) mapped.target_ready_date = patch.targetReadyDate;
+  if ("weeklyHoursAvailable" in patch) {
+    mapped.weekly_hours_available = patch.weeklyHoursAvailable;
+  }
+  if ("criteriaVersion" in patch) mapped.criteria_version = patch.criteriaVersion;
   if ("canonicalSearchId" in patch) mapped.canonical_search_id = patch.canonicalSearchId;
+  if ("lastLinkedInSearchAt" in patch) mapped.last_linkedin_search_at = patch.lastLinkedInSearchAt;
+  if ("nextLinkedInSearchAt" in patch) mapped.next_linkedin_search_at = patch.nextLinkedInSearchAt;
   if ("lastBroadSearchAt" in patch) mapped.last_broad_search_at = patch.lastBroadSearchAt;
   if ("nextBroadSearchAt" in patch) mapped.next_broad_search_at = patch.nextBroadSearchAt;
   if ("lastDiscoveryAt" in patch) mapped.last_discovery_at = patch.lastDiscoveryAt;
@@ -477,7 +946,24 @@ function toWatchPatch(patch: Record<string, unknown>) {
   if ("initialAlertsRemaining" in patch) {
     mapped.initial_alerts_remaining = patch.initialAlertsRemaining;
   }
+  if ("archivedAt" in patch) mapped.archived_at = patch.archivedAt;
   return mapped;
+}
+
+function mapCampaignListing(
+  row: CampaignListingRow,
+  isNewForCampaign: boolean,
+): CampaignListingSighting {
+  return {
+    campaignId: row.campaign_id,
+    listingId: row.listing_id,
+    discoverySource: row.discovery_source,
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    originatingRunId: row.originating_run_id,
+    qualification: row.qualification,
+    isNewForCampaign,
+  };
 }
 
 function mapSearch(row: SearchRow): CanonicalJobSearch {

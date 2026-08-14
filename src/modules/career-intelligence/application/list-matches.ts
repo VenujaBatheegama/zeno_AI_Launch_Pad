@@ -25,6 +25,7 @@ import type {
 const listSchema = z.object({
   userId: z.uuid(),
   includeDismissed: z.boolean().default(false),
+  listingIds: z.array(z.uuid()).max(200).optional(),
 });
 
 const detailsSchema = z.object({
@@ -45,13 +46,16 @@ export async function listRankedJobMatches(
   },
 ): Promise<RankedJobMatchCard[]> {
   const parsed = listSchema.parse(command);
+  const allowed = parsed.listingIds ? new Set(parsed.listingIds) : null;
 
-  const jobs = await dependencies.jobRepository.listJobs({
-    userId: parsed.userId,
-    includeDismissed: parsed.includeDismissed,
-    limit: 100,
-    offset: 0,
-  });
+  const jobs = (
+    await dependencies.jobRepository.listJobs({
+      userId: parsed.userId,
+      includeDismissed: parsed.includeDismissed,
+      limit: 100,
+      offset: 0,
+    })
+  ).filter((job) => (allowed ? allowed.has(job.listing_id) : true));
   const matches = await dependencies.repository.listCurrentMatchAnalyses(
     parsed.userId,
   );

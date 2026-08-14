@@ -133,6 +133,7 @@ export class InMemoryCareerCampaignRepository
       listingId: input.listingId,
       jobMatchAnalysisId: input.jobMatchAnalysisId,
       campaignRunId: input.campaignRunId,
+      jobSearchCampaignId: input.jobSearchCampaignId ?? null,
       status: "pending_review",
       scoreSnapshot: input.scoreSnapshot,
       fitSummarySnapshot: input.fitSummarySnapshot,

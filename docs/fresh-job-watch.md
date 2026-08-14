@@ -1,5 +1,13 @@
 # Fresh Job Watch
 
+This document describes the original one-watch-per-user design.
+
+**Current product language is Job Campaigns.** See `docs/job-campaigns.md` for
+the multi-campaign Jobs workspace, Instant Search isolation, and the 15-minute
+scheduler.
+
+# Fresh Job Watch (historical)
+
 Zeno can watch for newly listed jobs without turning every search into a
 permanent monitor.
 

@@ -7,6 +7,12 @@ import { InMemoryCareerCampaignRepository } from "./fakes";
 import { InMemoryFreshWatchRepository } from "./fresh-watch-fakes";
 import type { FreshWatchCaps } from "./fresh-watch-ports";
 import {
+  archiveJobCampaign,
+  createJobCampaign,
+  pauseJobCampaign,
+  updateJobCampaign,
+} from "./manage-job-campaigns";
+import {
   enableFreshJobWatch,
   getFreshJobWatchStatus,
   pauseFreshJobWatch,
@@ -117,11 +123,11 @@ describe("Fresh Job Watch", () => {
     expect(claimed).toEqual([]);
   });
 
-  it("keeps one primary fresh role per user and moves membership on change", async () => {
+  it("lets a user create multiple campaigns that share equivalent LinkedIn searches", async () => {
     const repository = new InMemoryFreshWatchRepository();
     const now = () => new Date("2026-08-13T10:00:00.000Z");
     const ids = createIdFactory();
-    const first = await enableFreshJobWatch(
+    const first = await createJobCampaign(
       {
         userId: USER_A,
         primaryRole: "Backend Developer",
@@ -130,7 +136,7 @@ describe("Fresh Job Watch", () => {
       },
       { repository, createId: ids, now, caps: caps() },
     );
-    const second = await enableFreshJobWatch(
+    const second = await createJobCampaign(
       {
         userId: USER_A,
         primaryRole: "Frontend Developer",
@@ -139,11 +145,54 @@ describe("Fresh Job Watch", () => {
       },
       { repository, createId: ids, now, caps: caps() },
     );
-    expect(second.id).toBe(first.id);
-    expect(second.primaryRole).toBe("Frontend Developer");
-    expect(repository.watches.size).toBe(1);
-    expect(await repository.countActiveMembers(first.canonicalSearchId)).toBe(0);
+    expect(second.id).not.toBe(first.id);
+    expect(repository.campaigns.size).toBe(2);
+    expect(await repository.countActiveMembers(first.canonicalSearchId)).toBe(1);
     expect(await repository.countActiveMembers(second.canonicalSearchId)).toBe(1);
+  });
+
+  it("enforces a maximum of three active campaigns and ignores paused or archived ones", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const ids = createIdFactory();
+    const deps = { repository, createId: ids, now, caps: caps() };
+    const first = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      deps,
+    );
+    await createJobCampaign(
+      { userId: USER_A, primaryRole: "Frontend Developer", location: "Sri Lanka" },
+      deps,
+    );
+    await createJobCampaign(
+      { userId: USER_A, primaryRole: "DevOps Engineer", location: "Remote" },
+      deps,
+    );
+    await expect(
+      createJobCampaign(
+        { userId: USER_A, primaryRole: "Data Engineer", location: "Singapore" },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "LIMIT_REACHED" });
+    await pauseJobCampaign(
+      { userId: USER_A, campaignId: first.id },
+      { repository, now },
+    );
+    const fourth = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Data Engineer", location: "Singapore" },
+      deps,
+    );
+    expect(fourth.status).toBe("active");
+    await archiveJobCampaign(
+      { userId: USER_A, campaignId: fourth.id },
+      { repository, now },
+    );
+    const fifth = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Mobile Engineer", location: "Remote" },
+      deps,
+    );
+    expect(fifth.status).toBe("active");
+    expect(await repository.countActiveCampaigns(USER_A)).toBe(3);
   });
 });
 
@@ -544,7 +593,7 @@ describe("scheduler tick", () => {
       },
       { repository, createId: createIdFactory(), now, caps: caps() },
     );
-    await repository.updateWatch(watch.id, {
+    await repository.updateCampaign(watch.id, {
       nextBroadSearchAt: "2026-08-13T22:00:00.000Z",
     });
     let broad = 0;
@@ -746,5 +795,283 @@ describe("scheduler tick", () => {
     expect(calls).toBe(2);
     expect(result.linkedIn.failed).toBe(1);
     expect(result.linkedIn.processed).toBe(1);
+  });
+
+  it("does not schedule paused or archived campaigns", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const ids = createIdFactory();
+    const paused = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    const archived = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Frontend Developer", location: "Colombo" },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    await pauseJobCampaign(
+      { userId: USER_A, campaignId: paused.id },
+      { repository, now },
+    );
+    await archiveJobCampaign(
+      { userId: USER_A, campaignId: archived.id },
+      { repository, now },
+    );
+    const claimed = await repository.claimDueCanonicalSearches({
+      now: "2026-08-13T10:01:00.000Z",
+      leaseOwner: "run",
+      leaseExpiresAt: "2026-08-13T10:03:00.000Z",
+      limit: 5,
+    });
+    expect(claimed).toEqual([]);
+    const broad = await repository.claimDueBroadCampaigns({
+      now: "2026-08-13T22:00:00.000Z",
+      leaseOwner: "run",
+      leaseExpiresAt: "2026-08-13T22:02:00.000Z",
+      limit: 5,
+    });
+    expect(broad).toEqual([]);
+  });
+});
+
+describe("campaign membership and isolation", () => {
+  it("moves canonical membership when criteria change", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const ids = createIdFactory();
+    const campaign = await createJobCampaign(
+      {
+        userId: USER_A,
+        primaryRole: "Backend Developer",
+        location: "Sri Lanka",
+        workMode: "remote",
+      },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    const previous = campaign.canonicalSearchId;
+    const updated = await updateJobCampaign(
+      {
+        userId: USER_A,
+        campaignId: campaign.id,
+        primaryRole: "Frontend Developer",
+        location: "Sri Lanka",
+        workMode: "remote",
+      },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    expect(updated.canonicalSearchId).not.toBe(previous);
+    expect(updated.criteriaVersion).toBe(2);
+    expect(await repository.countActiveMembers(previous)).toBe(0);
+    expect(await repository.countActiveMembers(updated.canonicalSearchId)).toBe(1);
+  });
+
+  it("keeps a listing globally unique while attributing it to multiple campaigns", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const campaign = new InMemoryCareerCampaignRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const ids = createIdFactory();
+    const a = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    const b = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    expect(a.canonicalSearchId).toBe(b.canonicalSearchId);
+    const job = card({ external_id: "shared-1", title: "Backend Developer" });
+    await processLinkedInFreshSearch(
+      { canonicalSearchId: a.canonicalSearchId, runId: "run-1" },
+      {
+        repository,
+        campaignRepository: campaign,
+        linkedIn: {
+          searchFreshCards: async () => ({ jobs: [job] }),
+          fetchJobDescription: async () =>
+            "Build APIs with TypeScript and PostgreSQL in a remote team collaborating across product and platform. Own production reliability.",
+        },
+        analyseListing: async ({ listingId }) => ({
+          listingId,
+          ok: true,
+          matchAnalysisId: ANALYSIS,
+          evidenceFitScore: 80,
+          hardConstraintEligible: true,
+          llmCalls: 1,
+          title: job.title,
+        }),
+        createId: ids,
+        now,
+        caps: caps(),
+      },
+    );
+    const listings = [...repository.sightings.values()].map((row) => row.listingId);
+    expect(new Set(listings).size).toBe(1);
+    const forA = await repository.listCampaignListings(a.id);
+    const forB = await repository.listCampaignListings(b.id);
+    expect(forA).toHaveLength(1);
+    expect(forB).toHaveLength(1);
+    expect(forA[0]?.listingId).toBe(forB[0]?.listingId);
+  });
+
+  it("does not delete shared listings or saved jobs when a campaign is archived", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const campaign = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: createIdFactory(), now, caps: caps() },
+    );
+    await repository.attachUserJob({
+      userId: USER_A,
+      listingId: "44444444-4444-4444-8444-000000000001",
+      seenAt: "2026-08-13T10:00:00.000Z",
+    });
+    repository.savedListingIds.add("44444444-4444-4444-8444-000000000001");
+    await repository.attachCampaignListing({
+      campaignId: campaign.id,
+      listingId: "44444444-4444-4444-8444-000000000001",
+      discoverySource: "linkedin_fresh",
+      seenAt: "2026-08-13T10:00:00.000Z",
+      originatingRunId: "run-1",
+    });
+    await archiveJobCampaign(
+      { userId: USER_A, campaignId: campaign.id },
+      { repository, now },
+    );
+    expect(repository.userJobs.has(`${USER_A}:44444444-4444-4444-8444-000000000001`)).toBe(
+      true,
+    );
+    expect(repository.savedListingIds.size).toBe(1);
+    expect(await repository.listCampaignListings(campaign.id)).toHaveLength(1);
+  });
+
+  it("does not let a user read another user's campaign", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const campaign = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: createIdFactory(), now, caps: caps() },
+    );
+    const { getJobCampaignForUser } = await import("./manage-job-campaigns");
+    await expect(
+      getJobCampaignForUser(
+        { userId: USER_B, campaignId: campaign.id },
+        { repository },
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("rejects mutations on archived campaigns", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const ids = createIdFactory();
+    const campaign = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: ids, now, caps: caps() },
+    );
+    await archiveJobCampaign(
+      { userId: USER_A, campaignId: campaign.id },
+      { repository, now },
+    );
+    await expect(
+      updateJobCampaign(
+        {
+          userId: USER_A,
+          campaignId: campaign.id,
+          primaryRole: "Frontend Developer",
+        },
+        { repository, createId: ids, now, caps: caps() },
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("keeps Instant Search sessions when campaign listings are attached", async () => {
+    const repository = new InMemoryFreshWatchRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    await repository.createInstantSearchSession({
+      id: "sess-1",
+      userId: USER_A,
+      status: "active",
+      jobsFound: 4,
+      analysedCount: 3,
+      listingIds: ["11111111-1111-4111-8111-111111111199"],
+      startedAt: "2026-08-13T09:00:00.000Z",
+      completedAt: "2026-08-13T09:01:00.000Z",
+    });
+    const campaign = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: createIdFactory(), now, caps: caps() },
+    );
+    await repository.attachCampaignListing({
+      campaignId: campaign.id,
+      listingId: "44444444-4444-4444-8444-000000000099",
+      discoverySource: "broad_hybrid",
+      seenAt: "2026-08-13T10:00:00.000Z",
+      originatingRunId: "run-1",
+    });
+    const session = await repository.getLatestInstantSearchSession(USER_A);
+    expect(session?.listingIds).toEqual(["11111111-1111-4111-8111-111111111199"]);
+    expect(await repository.listCampaignListingIdsForUser(USER_A)).toEqual([
+      "44444444-4444-4444-8444-000000000099",
+    ]);
+  });
+});
+
+describe("run campaign now", () => {
+  it("is idempotent and rejects overlapping runs", async () => {
+    const { runJobCampaignNow } = await import("./run-job-campaign");
+    const repository = new InMemoryFreshWatchRepository();
+    const campaignRepo = new InMemoryCareerCampaignRepository();
+    const now = () => new Date("2026-08-13T10:00:00.000Z");
+    const created = await createJobCampaign(
+      { userId: USER_A, primaryRole: "Backend Developer", location: "Sri Lanka" },
+      { repository, createId: createIdFactory(), now, caps: caps() },
+    );
+    const first = await runJobCampaignNow(
+      { userId: USER_A, campaignId: created.id },
+      {
+        repository,
+        campaignRepository: campaignRepo,
+        createId: createIdFactory(),
+        now,
+        caps: caps(),
+      },
+    );
+    const second = await runJobCampaignNow(
+      { userId: USER_A, campaignId: created.id },
+      {
+        repository,
+        campaignRepository: campaignRepo,
+        createId: createIdFactory(),
+        now,
+        caps: caps(),
+      },
+    );
+    expect(second.runId).toBe(first.runId);
+    expect(second.status).toBe("skipped");
+
+    await repository.tryClaimCampaignRunLease({
+      campaignId: created.id,
+      now: "2026-08-13T10:01:00.000Z",
+      leaseOwner: "other",
+      leaseExpiresAt: "2026-08-13T10:05:00.000Z",
+    });
+    const later = () => new Date("2026-08-13T10:01:00.000Z");
+    await expect(
+      runJobCampaignNow(
+        { userId: USER_A, campaignId: created.id },
+        {
+          repository,
+          campaignRepository: campaignRepo,
+          createId: createIdFactory(),
+          now: later,
+          caps: caps(),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "RUN_IN_PROGRESS" });
+  });
+
+  it("does not create recommendations from Instant Search origin", async () => {
+    const campaignRepo = new InMemoryCareerCampaignRepository();
+    expect(campaignRepo.recommendations.size).toBe(0);
   });
 });

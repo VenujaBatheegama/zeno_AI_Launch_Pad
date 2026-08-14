@@ -22,6 +22,7 @@ export type UpsertRecommendationInput = {
   listingId: string;
   jobMatchAnalysisId: string;
   campaignRunId: string | null;
+  jobSearchCampaignId?: string | null;
   scoreSnapshot: ScoreSnapshot;
   fitSummarySnapshot: FitSummarySnapshot;
   scoringPolicyVersion: string;

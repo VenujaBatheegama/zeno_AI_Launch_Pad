@@ -28,6 +28,7 @@ type RecommendationRow = {
   listing_id: string;
   job_match_analysis_id: string;
   campaign_run_id: string | null;
+  job_search_campaign_id: string | null;
   status: JobRecommendation["status"];
   score_snapshot: ScoreSnapshot;
   fit_summary_snapshot: FitSummarySnapshot;
@@ -339,6 +340,7 @@ export class SupabaseCareerCampaignRepository
         listing_id: input.listingId,
         job_match_analysis_id: input.jobMatchAnalysisId,
         campaign_run_id: input.campaignRunId,
+        job_search_campaign_id: input.jobSearchCampaignId ?? null,
         status: "pending_review",
         score_snapshot: input.scoreSnapshot,
         fit_summary_snapshot: input.fitSummarySnapshot,
@@ -1376,6 +1378,7 @@ function mapRecommendation(row: RecommendationRow): JobRecommendation {
     listingId: row.listing_id,
     jobMatchAnalysisId: row.job_match_analysis_id,
     campaignRunId: row.campaign_run_id,
+    jobSearchCampaignId: row.job_search_campaign_id ?? null,
     status: row.status,
     scoreSnapshot: row.score_snapshot,
     fitSummarySnapshot: row.fit_summary_snapshot,

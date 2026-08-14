@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import { CareerEvidenceError } from "@/modules/career-evidence/domain/errors";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
+import { CareerGrowthError } from "@/modules/career-growth/domain/errors";
 import { CareerIntelligenceError } from "@/modules/career-intelligence/domain/errors";
 import { CvTailoringError } from "@/modules/cv-tailoring/domain/errors";
 import { JobDiscoveryError } from "@/modules/job-discovery/domain/errors";
@@ -27,6 +28,28 @@ export function errorResponse(error: unknown): NextResponse {
     );
   }
 
+  if (error instanceof CareerGrowthError) {
+    const statusByCode = {
+      NOT_FOUND: 404,
+      INVALID_INPUT: 400,
+      INVALID_TRANSITION: 409,
+      UNAUTHORIZED: 401,
+      CONFLICT: 409,
+      AI_UNAVAILABLE: 502,
+      INVALID_AI_OUTPUT: 502,
+      PERSISTENCE_FAILED: 503,
+      CAPACITY_UNAVAILABLE: 429,
+    } as const;
+    return NextResponse.json(
+      {
+        error: error.message,
+        code: error.code,
+        retryAfter: error.retryAfter,
+      },
+      { status: statusByCode[error.code] },
+    );
+  }
+
   if (error instanceof CareerCampaignError) {
     const statusByCode = {
       EVIDENCE_REQUIRED: 400,
@@ -35,6 +58,7 @@ export function errorResponse(error: unknown): NextResponse {
       INVALID_INPUT: 400,
       INVALID_TRANSITION: 409,
       CONFLICT: 409,
+      LIMIT_REACHED: 409,
       RUN_IN_PROGRESS: 409,
       PACKET_NOT_READY: 409,
       AI_UNAVAILABLE: 502,

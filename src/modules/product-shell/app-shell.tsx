@@ -13,6 +13,7 @@ const NAV = [
   { href: "/app/home", label: "Home", icon: "home" },
   { href: "/app/recommendations", label: "Inbox", icon: "jobs" },
   { href: "/app/jobs", label: "Jobs", icon: "jobs" },
+  { href: "/app/growth", label: "Growth", icon: "growth" },
   { href: "/app/applications", label: "Apps", icon: "cvs" },
   { href: "/app/cvs", label: "CVs", icon: "cvs" },
   { href: "/app/career-profile", label: "Profile", icon: "profile" },
@@ -172,7 +173,7 @@ export function AppShell(props: {
               </span>
               <input
                 type="search"
-                placeholder="Search jobs, CVs, applications"
+                placeholder="Search jobs, evidence, applications"
                 className="h-9 w-full rounded-full border border-[var(--zeno-border)] bg-white pl-9 pr-3 text-[13px] text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
               />
             </label>
@@ -252,6 +253,7 @@ function breadcrumbLabel(pathname: string): string {
   if (pathname.startsWith("/app/applications")) return "Applications";
   if (pathname.startsWith("/app/packets")) return "Packet";
   if (pathname.startsWith("/app/jobs")) return "Jobs";
+  if (pathname.startsWith("/app/growth")) return "Growth";
   if (pathname.startsWith("/app/career-profile")) return "Profile";
   if (pathname.startsWith("/app/settings")) return "Settings";
   if (pathname.startsWith("/app/home")) return "Home";
@@ -299,6 +301,13 @@ function NavIcon({
         <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75">
           <circle cx="12" cy="8" r="3.5" />
           <path d="M5 19.5c1.8-3.2 4.2-4.8 7-4.8s5.2 1.6 7 4.8" />
+        </svg>
+      );
+    case "growth":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75">
+          <path d="M5 20V10M12 20V4M19 20v-7" />
+          <path d="m4 8 6-5 5 4 5-4" />
         </svg>
       );
     case "settings":

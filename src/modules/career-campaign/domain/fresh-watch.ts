@@ -82,7 +82,7 @@ export type CanonicalJobSearch = {
 
 export type CanonicalSearchMember = {
   canonicalSearchId: string;
-  watchId: string;
+  campaignId: string;
   userId: string;
   attachedAt: string;
 };

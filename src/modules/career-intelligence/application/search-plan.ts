@@ -54,6 +54,7 @@ const searchForJobsSchema = z.object({
     .max(8)
     .default(DEFAULT_SEARCH_QUERY_BUDGET),
   excludedTitles: z.array(z.string().trim().min(1)).max(20).default([]),
+  origin: z.enum(["instant", "campaign"]).default("instant"),
 });
 
 export type CreateCareerAwareSearchPlanCommand = z.input<typeof createPlanSchema>;
@@ -244,6 +245,7 @@ export async function executeCareerAwareJobSearch(
 ): Promise<{
   plan: JobSearchPlan;
   jobsFound: number;
+  listingIds: string[];
   partialFailure: boolean;
   warnings: string[];
 }> {
@@ -276,6 +278,7 @@ export async function executeCareerAwareJobSearch(
   let failureCount = 0;
   const seenExternalIds = new Set<string>();
   let jobsFound = 0;
+  const listingIds: string[] = [];
 
   const ordered = [...plan.queries].sort((a, b) => a.priority - b.priority);
   for (const query of ordered) {
@@ -317,6 +320,7 @@ export async function executeCareerAwareJobSearch(
               seenAt: dependencies.now().toISOString(),
             });
       jobsFound += upserted.length;
+      listingIds.push(...upserted.map((job) => job.listing_id));
       for (const job of upserted) {
         await dependencies.repository.linkJobToQuery({
           listingId: job.listing_id,
@@ -395,6 +399,7 @@ export async function executeCareerAwareJobSearch(
   return {
     plan: refreshed,
     jobsFound,
+    listingIds,
     partialFailure: failureCount > 0 || jobsFound === 0,
     warnings,
   };
@@ -413,10 +418,17 @@ export async function searchForJobs(
     escoResolver: EscoOccupationResolver;
     createId: IdGenerator;
     now: Clock;
+    recordInstantSession?: (input: {
+      userId: string;
+      listingIds: string[];
+      jobsFound: number;
+      startedAt: string;
+    }) => Promise<void>;
   },
 ): Promise<{
   plan: JobSearchPlan;
   jobsFound: number;
+  listingIds: string[];
   partialFailure: boolean;
   warnings: string[];
   softNotice: string | null;
@@ -424,15 +436,11 @@ export async function searchForJobs(
   alsoSearchFor: string[];
 }> {
   const parsed = searchForJobsSchema.parse(command);
+  const startedAt = dependencies.now().toISOString();
 
-  // Fresh search: drop previous discovered listings (keep saved) and old match
-  // cards so the Jobs page does not stack / duplicate prior results.
-  await dependencies.jobRepository.clearDiscoveredJobs({
-    userId: parsed.userId,
-    includeSaved: false,
-  });
-  await dependencies.repository.clearMatchAnalyses(parsed.userId);
-
+  // Instant Search may replace the previous Instant Search display via
+  // session records. It must not clear campaign discoveries, saved jobs,
+  // or match analyses that other workflows still need.
   const ensured = await ensureJobSearchPlan(
     {
       userId: parsed.userId,
@@ -451,6 +459,15 @@ export async function searchForJobs(
     },
     dependencies,
   );
+
+  if (parsed.origin === "instant" && dependencies.recordInstantSession) {
+    await dependencies.recordInstantSession({
+      userId: parsed.userId,
+      listingIds: result.listingIds,
+      jobsFound: result.jobsFound,
+      startedAt,
+    });
+  }
 
   return {
     ...result,

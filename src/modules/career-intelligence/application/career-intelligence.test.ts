@@ -22,6 +22,7 @@ import {
 import {
   createCareerAwareSearchPlan,
   executeCareerAwareJobSearch,
+  searchForJobs,
 } from "./search-plan";
 import { listRankedJobMatches } from "./list-matches";
 import { CareerIntelligenceError } from "../domain/errors";
@@ -125,6 +126,52 @@ describe("career intelligence application", () => {
     expect(result.partialFailure).toBe(true);
     expect(result.jobsFound).toBeGreaterThan(0);
     expect(result.plan.status).toBe("partial");
+  });
+
+  it("does not clear saved jobs during Instant Search", async () => {
+    const repository = new InMemoryCareerIntelligenceRepository();
+    await assessCareerStageForUser(
+      { userId: USER },
+      {
+        evidenceRepository: new FakeEvidenceRepository(verifiedEvidence()),
+        jobRepository: new FakeJobDiscoveryRepository(profile()),
+        repository,
+        createId: sequentialIds(),
+        now: () => NOW,
+      },
+    );
+    const saved = {
+      ...minimalJob("00000000-0000-4000-8000-000000000701"),
+      user_state: "saved" as const,
+    };
+    const jobRepository = new FakeJobDiscoveryRepository(profile(), [saved]);
+    const sessions: Array<{ listingIds: string[] }> = [];
+    const result = await searchForJobs(
+      { userId: USER, origin: "instant" },
+      {
+        jobRepository,
+        source: new FakeJobSource([{ jobs: [externalJob("Job B")] }]),
+        repository,
+        escoResolver: new FakeEscoOccupationResolver(async (role) => ({
+          originalRole: role,
+          preferredTitle: role,
+          searchTitles: [role],
+          status: "resolved",
+        })),
+        createId: sequentialIds(80),
+        now: () => NOW,
+        recordInstantSession: async (input) => {
+          sessions.push({ listingIds: input.listingIds });
+        },
+      },
+    );
+    expect(result.listingIds.length).toBeGreaterThan(0);
+    expect(
+      jobRepository.jobs.some(
+        (job) => job.listing_id === saved.listing_id && job.user_state === "saved",
+      ),
+    ).toBe(true);
+    expect(sessions).toHaveLength(1);
   });
 
   it("auto-assesses career stage during analyse when none exists", async () => {

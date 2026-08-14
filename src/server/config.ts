@@ -137,6 +137,12 @@ const configSchema = z
     WHATSAPP_TEMPLATE_RECOMMENDATION: z.string().min(1).optional(),
     WHATSAPP_TEMPLATE_LANGUAGE: z.string().min(2).default("en"),
     PUBLIC_APP_BASE_URL: z.string().url().optional(),
+    GROWTH_MARKET_MIN_ANALYSED_JOBS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
     CAREER_EXTRACTION_CONCURRENCY: z.coerce
       .number()
       .int()

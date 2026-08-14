@@ -16,8 +16,7 @@ import {
   type WorkMode,
 } from "@/modules/job-discovery/domain/job";
 import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
-import { FreshJobWatchPanel } from "@/modules/career-campaign/presentation/fresh-job-watch-panel";
-import type { FreshJobWatchStatusView } from "@/modules/career-campaign/domain/fresh-watch";
+import { JobsBreadcrumb } from "@/modules/career-campaign/presentation/jobs-breadcrumb";
 
 type Props = {
   initialAssessment: PersistedCareerStageAssessment | null;
@@ -26,14 +25,14 @@ type Props = {
   initialJobs: DiscoveredJob[];
   initialPreferences: JobSearchPreferences | null;
   analysisBatchSize: number;
-  initialFreshWatch: FreshJobWatchStatusView;
+  sessionListingIds?: string[];
 };
 
 const JOB_SEARCH_STEPS = [
   {
     id: "prepare",
     title: "Prepare",
-    description: "Clear prior results",
+    description: "Load your search plan",
   },
   {
     id: "search",
@@ -80,12 +79,21 @@ export function CareerIntelligenceWorkspace({
   initialJobs,
   initialPreferences,
   analysisBatchSize,
-  initialFreshWatch,
+  sessionListingIds = [],
 }: Props) {
   void initialAssessment;
   const [, setPlan] = useState<JobSearchPlan | null>(initialPlan);
-  const [matches, setMatches] = useState(initialMatches);
-  const [jobs, setJobs] = useState(initialJobs);
+  const sessionSet = sessionListingIds.length > 0 ? new Set(sessionListingIds) : null;
+  const [matches, setMatches] = useState(
+    sessionSet
+      ? initialMatches.filter((match) => sessionSet.has(match.listingId))
+      : [],
+  );
+  const [jobs, setJobs] = useState(
+    sessionSet
+      ? initialJobs.filter((job) => sessionSet.has(job.listing_id))
+      : initialJobs.filter((job) => job.user_state === "saved"),
+  );
   const [savedPreferences, setSavedPreferences] =
     useState<JobSearchPreferences | null>(initialPreferences);
   const [preferences, setPreferences] = useState<JobSearchPreferences>(
@@ -159,6 +167,8 @@ export function CareerIntelligenceWorkspace({
       .filter((match) => {
         const job = jobsByListingId.get(match.listingId);
         if (filterPosted !== "any" && job?.published_at) {
+          // Posted-date chips compare listing age to wall clock.
+          // eslint-disable-next-line react-hooks/purity -- filter uses current time
           const ageMs = Date.now() - new Date(job.published_at).getTime();
           const day = 86_400_000;
           const max =
@@ -249,6 +259,7 @@ export function CareerIntelligenceWorkspace({
         setMessage("Searching job sources…");
         const result = await request<{
           jobsFound: number;
+          listingIds?: string[];
           partialFailure: boolean;
           warnings: string[];
           softNotice: string | null;
@@ -280,9 +291,18 @@ export function CareerIntelligenceWorkspace({
         setSearchPhase("loading_jobs");
         setMessage(`Found ${result.jobsFound} job(s). Loading your list…`);
         const latestJobs = await request<DiscoveredJob[]>("/api/jobs");
-        setJobs(latestJobs);
+        const sessionIds = new Set(result.listingIds ?? []);
+        setJobs(
+          sessionIds.size > 0
+            ? latestJobs.filter((job) => sessionIds.has(job.listing_id))
+            : latestJobs.filter((job) => job.user_state === "saved"),
+        );
 
-        const activeJobs = latestJobs.filter(
+        const sessionJobs =
+          sessionIds.size > 0
+            ? latestJobs.filter((job) => sessionIds.has(job.listing_id))
+            : [];
+        const activeJobs = sessionJobs.filter(
           (job) => job.user_state !== "dismissed",
         );
         const analysableJobs = activeJobs.filter(
@@ -311,6 +331,11 @@ export function CareerIntelligenceWorkspace({
             `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s). Analysing the top ${listingIds.length} (AI extraction can take a minute)…`,
           );
           const analysed = await analyseListings(listingIds);
+          void fetch("/api/instant-search", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ analysedCount: analysed?.ok ?? listingIds.length }),
+          });
           setSearchPhase("ranking");
           setMessage(
             analysed && analysed.rankedCount > 0
@@ -328,17 +353,10 @@ export function CareerIntelligenceWorkspace({
       }
     });
 
-  const clearMatches = () =>
-    run("clear", async () => {
-      const result = await request<{ removed: number }>(
-        "/api/career-intelligence/matches",
-        { method: "DELETE" },
-      );
-      setMatches([]);
-      setMessage(
-        `Cleared ${result.removed} stored match result(s). Find new jobs to rebuild rankings.`,
-      );
-    });
+  const clearMatches = () => {
+    setMatches([]);
+    setMessage("Cleared Instant Search results from this view. Saved jobs and campaigns are unchanged.");
+  };
 
   const setJobSaved = (listingId: string, saved: boolean) =>
     run("save", async () => {
@@ -381,14 +399,21 @@ export function CareerIntelligenceWorkspace({
 
   return (
     <div className="space-y-6">
+      <JobsBreadcrumb
+        items={[
+          { href: "/app/jobs", label: "Jobs" },
+          { label: "Instant Search" },
+        ]}
+      />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
           <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
-            Jobs
+            Instant Search
           </h1>
           <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
-            Roles Zeno has analysed against your verified profile. Nothing is
-            applied for automatically.
+            Run a hybrid search now and rank the strongest available jobs against
+            your verified profile. This does not create a campaign or Inbox
+            recommendation.
           </p>
         </div>
         <button
@@ -408,7 +433,7 @@ export function CareerIntelligenceWorkspace({
               : searchPhase === "loading_jobs"
                 ? `Loading jobs… ${searchElapsedSec}s`
                 : `Searching… ${searchElapsedSec}s`
-            : "Find new jobs"}
+            : "Search jobs now"}
         </button>
       </header>
 
@@ -426,25 +451,6 @@ export function CareerIntelligenceWorkspace({
           }
         />
       ) : null}
-
-      <FreshJobWatchPanel
-        initialStatus={initialFreshWatch}
-        defaultRole={
-          preferences.roles[0] ?? savedPreferences?.roles[0] ?? ""
-        }
-        defaultLocation={
-          preferences.locations[0] ??
-          savedPreferences?.locations[0] ??
-          (preferences.work_modes.includes("remote") ||
-          savedPreferences?.work_modes.includes("remote") ||
-          !preferences.work_modes.length
-            ? "Remote"
-            : "")
-        }
-        defaultWorkMode={
-          preferences.work_modes[0] ?? savedPreferences?.work_modes[0] ?? "any"
-        }
-      />
 
       {(message || error) && (
         <div className="space-y-2">

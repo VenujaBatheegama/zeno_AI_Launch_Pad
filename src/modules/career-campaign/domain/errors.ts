@@ -5,6 +5,7 @@ export type CareerCampaignErrorCode =
   | "INVALID_INPUT"
   | "INVALID_TRANSITION"
   | "CONFLICT"
+  | "LIMIT_REACHED"
   | "RUN_IN_PROGRESS"
   | "PACKET_NOT_READY"
   | "AI_UNAVAILABLE"

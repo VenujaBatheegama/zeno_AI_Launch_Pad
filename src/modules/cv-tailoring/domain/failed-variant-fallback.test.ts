@@ -7,7 +7,10 @@ import { clampSkillItem } from "./skill-inventory";
 describe("failed production CV variant fixture", () => {
   it("builds deterministic resume even with long skill labels", () => {
     const fixture = JSON.parse(
-      readFileSync("/tmp/cv-fail-fixture.json", "utf8"),
+      readFileSync(
+        new URL("./fixtures/cv-fail-fixture.json", import.meta.url),
+        "utf8",
+      ),
     ) as {
       plan: Parameters<typeof buildDeterministicResume>[0]["plan"];
       snapshot: Parameters<typeof buildDeterministicResume>[0]["snapshot"];

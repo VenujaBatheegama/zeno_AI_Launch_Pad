@@ -1,18 +1,23 @@
 import type {
   CanonicalJobSearch,
   CanonicalSearchMember,
-  FreshJobWatch,
   ProviderHealth,
   ProviderJobSighting,
 } from "../domain/fresh-watch";
 import type {
+  CampaignListingSighting,
+  InstantSearchSession,
+  JobSearchCampaign,
+  JobSearchCampaignRun,
+} from "../domain/job-campaign";
+import type {
+  CampaignPatch,
   FreshWatchRepository,
   ObserveProviderJobInput,
 } from "./fresh-watch-ports";
 
 export class InMemoryFreshWatchRepository implements FreshWatchRepository {
-  watches = new Map<string, FreshJobWatch>();
-  watchesByUser = new Map<string, string>();
+  campaigns = new Map<string, JobSearchCampaign>();
   searches = new Map<string, CanonicalJobSearch>();
   searchesByKey = new Map<string, string>();
   members: CanonicalSearchMember[] = [];
@@ -23,57 +28,93 @@ export class InMemoryFreshWatchRepository implements FreshWatchRepository {
   health = new Map<string, ProviderHealth>();
   listingSeq = 0;
   broadLeases = new Map<string, { owner: string; expiresAt: string }>();
+  campaignListings = new Map<string, CampaignListingSighting>();
+  sessions = new Map<string, InstantSearchSession>();
+  runs = new Map<string, JobSearchCampaignRun>();
+  savedListingIds = new Set<string>();
+
+  async listCampaignsByUserId(userId: string) {
+    return [...this.campaigns.values()]
+      .filter(
+        (campaign) =>
+          campaign.userId === userId && campaign.status !== "archived",
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async getCampaignById(campaignId: string) {
+    return this.campaigns.get(campaignId) ?? null;
+  }
+
+  async countActiveCampaigns(userId: string) {
+    return [...this.campaigns.values()].filter(
+      (campaign) => campaign.userId === userId && campaign.status === "active",
+    ).length;
+  }
+
+  async insertCampaign(campaign: JobSearchCampaign) {
+    this.campaigns.set(campaign.id, campaign);
+    return campaign;
+  }
+
+  async updateCampaign(campaignId: string, patch: CampaignPatch) {
+    const current = this.campaigns.get(campaignId);
+    if (!current) throw new Error("campaign not found");
+    const next = {
+      ...current,
+      ...patch,
+      updatedAt: patch.updatedAt ?? current.updatedAt,
+    };
+    this.campaigns.set(campaignId, next);
+    return next;
+  }
 
   async getWatchByUserId(userId: string) {
-    const id = this.watchesByUser.get(userId);
-    return id ? (this.watches.get(id) ?? null) : null;
+    const campaigns = await this.listCampaignsByUserId(userId);
+    return campaigns[0] ?? null;
   }
 
-  async upsertWatch(watch: FreshJobWatch) {
-    this.watches.set(watch.id, watch);
-    this.watchesByUser.set(watch.userId, watch.id);
-    return watch;
-  }
-
-  async listActiveWatches() {
-    return [...this.watches.values()].filter((watch) => watch.status === "active");
-  }
-
-  async claimDueBroadWatches(input: {
+  async claimDueBroadCampaigns(input: {
     now: string;
     leaseOwner: string;
     leaseExpiresAt: string;
     limit: number;
   }) {
-    const claimed: FreshJobWatch[] = [];
-    for (const watch of this.watches.values()) {
+    const claimed: JobSearchCampaign[] = [];
+    for (const campaign of this.campaigns.values()) {
       if (claimed.length >= input.limit) break;
-      if (watch.status !== "active") continue;
-      if (!watch.nextBroadSearchAt || watch.nextBroadSearchAt > input.now) continue;
-      const lease = this.broadLeases.get(watch.id);
+      if (campaign.status !== "active" || campaign.archivedAt) continue;
+      if (!campaign.nextBroadSearchAt || campaign.nextBroadSearchAt > input.now) {
+        continue;
+      }
+      const lease = this.broadLeases.get(campaign.id);
       if (lease && lease.expiresAt > input.now) continue;
-      this.broadLeases.set(watch.id, {
+      this.broadLeases.set(campaign.id, {
         owner: input.leaseOwner,
         expiresAt: input.leaseExpiresAt,
       });
-      claimed.push(watch);
+      claimed.push(campaign);
     }
     return claimed;
   }
 
-  async releaseBroadWatchLease(watchId: string) {
-    this.broadLeases.delete(watchId);
+  async releaseBroadCampaignLease(campaignId: string) {
+    this.broadLeases.delete(campaignId);
   }
 
-  async updateWatch(
-    watchId: string,
-    patch: Partial<FreshJobWatch>,
-  ) {
-    const current = this.watches.get(watchId);
-    if (!current) throw new Error("watch not found");
-    const next = { ...current, ...patch, updatedAt: patch.updatedAt ?? current.updatedAt };
-    this.watches.set(watchId, next);
-    return next;
+  async tryClaimCampaignRunLease(input: {
+    campaignId: string;
+    now: string;
+    leaseOwner: string;
+    leaseExpiresAt: string;
+  }) {
+    const lease = this.broadLeases.get(input.campaignId);
+    if (lease && lease.expiresAt > input.now) return false;
+    this.broadLeases.set(input.campaignId, {
+      owner: input.leaseOwner,
+      expiresAt: input.leaseExpiresAt,
+    });
+    return true;
   }
 
   async getCanonicalSearchByKey(key: string) {
@@ -104,8 +145,8 @@ export class InMemoryFreshWatchRepository implements FreshWatchRepository {
       if (search.leaseExpiresAt && search.leaseExpiresAt > input.now) continue;
       const activeMembers = this.members.filter((member) => {
         if (member.canonicalSearchId !== search.id) return false;
-        const watch = this.watches.get(member.watchId);
-        return watch?.status === "active";
+        const campaign = this.campaigns.get(member.campaignId);
+        return campaign?.status === "active" && !campaign.archivedAt;
       });
       if (activeMembers.length === 0) continue;
       const next = {
@@ -142,18 +183,26 @@ export class InMemoryFreshWatchRepository implements FreshWatchRepository {
   }
 
   async replaceMembership(input: {
-    watchId: string;
+    campaignId: string;
     userId: string;
     canonicalSearchId: string;
     attachedAt: string;
   }) {
-    this.members = this.members.filter((member) => member.watchId !== input.watchId);
+    this.members = this.members.filter(
+      (member) => member.campaignId !== input.campaignId,
+    );
     this.members.push({
       canonicalSearchId: input.canonicalSearchId,
-      watchId: input.watchId,
+      campaignId: input.campaignId,
       userId: input.userId,
       attachedAt: input.attachedAt,
     });
+  }
+
+  async detachMembership(campaignId: string) {
+    this.members = this.members.filter(
+      (member) => member.campaignId !== campaignId,
+    );
   }
 
   async listMembers(canonicalSearchId: string) {
@@ -165,8 +214,8 @@ export class InMemoryFreshWatchRepository implements FreshWatchRepository {
   async countActiveMembers(canonicalSearchId: string) {
     const members = await this.listMembers(canonicalSearchId);
     return members.filter((member) => {
-      const watch = this.watches.get(member.watchId);
-      return watch?.status === "active";
+      const campaign = this.campaigns.get(member.campaignId);
+      return campaign?.status === "active" && !campaign.archivedAt;
     }).length;
   }
 
@@ -228,6 +277,131 @@ export class InMemoryFreshWatchRepository implements FreshWatchRepository {
 
   async getListingDescription(listingId: string) {
     return this.descriptions.get(listingId) ?? null;
+  }
+
+  async attachCampaignListing(input: {
+    campaignId: string;
+    listingId: string;
+    discoverySource: CampaignListingSighting["discoverySource"];
+    seenAt: string;
+    originatingRunId: string | null;
+  }) {
+    const key = `${input.campaignId}:${input.listingId}`;
+    const existing = this.campaignListings.get(key);
+    if (existing) {
+      const next = { ...existing, lastSeenAt: input.seenAt, isNewForCampaign: false };
+      this.campaignListings.set(key, next);
+      return next;
+    }
+    const created: CampaignListingSighting = {
+      campaignId: input.campaignId,
+      listingId: input.listingId,
+      discoverySource: input.discoverySource,
+      firstSeenAt: input.seenAt,
+      lastSeenAt: input.seenAt,
+      originatingRunId: input.originatingRunId,
+      qualification: "pending",
+      isNewForCampaign: true,
+    };
+    this.campaignListings.set(key, created);
+    return created;
+  }
+
+  async listCampaignListings(campaignId: string) {
+    return [...this.campaignListings.values()].filter(
+      (row) => row.campaignId === campaignId,
+    );
+  }
+
+  async listCampaignListingIdsForUser(userId: string) {
+    const ids = new Set<string>();
+    for (const row of this.campaignListings.values()) {
+      const campaign = this.campaigns.get(row.campaignId);
+      if (campaign?.userId === userId) ids.add(row.listingId);
+    }
+    return [...ids];
+  }
+
+  async countNewCampaignListings(campaignId: string) {
+    return [...this.campaignListings.values()].filter(
+      (row) => row.campaignId === campaignId && row.isNewForCampaign,
+    ).length;
+  }
+
+  async countQualifyingCampaignListings(campaignId: string) {
+    return [...this.campaignListings.values()].filter(
+      (row) =>
+        row.campaignId === campaignId && row.qualification === "qualifying",
+    ).length;
+  }
+
+  async updateCampaignListingQualification(input: {
+    campaignId: string;
+    listingId: string;
+    qualification: CampaignListingSighting["qualification"];
+  }) {
+    const key = `${input.campaignId}:${input.listingId}`;
+    const existing = this.campaignListings.get(key);
+    if (!existing) return;
+    this.campaignListings.set(key, {
+      ...existing,
+      qualification: input.qualification,
+    });
+  }
+
+  async createInstantSearchSession(session: InstantSearchSession) {
+    this.sessions.set(session.id, session);
+    return session;
+  }
+
+  async archiveInstantSearchSessions(userId: string) {
+    for (const session of this.sessions.values()) {
+      if (session.userId === userId && session.status === "active") {
+        this.sessions.set(session.id, { ...session, status: "archived" });
+      }
+    }
+  }
+
+  async getLatestInstantSearchSession(userId: string) {
+    return (
+      [...this.sessions.values()]
+        .filter((session) => session.userId === userId)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null
+    );
+  }
+
+  async updateInstantSearchSession(
+    sessionId: string,
+    patch: Partial<InstantSearchSession>,
+  ) {
+    const current = this.sessions.get(sessionId);
+    if (!current) throw new Error("session not found");
+    const next = { ...current, ...patch };
+    this.sessions.set(sessionId, next);
+    return next;
+  }
+
+  async insertCampaignRun(run: JobSearchCampaignRun) {
+    this.runs.set(run.id, run);
+    return run;
+  }
+
+  async updateCampaignRun(
+    runId: string,
+    patch: Partial<JobSearchCampaignRun>,
+  ) {
+    const current = this.runs.get(runId);
+    if (!current) throw new Error("run not found");
+    const next = { ...current, ...patch };
+    this.runs.set(runId, next);
+    return next;
+  }
+
+  async listCampaignRuns(campaignId: string, limit = 10) {
+    return [...this.runs.values()]
+      .filter((run) => run.campaignId === campaignId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, limit);
   }
 
   async getProviderHealth(provider: string) {

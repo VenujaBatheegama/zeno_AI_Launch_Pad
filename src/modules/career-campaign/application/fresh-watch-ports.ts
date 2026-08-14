@@ -3,11 +3,16 @@ import type { NormalizedExternalJob } from "@/modules/job-discovery/domain/job";
 import type {
   CanonicalJobSearch,
   CanonicalSearchMember,
-  FreshJobWatch,
   FreshWatchWorkMode,
   ProviderHealth,
   ProviderJobSighting,
 } from "../domain/fresh-watch";
+import type {
+  CampaignListingSighting,
+  InstantSearchSession,
+  JobSearchCampaign,
+  JobSearchCampaignRun,
+} from "../domain/job-campaign";
 
 export type ObserveProviderJobInput = {
   provider: string;
@@ -39,34 +44,53 @@ export type FreshWatchCaps = {
   minScore: number;
 };
 
+export type CampaignPatch = Partial<{
+  name: string;
+  status: JobSearchCampaign["status"];
+  primaryRole: string;
+  location: string;
+  workMode: JobSearchCampaign["workMode"];
+  employmentTypes: JobSearchCampaign["employmentTypes"];
+  experienceLevels: JobSearchCampaign["experienceLevels"];
+  minimumScore: number;
+  preferredTechnologies: string[];
+  targetReadyDate: string | null;
+  weeklyHoursAvailable: JobSearchCampaign["weeklyHoursAvailable"];
+  criteriaVersion: number;
+  canonicalSearchId: string;
+  lastLinkedInSearchAt: string | null;
+  nextLinkedInSearchAt: string | null;
+  lastBroadSearchAt: string | null;
+  nextBroadSearchAt: string | null;
+  lastDiscoveryAt: string | null;
+  lastError: string | null;
+  initialAlertsRemaining: number;
+  archivedAt: string | null;
+  updatedAt: string;
+}>;
+
 export interface FreshWatchRepository {
-  getWatchByUserId(userId: string): Promise<FreshJobWatch | null>;
-  upsertWatch(watch: FreshJobWatch): Promise<FreshJobWatch>;
-  listActiveWatches(): Promise<FreshJobWatch[]>;
-  claimDueBroadWatches(input: {
+  listCampaignsByUserId(userId: string): Promise<JobSearchCampaign[]>;
+  getCampaignById(campaignId: string): Promise<JobSearchCampaign | null>;
+  countActiveCampaigns(userId: string): Promise<number>;
+  insertCampaign(campaign: JobSearchCampaign): Promise<JobSearchCampaign>;
+  updateCampaign(
+    campaignId: string,
+    patch: CampaignPatch,
+  ): Promise<JobSearchCampaign>;
+  claimDueBroadCampaigns(input: {
     now: string;
     leaseOwner: string;
     leaseExpiresAt: string;
     limit: number;
-  }): Promise<FreshJobWatch[]>;
-  releaseBroadWatchLease(watchId: string): Promise<void>;
-  updateWatch(
-    watchId: string,
-    patch: Partial<{
-      status: FreshJobWatch["status"];
-      primaryRole: string;
-      location: string;
-      workMode: FreshJobWatch["workMode"];
-      minScore: number | null;
-      canonicalSearchId: string;
-      lastBroadSearchAt: string | null;
-      nextBroadSearchAt: string | null;
-      lastDiscoveryAt: string | null;
-      lastError: string | null;
-      initialAlertsRemaining: number;
-      updatedAt: string;
-    }>,
-  ): Promise<FreshJobWatch>;
+  }): Promise<JobSearchCampaign[]>;
+  releaseBroadCampaignLease(campaignId: string): Promise<void>;
+  tryClaimCampaignRunLease(input: {
+    campaignId: string;
+    now: string;
+    leaseOwner: string;
+    leaseExpiresAt: string;
+  }): Promise<boolean>;
 
   getCanonicalSearchByKey(key: string): Promise<CanonicalJobSearch | null>;
   getCanonicalSearchById(id: string): Promise<CanonicalJobSearch | null>;
@@ -95,11 +119,12 @@ export interface FreshWatchRepository {
   ): Promise<CanonicalJobSearch>;
 
   replaceMembership(input: {
-    watchId: string;
+    campaignId: string;
     userId: string;
     canonicalSearchId: string;
     attachedAt: string;
   }): Promise<void>;
+  detachMembership(campaignId: string): Promise<void>;
   listMembers(canonicalSearchId: string): Promise<CanonicalSearchMember[]>;
   countActiveMembers(canonicalSearchId: string): Promise<number>;
 
@@ -120,8 +145,65 @@ export interface FreshWatchRepository {
   }): Promise<void>;
   getListingDescription(listingId: string): Promise<string | null>;
 
+  attachCampaignListing(input: {
+    campaignId: string;
+    listingId: string;
+    discoverySource: CampaignListingSighting["discoverySource"];
+    seenAt: string;
+    originatingRunId: string | null;
+  }): Promise<CampaignListingSighting>;
+  listCampaignListings(campaignId: string): Promise<CampaignListingSighting[]>;
+  listCampaignListingIdsForUser(userId: string): Promise<string[]>;
+  countNewCampaignListings(campaignId: string, since?: string): Promise<number>;
+  countQualifyingCampaignListings(campaignId: string): Promise<number>;
+  updateCampaignListingQualification(input: {
+    campaignId: string;
+    listingId: string;
+    qualification: CampaignListingSighting["qualification"];
+  }): Promise<void>;
+
+  createInstantSearchSession(
+    session: InstantSearchSession,
+  ): Promise<InstantSearchSession>;
+  archiveInstantSearchSessions(userId: string): Promise<void>;
+  getLatestInstantSearchSession(
+    userId: string,
+  ): Promise<InstantSearchSession | null>;
+  updateInstantSearchSession(
+    sessionId: string,
+    patch: Partial<
+      Pick<
+        InstantSearchSession,
+        "jobsFound" | "analysedCount" | "listingIds" | "completedAt" | "status"
+      >
+    >,
+  ): Promise<InstantSearchSession>;
+
+  insertCampaignRun(run: JobSearchCampaignRun): Promise<JobSearchCampaignRun>;
+  updateCampaignRun(
+    runId: string,
+    patch: Partial<
+      Pick<
+        JobSearchCampaignRun,
+        | "status"
+        | "discovered"
+        | "analysed"
+        | "qualifying"
+        | "completedAt"
+        | "error"
+      >
+    >,
+  ): Promise<JobSearchCampaignRun>;
+  listCampaignRuns(
+    campaignId: string,
+    limit?: number,
+  ): Promise<JobSearchCampaignRun[]>;
+
   getProviderHealth(provider: string): Promise<ProviderHealth | null>;
   upsertProviderHealth(health: ProviderHealth): Promise<ProviderHealth>;
+
+  /** Compatibility: first non-archived campaign for a user. */
+  getWatchByUserId(userId: string): Promise<JobSearchCampaign | null>;
 }
 
 export type LinkedInFreshClient = {
@@ -169,7 +251,7 @@ export function defaultFreshWatchLogger(
 ): void {
   console.info(
     JSON.stringify({
-      scope: "fresh-job-watch",
+      scope: "job-campaign",
       event,
       ...payload,
     }),

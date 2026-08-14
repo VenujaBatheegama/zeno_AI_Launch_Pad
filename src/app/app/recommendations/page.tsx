@@ -1,10 +1,12 @@
 import Link from "next/link";
 
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
-import { RunZenoButton } from "@/modules/career-campaign/presentation/run-zeno-button";
-import { RecommendationInbox } from "@/modules/career-campaign/presentation/recommendation-inbox";
+import { UnifiedInbox } from "@/modules/career-growth/presentation/unified-inbox";
 import { requireUserId } from "@/server/auth";
-import { getCareerCampaignApplication } from "@/server/composition-root";
+import {
+  getCareerCampaignApplication,
+  getCareerGrowthApplication,
+} from "@/server/composition-root";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,7 @@ export default async function RecommendationsPage() {
   let notifications: Awaited<ReturnType<typeof app.listNotifications>> = [];
   let schemaMissing = false;
 
+  let growthItems: Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["listInbox"]>> = [];
   try {
     recommendations = await app.listRecommendations({
       statuses: ["pending_review", "saved", "accepted"],
@@ -40,6 +43,11 @@ export default async function RecommendationsPage() {
     } else {
       throw error;
     }
+  }
+  try {
+    growthItems = await getCareerGrowthApplication(userId).listInbox();
+  } catch {
+    growthItems = [];
   }
 
   return (
@@ -59,17 +67,13 @@ export default async function RecommendationsPage() {
         </section>
       ) : null}
 
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em] text-[var(--zeno-ink)]">
-            Recommendations
-          </h1>
-          <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-            Explained job matches from your campaign. Accept to prepare an
-            application packet.
-          </p>
-        </div>
-        <RunZenoButton disabled={schemaMissing} />
+      <header>
+        <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em] text-[var(--zeno-ink)]">
+          Inbox
+        </h1>
+        <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
+          Job matches and Growth recommendations from your campaigns.
+        </p>
       </header>
 
       {notifications.length > 0 ? (
@@ -85,7 +89,7 @@ export default async function RecommendationsPage() {
         </section>
       ) : null}
 
-      <RecommendationInbox recommendations={recommendations} />
+      <UnifiedInbox growth={growthItems} jobRecommendations={recommendations} />
 
       <p className="text-sm">
         <Link href="/app/applications" className="font-semibold text-[var(--zeno-primary)]">

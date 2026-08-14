@@ -32,8 +32,10 @@ Requirements: Node.js 22+ and pnpm.
    `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
    Skill Analyser / capability-profile tables. Migration `0010` adds the
    proactive campaign tables (recommendations, packets, applications, runs,
-   notification outbox). Migration `0011` adds Fresh Job Watch (canonical
-   LinkedIn searches, watches, provider sightings, and provider health).
+   notification outbox). Migration `0011` adds canonical LinkedIn searches and
+   the original one-watch-per-user table. Migration `0014` adds multi-campaign
+   `job_search_campaigns`, Instant Search sessions, and campaign listing
+   attribution. Apply `0014` after `0011`–`0013`.
 3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
 4. Configure hybrid job sources via `JOB_SOURCES` (default
@@ -116,13 +118,13 @@ unknown rather than being inferred.
 7. Open match details and confirm gaps/unknowns stay distinct from matched items.
 8. Tailor a CV for a matched listing and confirm grounding validation still applies.
 
-## Fresh Job Watch
+## Jobs: Instant Search and Job Campaigns
 
-Find new jobs remains a one-time search. Enabling **Fresh Job Watch** on
-`/app/jobs` starts proactive monitoring: a narrow LinkedIn guest check about
-every 15 minutes for one primary role, and a broad hybrid campaign about twice
-daily. See `docs/fresh-job-watch.md` for canonical searches, deduplication,
-Groq cooldown behaviour, and the Vercel Hobby cron limitation.
+`/app/jobs` is the Jobs control centre. **Instant Search** (`/app/jobs/search`)
+is a one-off hybrid search. **Job Campaigns** are named monitors; Zeno checks
+LinkedIn about every 15 minutes and runs a broader search about every 12 hours.
+See `docs/job-campaigns.md` for isolation, canonical searches, token budget,
+and the 15-minute scheduler (GitHub Actions; Vercel Hobby is daily-only).
 
 ## Verification
 

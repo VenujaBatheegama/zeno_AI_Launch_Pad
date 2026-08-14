@@ -120,6 +120,7 @@ export type JobRecommendation = {
   listingId: string;
   jobMatchAnalysisId: string;
   campaignRunId: string | null;
+  jobSearchCampaignId: string | null;
   status: RecommendationStatus;
   scoreSnapshot: ScoreSnapshot;
   fitSummarySnapshot: FitSummarySnapshot;
