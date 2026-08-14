@@ -4,8 +4,8 @@
  * Kept only as an emergency rollback when `CV_PDF_RENDERER=pdfkit`.
  */
 import { PassThrough } from "node:stream";
-
 import PDFDocument from "pdfkit";
+import { CanvasFactory } from "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
 
 import type { CvPdfRenderer } from "../application/ports";
@@ -104,8 +104,10 @@ export class PdfKitCvRenderer implements CvPdfRenderer {
     doc.end();
     const buffer = await done;
     const bytes = new Uint8Array(buffer);
-    const parser = new PDFParse({ data: Uint8Array.from(bytes) });
-    try {
+const parser = new PDFParse({
+  data: Uint8Array.from(bytes),
+  CanvasFactory,
+});    try {
       const textResult = await parser.getText();
       return {
         bytes,

@@ -1,4 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
+import { CanvasFactory } from "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
 
 import type { CvPdfRenderer } from "../application/ports";
@@ -127,8 +128,10 @@ async function renderResume(
   );
   const owned = Uint8Array.from(buffer);
   const pageCount = countPdfPages(owned);
-  const parser = new PDFParse({ data: Uint8Array.from(buffer) });
-  try {
+const parser = new PDFParse({
+  data: Uint8Array.from(buffer),
+  CanvasFactory,
+});  try {
     const textResult = await parser.getText();
     return {
       bytes: owned,
