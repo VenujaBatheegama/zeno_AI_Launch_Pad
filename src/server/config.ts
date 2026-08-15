@@ -130,6 +130,7 @@ const configSchema = z
       .enum(["true", "false"])
       .optional()
       .transform((value) => value === "true"),
+    WHATSAPP_PROVIDER: z.enum(["meta", "twilio"]).default("meta"),
     WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
     WHATSAPP_BUSINESS_PHONE_E164: z.string().min(8).optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
@@ -141,6 +142,11 @@ const configSchema = z
       .string()
       .regex(/^v\d+\.\d+$/u)
       .default("v21.0"),
+    TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
+    TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+    TWILIO_WHATSAPP_NUMBER: z.string().min(8).optional(),
+    TWILIO_WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
+    TWILIO_SANDBOX_JOIN_CODE: z.string().min(1).optional(),
     PUBLIC_APP_BASE_URL: z.string().url().optional(),
     GROWTH_MARKET_MIN_ANALYSED_JOBS: z.coerce
       .number()

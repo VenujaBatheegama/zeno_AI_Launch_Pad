@@ -12,12 +12,16 @@ type WhatsAppConnection = {
   maskedNumber: string | null;
   enabled: boolean;
   businessPhone: string | null;
+  provider: "meta" | "twilio";
+  sandboxJoinCode: string | null;
 };
 
 type WhatsAppCode = {
   code: string;
   expiresAt: string;
   businessPhone: string;
+  provider: "meta" | "twilio";
+  sandboxJoinCode: string | null;
 };
 
 export default function SettingsPage() {
@@ -55,6 +59,19 @@ export default function SettingsPage() {
     if (!code?.businessPhone) return null;
     const phone = code.businessPhone.replace(/\D/gu, "");
     const message = encodeURIComponent(`LINK ${code.code}`);
+    return `https://wa.me/${phone}?text=${message}`;
+  }, [code]);
+
+  const sandboxJoinLink = useMemo(() => {
+    if (
+      code?.provider !== "twilio" ||
+      !code.businessPhone ||
+      !code.sandboxJoinCode
+    ) {
+      return null;
+    }
+    const phone = code.businessPhone.replace(/\D/gu, "");
+    const message = encodeURIComponent(`join ${code.sandboxJoinCode}`);
     return `https://wa.me/${phone}?text=${message}`;
   }, [code]);
 
@@ -169,7 +186,44 @@ export default function SettingsPage() {
           </div>
         ) : code ? (
           <div className="mt-4 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] p-4">
-            <p className="text-sm font-semibold">Send this message to Zeno</p>
+            {code.provider === "twilio" ? (
+              <div className="mb-4 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-bg)] p-3">
+                <p className="text-sm font-semibold">
+                  1. Join the WhatsApp demo sandbox
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[var(--zeno-ink-muted)]">
+                  This is required once for each demo phone before Zeno can
+                  receive or send sandbox messages.
+                </p>
+                {code.sandboxJoinCode ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <code className="rounded-md bg-white px-3 py-2 text-sm font-semibold">
+                      join {code.sandboxJoinCode}
+                    </code>
+                    {sandboxJoinLink ? (
+                      <a
+                        href={sandboxJoinLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-3 py-2 text-sm font-semibold"
+                      >
+                        Join sandbox
+                      </a>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs font-medium text-amber-800">
+                    Join the Twilio sandbox using the code shown in the Twilio
+                    Console, then continue below.
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <p className="text-sm font-semibold">
+              {code.provider === "twilio"
+                ? "2. Link your Zeno account"
+                : "Send this message to Zeno"}
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <code className="rounded-md bg-[var(--zeno-bg)] px-3 py-2 text-sm font-semibold tracking-[0.08em]">
                 LINK {code.code}

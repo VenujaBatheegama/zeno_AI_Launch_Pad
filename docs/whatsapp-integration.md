@@ -1,7 +1,9 @@
 # WhatsApp Cloud API MVP
 
-Zeno uses Meta's official WhatsApp Cloud API. The web application remains the
-source of truth; WhatsApp is a lightweight alert and command channel.
+Zeno supports Meta's official WhatsApp Cloud API and Twilio's official
+WhatsApp Sandbox. The web application remains the source of truth; WhatsApp is
+a lightweight alert and command channel. Select the transport with
+`WHATSAPP_PROVIDER`.
 
 ## Implemented flow
 
@@ -59,6 +61,7 @@ recipient list in the Meta dashboard.
 
 ```env
 WHATSAPP_ENABLED=true
+WHATSAPP_PROVIDER=meta
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_BUSINESS_PHONE_E164=
 WHATSAPP_ACCESS_TOKEN=
@@ -72,6 +75,33 @@ PUBLIC_APP_BASE_URL=https://YOUR_DOMAIN
 
 Use an API version supported by the Meta app. The version is configurable so
 it can be upgraded without changing application code.
+
+## Twilio Sandbox demo setup
+
+Twilio is a demo transport; keep the Meta configuration for the production
+path. In Twilio Console, activate **Messaging → Try out WhatsApp**, copy the
+sandbox number and join phrase, and set **When a message comes in** to:
+
+`https://YOUR_DOMAIN/api/whatsapp/twilio/webhook`
+
+Use HTTP `POST`, then configure:
+
+```env
+WHATSAPP_ENABLED=true
+WHATSAPP_PROVIDER=twilio
+PUBLIC_APP_BASE_URL=https://YOUR_DOMAIN
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+TWILIO_WHATSAPP_WEBHOOK_URL=https://YOUR_DOMAIN/api/whatsapp/twilio/webhook
+TWILIO_SANDBOX_JOIN_CODE=your-sandbox-join-word
+```
+
+Each demo phone must first send `join <sandbox word>` to the sandbox number.
+Zeno Settings then asks it to send the separate `LINK <code>` message. The
+sandbox permits free-form proactive demo alerts only while its customer-service
+window is active; the Meta adapter remains the production route for approved
+out-of-window templates.
 
 ## Database
 
