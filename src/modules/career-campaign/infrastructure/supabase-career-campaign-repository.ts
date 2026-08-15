@@ -1323,6 +1323,96 @@ export class SupabaseCareerCampaignRepository
     return data ? (data as { user_id: string }).user_id : null;
   }
 
+  async createWhatsAppLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }): Promise<void> {
+    const { error: invalidateError } = await this.client
+      .from("whatsapp_link_codes")
+      .update({ used_at: input.createdAt })
+      .eq("user_id", input.userId)
+      .is("used_at", null);
+    if (invalidateError) {
+      throw persistenceError(
+        "Previous WhatsApp connection codes could not be invalidated.",
+        invalidateError,
+      );
+    }
+
+    const { error } = await this.client.from("whatsapp_link_codes").insert({
+      id: input.id,
+      user_id: input.userId,
+      code_hash: input.codeHash,
+      expires_at: input.expiresAt,
+      created_at: input.createdAt,
+    });
+    if (error) {
+      throw persistenceError(
+        "WhatsApp connection code could not be saved.",
+        error,
+      );
+    }
+  }
+
+  async claimWhatsAppLinkCode(input: {
+    codeHash: string;
+    waId: string;
+    claimedAt: string;
+  }): Promise<string | null> {
+    const { data, error } = await this.client.rpc("claim_whatsapp_link_code", {
+      p_code_hash: input.codeHash,
+      p_wa_id: input.waId,
+      p_claimed_at: input.claimedAt,
+    });
+    if (error) {
+      throw persistenceError(
+        "WhatsApp connection code could not be claimed.",
+        error,
+      );
+    }
+    return typeof data === "string" ? data : null;
+  }
+
+  async claimWhatsAppInboundMessage(input: {
+    messageId: string;
+    waId: string;
+    receivedAt: string;
+  }): Promise<boolean> {
+    const { error } = await this.client
+      .from("whatsapp_inbound_messages")
+      .insert({
+        message_id: input.messageId,
+        wa_id: input.waId,
+        received_at: input.receivedAt,
+      });
+    if (!error) return true;
+    if (isUniqueViolation(error)) return false;
+    throw persistenceError("WhatsApp message could not be claimed.", error);
+  }
+
+  async deleteWhatsAppLink(userId: string): Promise<void> {
+    const { error } = await this.client
+      .from("whatsapp_user_links")
+      .delete()
+      .eq("user_id", userId);
+    if (error) {
+      throw persistenceError("WhatsApp connection could not be removed.", error);
+    }
+  }
+
+  async setWhatsAppOptIn(userId: string, at: string): Promise<void> {
+    const { error } = await this.client
+      .from("whatsapp_user_links")
+      .update({ opted_in_at: at, opted_out_at: null })
+      .eq("user_id", userId);
+    if (error) {
+      throw persistenceError("WhatsApp opt-in could not be saved.", error);
+    }
+  }
+
   async setWhatsAppOptOut(userId: string, at: string): Promise<void> {
     const { error } = await this.client
       .from("whatsapp_user_links")

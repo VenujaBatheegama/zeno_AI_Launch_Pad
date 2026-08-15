@@ -271,6 +271,25 @@ export interface CareerCampaignRepository {
     optedOutAt: string | null;
   } | null>;
   getUserIdByWhatsAppId(waId: string): Promise<string | null>;
+  createWhatsAppLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }): Promise<void>;
+  claimWhatsAppLinkCode(input: {
+    codeHash: string;
+    waId: string;
+    claimedAt: string;
+  }): Promise<string | null>;
+  claimWhatsAppInboundMessage(input: {
+    messageId: string;
+    waId: string;
+    receivedAt: string;
+  }): Promise<boolean>;
+  deleteWhatsAppLink(userId: string): Promise<void>;
+  setWhatsAppOptIn(userId: string, at: string): Promise<void>;
   setWhatsAppOptOut(userId: string, at: string): Promise<void>;
 }
 

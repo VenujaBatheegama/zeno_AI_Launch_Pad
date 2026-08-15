@@ -116,6 +116,11 @@ import {
 import { recordRecommendationDecision } from "@/modules/career-campaign/application/recommendation-decisions";
 import { runCampaignCheck } from "@/modules/career-campaign/application/run-campaign-check";
 import {
+  createWhatsAppConnectionCode,
+  disconnectWhatsApp,
+  getWhatsAppConnection,
+} from "@/modules/career-campaign/application/whatsapp-connection";
+import {
   aggregateCampaignGaps,
   growthActionCopy,
 } from "@/modules/career-campaign/domain/gap-aggregation";
@@ -1123,6 +1128,10 @@ function createCareerCampaignApplication(userId: string) {
       }),
     listNotifications: (limit?: number) =>
       repository.listNotifications({ userId, limit }),
+    getWhatsAppConnection: () => getWhatsAppConnection(userId, repository),
+    createWhatsAppConnectionCode: () =>
+      createWhatsAppConnectionCode({ userId, repository, now }),
+    disconnectWhatsApp: () => disconnectWhatsApp(userId, repository),
     deliverNotifications: () =>
       deliverPendingNotifications({
         repository,
@@ -1140,7 +1149,10 @@ function createCareerCampaignApplication(userId: string) {
                     config.WHATSAPP_TEMPLATE_RECOMMENDATION ??
                     "zeno_recommendation",
                   templateLanguage: config.WHATSAPP_TEMPLATE_LANGUAGE,
+                  graphApiVersion: config.WHATSAPP_GRAPH_API_VERSION,
                   publicBaseUrl: config.PUBLIC_APP_BASE_URL,
+                  resolveWaId: async (uid) =>
+                    (await repository.getWhatsAppLink(uid))?.waId ?? null,
                 }),
               }
             : {}),
