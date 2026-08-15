@@ -17,7 +17,12 @@ export async function GET() {
     return NextResponse.json({
       ...connection,
       enabled: whatsappConfigured(config),
-      businessPhone: config.WHATSAPP_BUSINESS_PHONE_E164 ?? null,
+      provider: config.WHATSAPP_PROVIDER,
+      businessPhone: businessPhone(config),
+      sandboxJoinCode:
+        config.WHATSAPP_PROVIDER === "twilio"
+          ? config.TWILIO_SANDBOX_JOIN_CODE ?? null
+          : null,
     });
   } catch (error) {
     return authErrorResponse(error) ?? errorResponse(error);
@@ -39,7 +44,12 @@ export async function POST() {
     ).createWhatsAppConnectionCode();
     return NextResponse.json({
       ...result,
-      businessPhone: config.WHATSAPP_BUSINESS_PHONE_E164,
+      provider: config.WHATSAPP_PROVIDER,
+      businessPhone: businessPhone(config),
+      sandboxJoinCode:
+        config.WHATSAPP_PROVIDER === "twilio"
+          ? config.TWILIO_SANDBOX_JOIN_CODE ?? null
+          : null,
     });
   } catch (error) {
     return authErrorResponse(error) ?? errorResponse(error);
@@ -57,13 +67,29 @@ export async function DELETE() {
 }
 
 function whatsappConfigured(config: ReturnType<typeof getServerConfig>) {
+  if (!config.WHATSAPP_ENABLED || !config.PUBLIC_APP_BASE_URL) return false;
+
+  if (config.WHATSAPP_PROVIDER === "twilio") {
+    return Boolean(
+      config.TWILIO_ACCOUNT_SID &&
+        config.TWILIO_AUTH_TOKEN &&
+        businessPhone(config),
+    );
+  }
+
   return Boolean(
-    config.WHATSAPP_ENABLED &&
-      config.WHATSAPP_PHONE_NUMBER_ID &&
+    config.WHATSAPP_PHONE_NUMBER_ID &&
       config.WHATSAPP_BUSINESS_PHONE_E164 &&
       config.WHATSAPP_ACCESS_TOKEN &&
       config.WHATSAPP_VERIFY_TOKEN &&
-      config.WHATSAPP_APP_SECRET &&
-      config.PUBLIC_APP_BASE_URL,
+      config.WHATSAPP_APP_SECRET,
   );
+}
+
+function businessPhone(config: ReturnType<typeof getServerConfig>) {
+  const value =
+    config.WHATSAPP_PROVIDER === "twilio"
+      ? config.TWILIO_WHATSAPP_NUMBER ?? config.WHATSAPP_BUSINESS_PHONE_E164
+      : config.WHATSAPP_BUSINESS_PHONE_E164;
+  return value?.replace(/^whatsapp:/iu, "") ?? null;
 }

@@ -128,6 +128,7 @@ import { applyFeedbackAdjustments } from "@/modules/career-campaign/domain/feedb
 import { GroqCoverLetterGenerator } from "@/modules/career-campaign/infrastructure/groq-cover-letter-generator";
 import { SupabaseCareerCampaignRepository } from "@/modules/career-campaign/infrastructure/supabase-career-campaign-repository";
 import { SupabaseFreshWatchRepository } from "@/modules/career-campaign/infrastructure/supabase-fresh-watch-repository";
+import { TwilioWhatsAppSender } from "@/modules/career-campaign/infrastructure/twilio-whatsapp-sender";
 import { WhatsAppCloudNotificationSender } from "@/modules/career-campaign/infrastructure/whatsapp-cloud-sender";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
 import type { JobSearchCampaign } from "@/modules/career-campaign/domain/job-campaign";
@@ -1132,32 +1133,53 @@ function createCareerCampaignApplication(userId: string) {
     createWhatsAppConnectionCode: () =>
       createWhatsAppConnectionCode({ userId, repository, now }),
     disconnectWhatsApp: () => disconnectWhatsApp(userId, repository),
-    deliverNotifications: () =>
-      deliverPendingNotifications({
+    deliverNotifications: () => {
+      let whatsappSender:
+        | TwilioWhatsAppSender
+        | WhatsAppCloudNotificationSender
+        | null = null;
+      const resolveWaId = async (uid: string) =>
+        (await repository.getWhatsAppLink(uid))?.waId ?? null;
+
+      if (config.WHATSAPP_ENABLED && config.WHATSAPP_PROVIDER === "twilio") {
+        const from =
+          config.TWILIO_WHATSAPP_NUMBER ??
+          config.WHATSAPP_BUSINESS_PHONE_E164;
+        if (config.TWILIO_ACCOUNT_SID && config.TWILIO_AUTH_TOKEN && from) {
+          whatsappSender = new TwilioWhatsAppSender({
+            accountSid: config.TWILIO_ACCOUNT_SID,
+            authToken: config.TWILIO_AUTH_TOKEN,
+            from,
+            publicBaseUrl: config.PUBLIC_APP_BASE_URL,
+            resolveWaId,
+          });
+        }
+      } else if (
+        config.WHATSAPP_ENABLED &&
+        config.WHATSAPP_ACCESS_TOKEN &&
+        config.WHATSAPP_PHONE_NUMBER_ID
+      ) {
+        whatsappSender = new WhatsAppCloudNotificationSender({
+          accessToken: config.WHATSAPP_ACCESS_TOKEN,
+          phoneNumberId: config.WHATSAPP_PHONE_NUMBER_ID,
+          templateName:
+            config.WHATSAPP_TEMPLATE_RECOMMENDATION ?? "zeno_recommendation",
+          templateLanguage: config.WHATSAPP_TEMPLATE_LANGUAGE,
+          graphApiVersion: config.WHATSAPP_GRAPH_API_VERSION,
+          publicBaseUrl: config.PUBLIC_APP_BASE_URL,
+          resolveWaId,
+        });
+      }
+
+      return deliverPendingNotifications({
         repository,
         now,
         senders: {
           in_app: new InAppNotificationSender(),
-          ...(config.WHATSAPP_ENABLED &&
-          config.WHATSAPP_ACCESS_TOKEN &&
-          config.WHATSAPP_PHONE_NUMBER_ID
-            ? {
-                whatsapp: new WhatsAppCloudNotificationSender({
-                  accessToken: config.WHATSAPP_ACCESS_TOKEN,
-                  phoneNumberId: config.WHATSAPP_PHONE_NUMBER_ID,
-                  templateName:
-                    config.WHATSAPP_TEMPLATE_RECOMMENDATION ??
-                    "zeno_recommendation",
-                  templateLanguage: config.WHATSAPP_TEMPLATE_LANGUAGE,
-                  graphApiVersion: config.WHATSAPP_GRAPH_API_VERSION,
-                  publicBaseUrl: config.PUBLIC_APP_BASE_URL,
-                  resolveWaId: async (uid) =>
-                    (await repository.getWhatsAppLink(uid))?.waId ?? null,
-                }),
-              }
-            : {}),
+          ...(whatsappSender ? { whatsapp: whatsappSender } : {}),
         },
-      }),
+      });
+    },
     getDashboard: () =>
       getCampaignDashboard(userId, {
         repository,

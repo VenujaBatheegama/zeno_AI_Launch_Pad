@@ -6,9 +6,9 @@ keeping the Zeno web application and Supabase database as the source of truth.
 ## Request flow
 
 1. An authenticated user creates a short-lived link code from Settings.
-2. The user sends `LINK <code>` to Zeno's Meta test/business number.
-3. Meta sends the inbound message to `/api/whatsapp/webhook`.
-4. Zeno verifies Meta's signature, deduplicates the message, atomically claims
+2. The user sends `LINK <code>` to the configured WhatsApp number.
+3. Meta or Twilio sends the inbound message to its signed webhook route.
+4. Zeno verifies the provider signature, deduplicates the message, atomically claims
    the code, and links the WhatsApp identity to the signed-in user.
 5. Deterministic commands return links into the web app without using an LLM.
 6. Approved templates can deliver proactive recommendation notifications.
@@ -23,7 +23,11 @@ keeping the Zeno web application and Supabase database as the source of truth.
   commands, opt-in, opt-out, and inbound-message handling.
 - `src/modules/career-campaign/application/whatsapp-connection.test.ts` —
   application-level behavior tests.
-- `docs/whatsapp-integration.md` — Meta, environment, webhook, template, and
+- `src/app/api/whatsapp/twilio/webhook/route.ts` — signed Twilio Sandbox
+  webhook and inbound form parsing.
+- `src/modules/career-campaign/infrastructure/twilio-whatsapp-sender.ts` —
+  Twilio REST sender, signature verification, and address normalization.
+- `docs/whatsapp-integration.md` — Meta/Twilio, environment, webhook, and
   database setup.
 
 ## Files extended
@@ -36,7 +40,8 @@ keeping the Zeno web application and Supabase database as the source of truth.
   — Supabase implementations for the new persistence operations.
 - `src/modules/career-campaign/infrastructure/whatsapp-cloud-sender.ts` — text
   replies, templates, timeout, and configurable Graph API version.
-- `src/server/composition-root.ts` — WhatsApp dependencies and WA-ID lookup.
+- `src/server/composition-root.ts` — provider selection, dependencies, and
+  WA-ID lookup.
 - `src/server/config.ts` and `.env.example` — server-only WhatsApp settings.
 - `src/app/app/settings/page.tsx` — Connect WhatsApp user interface.
 
@@ -56,6 +61,6 @@ duplicating costly work.
 1. Merge the source changes through a feature branch and pull request.
 2. Apply Supabase migration `0016_whatsapp_connection.sql`.
 3. Deploy with `WHATSAPP_ENABLED=false` and verify the base application.
-4. Add Meta credentials to Vercel, then set `WHATSAPP_ENABLED=true`.
-5. Redeploy and verify the callback URL.
-6. Test linking with Meta's test sender and one permitted recipient.
+4. Add credentials for the selected provider and set `WHATSAPP_ENABLED=true`.
+5. Redeploy and configure the provider callback URL.
+6. Test provider onboarding, Zeno linking, commands, and an alert.

@@ -134,7 +134,8 @@ Zeno can link an authenticated account to a WhatsApp identity with a short-lived
 one-time code, deliver proactive recommendation templates, and handle the
 `HELP`, `JOBS`, `INBOX`, `APPLICATIONS`, `GROWTH`, `STOP`, and `START` commands.
 Apply migration `0016` and follow `docs/whatsapp-integration.md` to configure
-the Meta test number, webhook, template, and server-only environment values.
+either Meta Cloud API or Twilio's WhatsApp Sandbox. Both transports reuse the
+same linking, commands, opt-in state, notification queue, and campaign logic.
 
 ## Verification
 
