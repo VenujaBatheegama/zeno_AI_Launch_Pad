@@ -47,6 +47,11 @@ export class InMemoryCareerCampaignRepository
       optedOutAt: string | null;
     }
   >();
+  whatsappLinkCodes = new Map<
+    string,
+    { userId: string; expiresAt: string; usedAt: string | null }
+  >();
+  whatsappInboundMessages = new Set<string>();
 
   async createOrGetRun(input: CreateRunInput) {
     const existingId = this.runsByKey.get(input.idempotencyKey);
@@ -593,6 +598,83 @@ export class InMemoryCareerCampaignRepository
       if (link.waId === waId) return link.userId;
     }
     return null;
+  }
+
+  async createWhatsAppLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }) {
+    void input.id;
+    for (const [hash, code] of this.whatsappLinkCodes) {
+      if (code.userId === input.userId && !code.usedAt) {
+        this.whatsappLinkCodes.set(hash, {
+          ...code,
+          usedAt: input.createdAt,
+        });
+      }
+    }
+    this.whatsappLinkCodes.set(input.codeHash, {
+      userId: input.userId,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+    });
+  }
+
+  async claimWhatsAppLinkCode(input: {
+    codeHash: string;
+    waId: string;
+    claimedAt: string;
+  }) {
+    const code = this.whatsappLinkCodes.get(input.codeHash);
+    if (
+      !code ||
+      code.usedAt ||
+      new Date(code.expiresAt).getTime() <= new Date(input.claimedAt).getTime()
+    ) {
+      return null;
+    }
+    const existingUserId = await this.getUserIdByWhatsAppId(input.waId);
+    if (existingUserId && existingUserId !== code.userId) return null;
+    this.whatsappLinkCodes.set(input.codeHash, {
+      ...code,
+      usedAt: input.claimedAt,
+    });
+    this.whatsapp.set(code.userId, {
+      userId: code.userId,
+      waId: input.waId,
+      optedInAt: input.claimedAt,
+      optedOutAt: null,
+    });
+    return code.userId;
+  }
+
+  async claimWhatsAppInboundMessage(input: {
+    messageId: string;
+    waId: string;
+    receivedAt: string;
+  }) {
+    void input.waId;
+    void input.receivedAt;
+    if (this.whatsappInboundMessages.has(input.messageId)) return false;
+    this.whatsappInboundMessages.add(input.messageId);
+    return true;
+  }
+
+  async deleteWhatsAppLink(userId: string) {
+    this.whatsapp.delete(userId);
+  }
+
+  async setWhatsAppOptIn(userId: string, at: string) {
+    const link = this.whatsapp.get(userId);
+    if (!link) return;
+    this.whatsapp.set(userId, {
+      ...link,
+      optedInAt: at,
+      optedOutAt: null,
+    });
   }
 
   async setWhatsAppOptOut(userId: string, at: string) {

@@ -11,6 +11,7 @@ export type WhatsAppCloudConfig = {
   phoneNumberId: string;
   templateName: string;
   templateLanguage: string;
+  graphApiVersion?: string;
   publicBaseUrl?: string;
   fetchImpl?: typeof fetch;
   resolveWaId?: (userId: string) => Promise<string | null>;
@@ -24,6 +25,22 @@ export class WhatsAppCloudNotificationSender implements NotificationSender {
 
   constructor(private readonly config: WhatsAppCloudConfig) {
     this.fetchImpl = config.fetchImpl ?? fetch;
+  }
+
+  async sendText(waId: string, text: string): Promise<void> {
+    const response = await this.postMessage({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waId,
+      type: "text",
+      text: {
+        preview_url: false,
+        body: text.slice(0, 4096),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`WhatsApp API HTTP ${response.status}`);
+    }
   }
 
   async send(notification: PendingNotification): Promise<DeliveryResult> {
@@ -54,7 +71,6 @@ export class WhatsAppCloudNotificationSender implements NotificationSender {
         ? notification.payload.title
         : "New Zeno recommendation";
 
-    const url = `https://graph.facebook.com/v21.0/${this.config.phoneNumberId}/messages`;
     const body = {
       messaging_product: "whatsapp",
       to: waId,
@@ -75,14 +91,7 @@ export class WhatsAppCloudNotificationSender implements NotificationSender {
     };
 
     try {
-      const response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      const response = await this.postMessage(body);
 
       if (!response.ok) {
         const retryable = response.status === 429 || response.status >= 500;
@@ -107,6 +116,23 @@ export class WhatsAppCloudNotificationSender implements NotificationSender {
         error: error instanceof Error ? error.message : "WhatsApp send failed",
       };
     }
+  }
+
+  private postMessage(body: Record<string, unknown>): Promise<Response> {
+    const version = (this.config.graphApiVersion ?? "v21.0").replace(
+      /^\/+|\/+$/gu,
+      "",
+    );
+    const url = `https://graph.facebook.com/${version}/${this.config.phoneNumberId}/messages`;
+    return this.fetchImpl(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8_000),
+    });
   }
 }
 

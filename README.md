@@ -26,7 +26,8 @@ roles.
 Requirements: Node.js 22+ and pnpm.
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_slice_0.sql` through `0011_fresh_job_watch.sql`
+2. Run the numbered files in `supabase/migrations` through
+   `0016_whatsapp_connection.sql`
    in order (or apply pending migrations with the Supabase CLI). Migration
    `0009` adds the ESCO resolution cache, updates planned-query sources to
    `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
@@ -35,7 +36,8 @@ Requirements: Node.js 22+ and pnpm.
    notification outbox). Migration `0011` adds canonical LinkedIn searches and
    the original one-watch-per-user table. Migration `0014` adds multi-campaign
    `job_search_campaigns`, Instant Search sessions, and campaign listing
-   attribution. Apply `0014` after `0011`–`0013`.
+   attribution. Migration `0015` adds campaign-aware Growth, and `0016` adds
+   secure WhatsApp linking and inbound-message idempotency.
 3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
 4. Configure hybrid job sources via `JOB_SOURCES` (default
@@ -125,6 +127,14 @@ is a one-off hybrid search. **Job Campaigns** are named monitors; Zeno checks
 LinkedIn about every 15 minutes and runs a broader search about every 12 hours.
 See `docs/job-campaigns.md` for isolation, canonical searches, token budget,
 and the 15-minute scheduler (GitHub Actions; Vercel Hobby is daily-only).
+
+## WhatsApp MVP
+
+Zeno can link an authenticated account to a WhatsApp identity with a short-lived
+one-time code, deliver proactive recommendation templates, and handle the
+`HELP`, `JOBS`, `INBOX`, `APPLICATIONS`, `GROWTH`, `STOP`, and `START` commands.
+Apply migration `0016` and follow `docs/whatsapp-integration.md` to configure
+the Meta test number, webhook, template, and server-only environment values.
 
 ## Verification
 

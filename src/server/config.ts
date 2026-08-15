@@ -131,11 +131,16 @@ const configSchema = z
       .optional()
       .transform((value) => value === "true"),
     WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
+    WHATSAPP_BUSINESS_PHONE_E164: z.string().min(8).optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
     WHATSAPP_VERIFY_TOKEN: z.string().min(1).optional(),
     WHATSAPP_APP_SECRET: z.string().min(1).optional(),
     WHATSAPP_TEMPLATE_RECOMMENDATION: z.string().min(1).optional(),
     WHATSAPP_TEMPLATE_LANGUAGE: z.string().min(2).default("en"),
+    WHATSAPP_GRAPH_API_VERSION: z
+      .string()
+      .regex(/^v\d+\.\d+$/u)
+      .default("v21.0"),
     PUBLIC_APP_BASE_URL: z.string().url().optional(),
     GROWTH_MARKET_MIN_ANALYSED_JOBS: z.coerce
       .number()
