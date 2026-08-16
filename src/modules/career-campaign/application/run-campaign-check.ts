@@ -63,6 +63,7 @@ export type CampaignCheckDependencies = {
     minScore: number;
   };
   whatsappOptedIn?: (userId: string) => Promise<boolean>;
+  telegramOptedIn?: (userId: string) => Promise<boolean>;
 };
 
 export type CampaignCheckResult = {
@@ -220,6 +221,9 @@ async function continueRun(
     const whatsappOk = deps.whatsappOptedIn
       ? await deps.whatsappOptedIn(command.userId)
       : false;
+    const telegramOk = deps.telegramOptedIn
+      ? await deps.telegramOptedIn(command.userId)
+      : false;
 
     for (const item of eligible) {
       const { recommendation, created } =
@@ -288,6 +292,24 @@ async function continueRun(
             listingId: item.listingId,
           },
           idempotencyKey: `rec:${recommendation.id}:whatsapp`,
+          scheduledAt: deps.now().toISOString(),
+        });
+      }
+
+      if (telegramOk) {
+        await deps.repository.enqueueNotification({
+          id: deps.createId(),
+          userId: command.userId,
+          eventType: "recommendation_created",
+          channel: "telegram",
+          relatedEntityType: "job_recommendation",
+          relatedEntityId: recommendation.id,
+          payload: {
+            title: item.title ?? "New job recommendation",
+            listingId: item.listingId,
+            reviewPath: "/app/recommendations",
+          },
+          idempotencyKey: `rec:${recommendation.id}:telegram`,
           scheduledAt: deps.now().toISOString(),
         });
       }

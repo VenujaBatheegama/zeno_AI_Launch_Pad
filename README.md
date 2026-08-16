@@ -27,7 +27,7 @@ Requirements: Node.js 22+ and pnpm.
 
 1. Create a Supabase project.
 2. Run the numbered files in `supabase/migrations` through
-   `0016_whatsapp_connection.sql`
+   `0017_telegram_connection.sql`
    in order (or apply pending migrations with the Supabase CLI). Migration
    `0009` adds the ESCO resolution cache, updates planned-query sources to
    `exact_role` / `esco_preferred` / `esco_alternative`, and drops the Smart
@@ -37,7 +37,8 @@ Requirements: Node.js 22+ and pnpm.
    the original one-watch-per-user table. Migration `0014` adds multi-campaign
    `job_search_campaigns`, Instant Search sessions, and campaign listing
    attribution. Migration `0015` adds campaign-aware Growth, and `0016` adds
-   secure WhatsApp linking and inbound-message idempotency.
+   secure WhatsApp linking and inbound-message idempotency. Migration `0017`
+   adds Telegram linking, webhook idempotency, and notification delivery.
 3. Copy `.env.example` to `.env.local` and fill in the Supabase service-role
    key and `GROQ_API_KEY`.
 4. Configure hybrid job sources via `JOB_SOURCES` (default
@@ -136,6 +137,14 @@ one-time code, deliver proactive recommendation templates, and handle the
 Apply migration `0016` and follow `docs/whatsapp-integration.md` to configure
 either Meta Cloud API or Twilio's WhatsApp Sandbox. Both transports reuse the
 same linking, commands, opt-in state, notification queue, and campaign logic.
+
+## Telegram MVP
+
+For the competition demo, Telegram can be enabled independently of WhatsApp.
+Users connect with a short-lived bot deep link; Zeno then supports proactive
+recommendation alerts and `/help`, `/jobs`, `/inbox`, `/applications`,
+`/growth`, `/stop`, and `/start`. Apply migration `0017` and follow
+`docs/telegram-integration.md` for BotFather, Vercel, and webhook setup.
 
 ## Verification
 

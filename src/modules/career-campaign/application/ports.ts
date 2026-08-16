@@ -212,6 +212,7 @@ export interface CareerCampaignRepository {
   }>;
   claimPendingNotifications(input: {
     channel?: NotificationChannel;
+    userId?: string;
     limit: number;
     now: string;
   }): Promise<NotificationOutboxItem[]>;
@@ -291,6 +292,37 @@ export interface CareerCampaignRepository {
   deleteWhatsAppLink(userId: string): Promise<void>;
   setWhatsAppOptIn(userId: string, at: string): Promise<void>;
   setWhatsAppOptOut(userId: string, at: string): Promise<void>;
+
+  getTelegramLink(userId: string): Promise<{
+    userId: string;
+    chatId: string;
+    username: string | null;
+    optedInAt: string | null;
+    optedOutAt: string | null;
+  } | null>;
+  getUserIdByTelegramChatId(chatId: string): Promise<string | null>;
+  createTelegramLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }): Promise<void>;
+  claimTelegramLinkCode(input: {
+    codeHash: string;
+    chatId: string;
+    username: string | null;
+    claimedAt: string;
+  }): Promise<string | null>;
+  claimTelegramInboundMessage(input: {
+    updateId: string;
+    chatId: string;
+    receivedAt: string;
+  }): Promise<boolean>;
+  releaseTelegramInboundMessage(updateId: string): Promise<void>;
+  deleteTelegramLink(userId: string): Promise<void>;
+  setTelegramOptIn(userId: string, at: string): Promise<void>;
+  setTelegramOptOut(userId: string, at: string): Promise<void>;
 }
 
 export type PendingNotification = NotificationOutboxItem;

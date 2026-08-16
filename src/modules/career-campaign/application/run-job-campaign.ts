@@ -44,6 +44,7 @@ export async function runJobCampaignNow(
       runId: string;
     }) => Promise<{ recommended: number; status: string; listingIds: string[] }>;
     linkedInEnabled?: boolean;
+    telegramEnabled?: boolean;
     log?: FreshWatchLogger;
   },
 ): Promise<RunJobCampaignNowResult> {
@@ -128,6 +129,7 @@ export async function runJobCampaignNow(
           now: deps.now,
           caps: deps.caps,
           linkedInEnabled: deps.linkedInEnabled,
+          telegramEnabled: deps.telegramEnabled,
           log,
         },
       );

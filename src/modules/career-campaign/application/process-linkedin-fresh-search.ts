@@ -54,6 +54,7 @@ export async function processLinkedInFreshSearch(
     now: () => Date;
     caps: FreshWatchCaps;
     linkedInEnabled?: boolean;
+    telegramEnabled?: boolean;
     log?: FreshWatchLogger;
   },
 ): Promise<LinkedInFreshSearchResult> {
@@ -455,6 +456,32 @@ export async function processLinkedInFreshSearch(
         idempotencyKey: `rec:${recommendation.id}:in_app`,
         scheduledAt: nowIso,
       });
+      const telegramLink = await deps.campaignRepository.getTelegramLink(
+        campaign.userId,
+      );
+      if (
+        deps.telegramEnabled &&
+        telegramLink?.optedInAt &&
+        !telegramLink.optedOutAt
+      ) {
+        await deps.campaignRepository.enqueueNotification({
+          id: deps.createId(),
+          userId: campaign.userId,
+          eventType: "recommendation_created",
+          channel: "telegram",
+          relatedEntityType: "job_recommendation",
+          relatedEntityId: recommendation.id,
+          payload: {
+            title: analysis.title ?? item.job.title,
+            listingId: item.listingId,
+            freshness: "newly_discovered",
+            campaignId: campaign.id,
+            reviewPath: "/app/recommendations",
+          },
+          idempotencyKey: `rec:${recommendation.id}:telegram`,
+          scheduledAt: nowIso,
+        });
+      }
       if (queued) {
         empty.recommendationsCreated += 1;
         await deps.repository.updateCampaign(campaign.id, {
