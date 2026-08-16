@@ -52,6 +52,21 @@ export class InMemoryCareerCampaignRepository
     { userId: string; expiresAt: string; usedAt: string | null }
   >();
   whatsappInboundMessages = new Set<string>();
+  telegram = new Map<
+    string,
+    {
+      userId: string;
+      chatId: string;
+      username: string | null;
+      optedInAt: string | null;
+      optedOutAt: string | null;
+    }
+  >();
+  telegramLinkCodes = new Map<
+    string,
+    { userId: string; expiresAt: string; usedAt: string | null }
+  >();
+  telegramInboundMessages = new Set<string>();
 
   async createOrGetRun(input: CreateRunInput) {
     const existingId = this.runsByKey.get(input.idempotencyKey);
@@ -445,6 +460,7 @@ export class InMemoryCareerCampaignRepository
 
   async claimPendingNotifications(input: {
     channel?: NotificationOutboxItem["channel"];
+    userId?: string;
     limit: number;
     now: string;
   }) {
@@ -453,6 +469,7 @@ export class InMemoryCareerCampaignRepository
       if (claimed.length >= input.limit) break;
       if (item.status !== "pending" && item.status !== "failed") continue;
       if (input.channel && item.channel !== input.channel) continue;
+      if (input.userId && item.userId !== input.userId) continue;
       if (item.scheduledAt > input.now) continue;
       const next = {
         ...item,
@@ -681,5 +698,98 @@ export class InMemoryCareerCampaignRepository
     const link = this.whatsapp.get(userId);
     if (!link) return;
     this.whatsapp.set(userId, { ...link, optedOutAt: at });
+  }
+
+  async getTelegramLink(userId: string) {
+    return this.telegram.get(userId) ?? null;
+  }
+
+  async getUserIdByTelegramChatId(chatId: string) {
+    for (const link of this.telegram.values()) {
+      if (link.chatId === chatId) return link.userId;
+    }
+    return null;
+  }
+
+  async createTelegramLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }) {
+    void input.id;
+    for (const [hash, code] of this.telegramLinkCodes) {
+      if (code.userId === input.userId && !code.usedAt) {
+        this.telegramLinkCodes.set(hash, { ...code, usedAt: input.createdAt });
+      }
+    }
+    this.telegramLinkCodes.set(input.codeHash, {
+      userId: input.userId,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+    });
+  }
+
+  async claimTelegramLinkCode(input: {
+    codeHash: string;
+    chatId: string;
+    username: string | null;
+    claimedAt: string;
+  }) {
+    const code = this.telegramLinkCodes.get(input.codeHash);
+    if (
+      !code ||
+      code.usedAt ||
+      new Date(code.expiresAt).getTime() <= new Date(input.claimedAt).getTime()
+    ) {
+      return null;
+    }
+    const existingUserId = await this.getUserIdByTelegramChatId(input.chatId);
+    if (existingUserId && existingUserId !== code.userId) return null;
+    this.telegramLinkCodes.set(input.codeHash, {
+      ...code,
+      usedAt: input.claimedAt,
+    });
+    this.telegram.set(code.userId, {
+      userId: code.userId,
+      chatId: input.chatId,
+      username: input.username,
+      optedInAt: input.claimedAt,
+      optedOutAt: null,
+    });
+    return code.userId;
+  }
+
+  async claimTelegramInboundMessage(input: {
+    updateId: string;
+    chatId: string;
+    receivedAt: string;
+  }) {
+    void input.chatId;
+    void input.receivedAt;
+    if (this.telegramInboundMessages.has(input.updateId)) return false;
+    this.telegramInboundMessages.add(input.updateId);
+    return true;
+  }
+
+  async releaseTelegramInboundMessage(updateId: string) {
+    this.telegramInboundMessages.delete(updateId);
+  }
+
+  async deleteTelegramLink(userId: string) {
+    this.telegram.delete(userId);
+  }
+
+  async setTelegramOptIn(userId: string, at: string) {
+    const link = this.telegram.get(userId);
+    if (!link) return;
+    this.telegram.set(userId, { ...link, optedInAt: at, optedOutAt: null });
+  }
+
+  async setTelegramOptOut(userId: string, at: string) {
+    const link = this.telegram.get(userId);
+    if (!link) return;
+    this.telegram.set(userId, { ...link, optedOutAt: at });
   }
 }

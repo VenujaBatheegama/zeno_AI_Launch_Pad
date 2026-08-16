@@ -7,13 +7,19 @@ import type {
 export async function deliverPendingNotifications(
   deps: {
     repository: CareerCampaignRepository;
-    senders: Partial<Record<"in_app" | "whatsapp", NotificationSender>>;
+    senders: Partial<
+      Record<"in_app" | "whatsapp" | "telegram", NotificationSender>
+    >;
     now: () => Date;
+    channel?: "in_app" | "whatsapp" | "telegram";
+    userId?: string;
     limit?: number;
   },
 ): Promise<{ delivered: number; failed: number; suppressed: number }> {
   const now = deps.now().toISOString();
   const pending = await deps.repository.claimPendingNotifications({
+    ...(deps.channel ? { channel: deps.channel } : {}),
+    ...(deps.userId ? { userId: deps.userId } : {}),
     limit: deps.limit ?? 20,
     now,
   });
@@ -35,6 +41,18 @@ export async function deliverPendingNotifications(
       }
     }
 
+    if (item.channel === "telegram") {
+      const link = await deps.repository.getTelegramLink(item.userId);
+      if (!link?.optedInAt || link.optedOutAt) {
+        await deps.repository.updateNotification(item.id, {
+          status: "suppressed",
+          lastError: "User not opted in to Telegram",
+        });
+        suppressed += 1;
+        continue;
+      }
+    }
+
     const sender = deps.senders[item.channel];
     if (!sender) {
       if (item.channel === "in_app") {
@@ -48,7 +66,7 @@ export async function deliverPendingNotifications(
       }
       await deps.repository.updateNotification(item.id, {
         status: "failed",
-        lastError: "WhatsApp sender not configured",
+        lastError: `${item.channel} sender not configured`,
       });
       failed += 1;
       continue;

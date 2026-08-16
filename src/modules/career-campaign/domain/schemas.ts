@@ -58,7 +58,11 @@ export const campaignRunStatusSchema = z.enum([
 ]);
 export type CampaignRunStatus = z.infer<typeof campaignRunStatusSchema>;
 
-export const notificationChannelSchema = z.enum(["in_app", "whatsapp"]);
+export const notificationChannelSchema = z.enum([
+  "in_app",
+  "whatsapp",
+  "telegram",
+]);
 export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
 
 export const notificationStatusSchema = z.enum([

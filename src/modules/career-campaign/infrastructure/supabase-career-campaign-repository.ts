@@ -171,6 +171,14 @@ type WhatsAppLinkRow = {
   opted_out_at: string | null;
 };
 
+type TelegramLinkRow = {
+  user_id: string;
+  chat_id: string;
+  username: string | null;
+  opted_in_at: string | null;
+  opted_out_at: string | null;
+};
+
 const ACTIVE_RECOMMENDATION_STATUSES = [
   "pending_review",
   "saved",
@@ -942,6 +950,7 @@ export class SupabaseCareerCampaignRepository
 
   async claimPendingNotifications(input: {
     channel?: NotificationOutboxItem["channel"];
+    userId?: string;
     limit: number;
     now: string;
   }): Promise<NotificationOutboxItem[]> {
@@ -954,6 +963,9 @@ export class SupabaseCareerCampaignRepository
       .limit(input.limit);
     if (input.channel) {
       query = query.eq("channel", input.channel);
+    }
+    if (input.userId) {
+      query = query.eq("user_id", input.userId);
     }
 
     const { data, error } = await query;
@@ -1420,6 +1432,153 @@ export class SupabaseCareerCampaignRepository
       .eq("user_id", userId);
     if (error) {
       throw persistenceError("WhatsApp opt-out could not be saved.", error);
+    }
+  }
+
+  async getTelegramLink(userId: string): Promise<{
+    userId: string;
+    chatId: string;
+    username: string | null;
+    optedInAt: string | null;
+    optedOutAt: string | null;
+  } | null> {
+    const { data, error } = await this.client
+      .from("telegram_user_links")
+      .select()
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      throw persistenceError("Telegram link could not be loaded.", error);
+    }
+    if (!data) return null;
+    const row = data as TelegramLinkRow;
+    return {
+      userId: row.user_id,
+      chatId: row.chat_id,
+      username: row.username,
+      optedInAt: row.opted_in_at,
+      optedOutAt: row.opted_out_at,
+    };
+  }
+
+  async getUserIdByTelegramChatId(chatId: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from("telegram_user_links")
+      .select("user_id")
+      .eq("chat_id", chatId)
+      .maybeSingle();
+    if (error) {
+      throw persistenceError("Telegram user could not be resolved.", error);
+    }
+    return data ? (data as { user_id: string }).user_id : null;
+  }
+
+  async createTelegramLinkCode(input: {
+    id: string;
+    userId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }): Promise<void> {
+    const { error: invalidateError } = await this.client
+      .from("telegram_link_codes")
+      .update({ used_at: input.createdAt })
+      .eq("user_id", input.userId)
+      .is("used_at", null);
+    if (invalidateError) {
+      throw persistenceError(
+        "Previous Telegram connection codes could not be invalidated.",
+        invalidateError,
+      );
+    }
+
+    const { error } = await this.client.from("telegram_link_codes").insert({
+      id: input.id,
+      user_id: input.userId,
+      code_hash: input.codeHash,
+      expires_at: input.expiresAt,
+      created_at: input.createdAt,
+    });
+    if (error) {
+      throw persistenceError(
+        "Telegram connection code could not be saved.",
+        error,
+      );
+    }
+  }
+
+  async claimTelegramLinkCode(input: {
+    codeHash: string;
+    chatId: string;
+    username: string | null;
+    claimedAt: string;
+  }): Promise<string | null> {
+    const { data, error } = await this.client.rpc("claim_telegram_link_code", {
+      p_code_hash: input.codeHash,
+      p_chat_id: input.chatId,
+      p_username: input.username,
+      p_claimed_at: input.claimedAt,
+    });
+    if (error) {
+      throw persistenceError("Telegram connection code could not be claimed.", error);
+    }
+    return typeof data === "string" ? data : null;
+  }
+
+  async claimTelegramInboundMessage(input: {
+    updateId: string;
+    chatId: string;
+    receivedAt: string;
+  }): Promise<boolean> {
+    const { error } = await this.client
+      .from("telegram_inbound_messages")
+      .insert({
+        update_id: input.updateId,
+        chat_id: input.chatId,
+        received_at: input.receivedAt,
+      });
+    if (!error) return true;
+    if (isUniqueViolation(error)) return false;
+    throw persistenceError("Telegram message could not be claimed.", error);
+  }
+
+  async releaseTelegramInboundMessage(updateId: string): Promise<void> {
+    const { error } = await this.client
+      .from("telegram_inbound_messages")
+      .delete()
+      .eq("update_id", updateId);
+    if (error) {
+      throw persistenceError("Telegram message claim could not be released.", error);
+    }
+  }
+
+  async deleteTelegramLink(userId: string): Promise<void> {
+    const { error } = await this.client
+      .from("telegram_user_links")
+      .delete()
+      .eq("user_id", userId);
+    if (error) {
+      throw persistenceError("Telegram connection could not be removed.", error);
+    }
+  }
+
+  async setTelegramOptIn(userId: string, at: string): Promise<void> {
+    const { error } = await this.client
+      .from("telegram_user_links")
+      .update({ opted_in_at: at, opted_out_at: null })
+      .eq("user_id", userId);
+    if (error) {
+      throw persistenceError("Telegram opt-in could not be saved.", error);
+    }
+  }
+
+  async setTelegramOptOut(userId: string, at: string): Promise<void> {
+    const { error } = await this.client
+      .from("telegram_user_links")
+      .update({ opted_out_at: at })
+      .eq("user_id", userId);
+    if (error) {
+      throw persistenceError("Telegram opt-out could not be saved.", error);
     }
   }
 

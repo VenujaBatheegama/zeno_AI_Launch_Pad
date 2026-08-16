@@ -147,6 +147,21 @@ const configSchema = z
     TWILIO_WHATSAPP_NUMBER: z.string().min(8).optional(),
     TWILIO_WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
     TWILIO_SANDBOX_JOIN_CODE: z.string().min(1).optional(),
+    TELEGRAM_ENABLED: z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => value === "true"),
+    TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+    TELEGRAM_BOT_USERNAME: z
+      .string()
+      .regex(/^@?[a-z0-9_]{5,}$/iu)
+      .optional(),
+    TELEGRAM_WEBHOOK_SECRET: z
+      .string()
+      .min(16)
+      .max(256)
+      .regex(/^[a-z0-9_-]+$/iu)
+      .optional(),
     PUBLIC_APP_BASE_URL: z.string().url().optional(),
     GROWTH_MARKET_MIN_ANALYSED_JOBS: z.coerce
       .number()

@@ -121,6 +121,11 @@ import {
   getWhatsAppConnection,
 } from "@/modules/career-campaign/application/whatsapp-connection";
 import {
+  createTelegramConnectionCode,
+  disconnectTelegram,
+  getTelegramConnection,
+} from "@/modules/career-campaign/application/telegram-connection";
+import {
   aggregateCampaignGaps,
   growthActionCopy,
 } from "@/modules/career-campaign/domain/gap-aggregation";
@@ -128,6 +133,7 @@ import { applyFeedbackAdjustments } from "@/modules/career-campaign/domain/feedb
 import { GroqCoverLetterGenerator } from "@/modules/career-campaign/infrastructure/groq-cover-letter-generator";
 import { SupabaseCareerCampaignRepository } from "@/modules/career-campaign/infrastructure/supabase-career-campaign-repository";
 import { SupabaseFreshWatchRepository } from "@/modules/career-campaign/infrastructure/supabase-fresh-watch-repository";
+import { TelegramBotNotificationSender } from "@/modules/career-campaign/infrastructure/telegram-bot-sender";
 import { TwilioWhatsAppSender } from "@/modules/career-campaign/infrastructure/twilio-whatsapp-sender";
 import { WhatsAppCloudNotificationSender } from "@/modules/career-campaign/infrastructure/whatsapp-cloud-sender";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
@@ -791,6 +797,31 @@ export function getCareerCampaignApplication(
   return createCareerCampaignApplication(userId);
 }
 
+function createTelegramNotificationSender(
+  config: ReturnType<typeof getServerConfig>,
+  repository: SupabaseCareerCampaignRepository,
+): TelegramBotNotificationSender | null {
+  const botToken = config.TELEGRAM_BOT_TOKEN;
+  const publicBaseUrl = config.PUBLIC_APP_BASE_URL;
+  if (!telegramConfigured(config) || !botToken || !publicBaseUrl) return null;
+  return new TelegramBotNotificationSender({
+    botToken,
+    publicBaseUrl,
+    resolveChatId: async (uid) =>
+      (await repository.getTelegramLink(uid))?.chatId ?? null,
+  });
+}
+
+function telegramConfigured(
+  config: ReturnType<typeof getServerConfig>,
+): boolean {
+  return Boolean(
+    config.TELEGRAM_ENABLED &&
+      config.TELEGRAM_BOT_TOKEN &&
+      config.PUBLIC_APP_BASE_URL,
+  );
+}
+
 export type CareerFriendApplication = ReturnType<
   typeof createCareerFriendApplication
 >;
@@ -926,6 +957,11 @@ function createCareerCampaignApplication(userId: string) {
           whatsappOptedIn: async (uid) => {
             if (!config.WHATSAPP_ENABLED) return false;
             const link = await repository.getWhatsAppLink(uid);
+            return Boolean(link?.optedInAt && !link.optedOutAt);
+          },
+          telegramOptedIn: async (uid) => {
+            if (!telegramConfigured(config)) return false;
+            const link = await repository.getTelegramLink(uid);
             return Boolean(link?.optedInAt && !link.optedOutAt);
           },
           executeSearch: async (uid) => {
@@ -1133,13 +1169,24 @@ function createCareerCampaignApplication(userId: string) {
     createWhatsAppConnectionCode: () =>
       createWhatsAppConnectionCode({ userId, repository, now }),
     disconnectWhatsApp: () => disconnectWhatsApp(userId, repository),
-    deliverNotifications: () => {
+    getTelegramConnection: () => getTelegramConnection(userId, repository),
+    createTelegramConnectionCode: () =>
+      createTelegramConnectionCode({ userId, repository, now }),
+    disconnectTelegram: () => disconnectTelegram(userId, repository),
+    deliverNotifications: (input?: {
+      channel?: "in_app" | "whatsapp" | "telegram";
+      userId?: string;
+    }) => {
       let whatsappSender:
         | TwilioWhatsAppSender
         | WhatsAppCloudNotificationSender
         | null = null;
       const resolveWaId = async (uid: string) =>
         (await repository.getWhatsAppLink(uid))?.waId ?? null;
+      const telegramSender = createTelegramNotificationSender(
+        config,
+        repository,
+      );
 
       if (config.WHATSAPP_ENABLED && config.WHATSAPP_PROVIDER === "twilio") {
         const from =
@@ -1174,9 +1221,12 @@ function createCareerCampaignApplication(userId: string) {
       return deliverPendingNotifications({
         repository,
         now,
+        ...(input?.channel ? { channel: input.channel } : {}),
+        ...(input?.userId ? { userId: input.userId } : {}),
         senders: {
           in_app: new InAppNotificationSender(),
           ...(whatsappSender ? { whatsapp: whatsappSender } : {}),
+          ...(telegramSender ? { telegram: telegramSender } : {}),
         },
       });
     },
@@ -1390,6 +1440,7 @@ function createCareerCampaignApplication(userId: string) {
           now,
           caps: freshWatchCapsFromConfig(config),
           linkedInEnabled,
+          telegramEnabled: telegramConfigured(config),
           linkedIn: {
             searchFreshCards: (input) => linkedIn.searchFreshCards(input),
             fetchJobDescription: (id) => linkedIn.fetchJobDescription(id),
@@ -1438,6 +1489,10 @@ function createCareerCampaignApplication(userId: string) {
         userId,
         campaignId,
         mode: "market_refined",
+      });
+      await getCareerCampaignApplication(userId).deliverNotifications({
+        userId,
+        channel: "telegram",
       });
       return result;
     },
@@ -1551,6 +1606,7 @@ export async function runScheduledDiscoveryTick() {
           now: () => new Date(),
           caps: freshWatchCapsFromConfig(config),
           linkedInEnabled,
+          telegramEnabled: telegramConfigured(config),
         },
       );
       if (
@@ -1603,10 +1659,17 @@ export async function runScheduledDiscoveryTick() {
       };
     },
     deliverNotifications: async () => {
+      const telegramSender = createTelegramNotificationSender(
+        config,
+        campaignRepository,
+      );
       const result = await deliverPendingNotifications(
         {
           repository: campaignRepository,
-          senders: { in_app: new InAppNotificationSender() },
+          senders: {
+            in_app: new InAppNotificationSender(),
+            ...(telegramSender ? { telegram: telegramSender } : {}),
+          },
           now: () => new Date(),
         },
       );
