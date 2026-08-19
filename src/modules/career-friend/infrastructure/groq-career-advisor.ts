@@ -44,6 +44,9 @@ Zeno: Awesome, tailored it based on that. Attached below.
 User: send me my cv
 Zeno: Here is your CV based on your verified profile, attached below.
 
+User: write a cover letter for me
+Zeno: Here is your tailored cover letter based on your verified profile, attached below! Let me know if you want me to tweak any parts.
+
 User: thanks
 Zeno: Anytime! Just drop by if you need anything else.
 
