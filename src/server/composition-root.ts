@@ -915,7 +915,7 @@ function createCareerFriendApplication(userId: string) {
     askTelegram: async (message: string) => {
       const conversationId = await repository.findOrCreateTelegramConversation(userId);
       const snapshot = await getSnapshot();
-      return askCareerFriend(
+      const reply = await askCareerFriend(
         {
           userId,
           conversationId,
@@ -925,6 +925,39 @@ function createCareerFriendApplication(userId: string) {
         },
         { repository, advisor, createId: randomUUID, now },
       );
+
+      let attachment: { bytes: Uint8Array; filename: string } | undefined;
+      const cvApp = createCvTailoringApplication(userId);
+      const shouldAttachCv =
+        reply.answer.toLowerCase().includes("attached") ||
+        /(?:send|give|download|export|tailor).*(?:cv|resume)/iu.test(message);
+
+      if (shouldAttachCv) {
+        try {
+          const variants = await cvApp.listForUser({
+            statuses: ["ready", "ready_to_render"],
+            limit: 1,
+          });
+          const target = variants[0];
+          if (target) {
+            if (target.status === "ready") {
+              const dl = await cvApp.download({ variantId: target.id });
+              attachment = { bytes: dl.bytes, filename: dl.filename };
+            } else if (target.status === "ready_to_render") {
+              const rendered = await cvApp.render({ variantId: target.id });
+              const dl = await cvApp.download({ variantId: rendered.id });
+              attachment = { bytes: dl.bytes, filename: dl.filename };
+            }
+          }
+        } catch {
+          // If attachment download fails, proceed with the text answer
+        }
+      }
+
+      return {
+        ...reply,
+        attachment,
+      };
     },
   };
 }

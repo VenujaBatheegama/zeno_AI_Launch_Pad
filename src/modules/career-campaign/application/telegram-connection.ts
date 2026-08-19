@@ -75,10 +75,23 @@ export async function handleTelegramInboundMessage(input: {
   text: string | null;
   repository: CareerCampaignRepository;
   sendText: (chatId: string, text: string) => Promise<void>;
+  sendChatAction?: (
+    chatId: string,
+    action?: "typing" | "upload_document",
+  ) => Promise<void>;
+  sendDocument?: (
+    chatId: string,
+    document: Uint8Array | Buffer,
+    filename: string,
+    caption?: string,
+  ) => Promise<void>;
   askAgent?: (agentInput: {
     userId: string;
     message: string;
-  }) => Promise<{ answer: string }>;
+  }) => Promise<{
+    answer: string;
+    attachment?: { bytes: Uint8Array | Buffer; filename: string };
+  }>;
   publicBaseUrl?: string;
   now?: () => Date;
 }): Promise<TelegramInboundResult> {
@@ -131,6 +144,9 @@ export async function handleTelegramInboundMessage(input: {
     await input.sendText(input.chatId, unlinkedDeflection);
     return { status: "replied", command: "unlinked", userId: null };
   }
+
+  // Trigger typing bubble immediately so user sees the agent is typing
+  await input.sendChatAction?.(input.chatId, "typing").catch(() => undefined);
 
   const command = normalizeCommand(text);
   const baseUrl = input.publicBaseUrl?.replace(/\/+$/u, "") ?? "";
@@ -203,16 +219,41 @@ export async function handleTelegramInboundMessage(input: {
     return { status: "replied", command: "jailbreak_deflected", userId };
   }
 
-  // Route to Conversational Agent
+  // Route to Conversational Agent with typing pulse & document attachment support
   if (input.askAgent) {
-    const sanitized = sanitizeUserInput(text);
-    const agentResult = await input.askAgent({
-      userId,
-      message: sanitized,
-    });
-    const formatted = formatTelegramAppLinks(agentResult.answer, input.publicBaseUrl);
-    await input.sendText(input.chatId, formatted);
-    return { status: "replied", command: "conversational", userId };
+    let typingInterval: NodeJS.Timeout | undefined;
+    if (input.sendChatAction) {
+      typingInterval = setInterval(() => {
+        input.sendChatAction?.(input.chatId, "typing").catch(() => undefined);
+      }, 4000);
+    }
+
+    try {
+      const sanitized = sanitizeUserInput(text);
+      const agentResult = await input.askAgent({
+        userId,
+        message: sanitized,
+      });
+      const formatted = formatTelegramAppLinks(
+        agentResult.answer,
+        input.publicBaseUrl,
+      );
+
+      if (agentResult.attachment && input.sendDocument) {
+        await input.sendChatAction?.(input.chatId, "upload_document").catch(() => undefined);
+        await input.sendDocument(
+          input.chatId,
+          agentResult.attachment.bytes,
+          agentResult.attachment.filename,
+          formatted,
+        );
+      } else {
+        await input.sendText(input.chatId, formatted);
+      }
+      return { status: "replied", command: "conversational", userId };
+    } finally {
+      if (typingInterval) clearInterval(typingInterval);
+    }
   }
 
   await input.sendText(

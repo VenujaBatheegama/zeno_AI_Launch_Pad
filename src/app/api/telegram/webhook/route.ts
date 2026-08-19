@@ -76,10 +76,16 @@ export async function POST(request: Request) {
       repository,
       publicBaseUrl: config.PUBLIC_APP_BASE_URL,
       sendText: (targetChatId, text) => sender.sendText(targetChatId, text),
+      sendChatAction: (targetChatId, action) => sender.sendChatAction(targetChatId, action),
+      sendDocument: (targetChatId, document, filename, caption) =>
+        sender.sendDocument(targetChatId, document, filename, caption),
       askAgent: async ({ userId, message }) => {
         const app = getCareerFriendApplication(userId);
         const result = await app.askTelegram(message);
-        return { answer: result.answer };
+        return {
+          answer: result.answer,
+          attachment: result.attachment,
+        };
       },
     });
   } catch (error) {

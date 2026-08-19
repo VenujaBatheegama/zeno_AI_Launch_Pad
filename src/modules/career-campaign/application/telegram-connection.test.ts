@@ -205,4 +205,50 @@ describe("Telegram connection", () => {
     expect(result).toMatchObject({ status: "replied", command: "unlinked", userId: null });
     expect(replies[0]).toContain("https://zeno.example/app/settings");
   });
+
+  it("triggers typing chat action and sends document attachment when present", async () => {
+    const repository = new InMemoryCareerCampaignRepository();
+    repository.telegram.set("user-1", {
+      userId: "user-1",
+      chatId: "12345",
+      username: "venuja",
+      optedInAt: now().toISOString(),
+      optedOutAt: null,
+    });
+    const chatActions: string[] = [];
+    const documents: Array<{ bytes: Uint8Array; filename: string; caption?: string }> = [];
+
+    const dummyPdf = new Uint8Array([37, 80, 68, 70]); // %PDF
+    const result = await handleTelegramInboundMessage({
+      updateId: "1008",
+      chatId: "12345",
+      username: "venuja",
+      text: "Send me my tailored CV",
+      repository,
+      now,
+      sendText: async () => {},
+      sendChatAction: async (_chatId, action) => {
+        chatActions.push(action ?? "typing");
+      },
+      sendDocument: async (_chatId, document, filename, caption) => {
+        documents.push({ bytes: document as Uint8Array, filename, caption });
+      },
+      askAgent: async () => {
+        return {
+          answer: "Awesome, tailored it based on that. Attached below.",
+          attachment: {
+            bytes: dummyPdf,
+            filename: "zeno-cv-tailored.pdf",
+          },
+        };
+      },
+    });
+
+    expect(result).toMatchObject({ status: "replied", command: "conversational", userId: "user-1" });
+    expect(chatActions).toContain("typing");
+    expect(chatActions).toContain("upload_document");
+    expect(documents.length).toBe(1);
+    expect(documents[0]?.filename).toBe("zeno-cv-tailored.pdf");
+    expect(documents[0]?.caption).toContain("Attached below.");
+  });
 });
