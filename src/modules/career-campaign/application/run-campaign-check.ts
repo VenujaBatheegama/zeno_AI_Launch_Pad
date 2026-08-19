@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CareerCampaignError } from "../domain/errors";
+import { canResurface } from "../domain/resurfacing";
 import {
   campaignRunTriggerSchema,
   type CampaignRun,
@@ -64,6 +65,8 @@ export type CampaignCheckDependencies = {
   };
   whatsappOptedIn?: (userId: string) => Promise<boolean>;
   telegramOptedIn?: (userId: string) => Promise<boolean>;
+  /** Days before a dismissed recommendation can be re-surfaced when a new sighting appears. */
+  resurfacingWindowDays?: number;
 };
 
 export type CampaignCheckResult = {
@@ -331,6 +334,36 @@ async function continueRun(
       failedCount: failed,
       errorSummary: errors.length ? errors.slice(0, 8).join("; ") : null,
     });
+
+    // Re-surfacing: re-queue eligible dismissed recommendations (Jobs-tab only).
+    const windowDays = deps.resurfacingWindowDays ?? 30;
+    try {
+      const candidates = await deps.repository.listResurfaceCandidates({
+        userId: command.userId,
+        windowDays,
+        asOf: deps.now().toISOString(),
+      });
+      for (const candidate of candidates) {
+        if (
+          canResurface({
+            dismissedAt: candidate.dismissedAt,
+            lastSeenAt: candidate.lastSeenAt,
+            windowDays,
+            asOf: deps.now().toISOString(),
+          })
+        ) {
+          // Re-queue as pending_review so it appears in the Inbox again.
+          await deps.repository.updateRecommendationDecision({
+            userId: command.userId,
+            recommendationId: candidate.recommendationId,
+            status: "saved",
+            reviewedAt: deps.now().toISOString(),
+          });
+        }
+      }
+    } catch {
+      // Re-surfacing is best-effort; never fail the campaign run for it.
+    }
 
     console.info(
       JSON.stringify({

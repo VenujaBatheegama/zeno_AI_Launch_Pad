@@ -14,6 +14,8 @@ type Filter = "all" | "jobs" | "growth";
 export function UnifiedInbox(props: {
   growth: GrowthInboxItem[];
   jobRecommendations: JobRecommendation[];
+  /** Map of campaign id → campaign name, for attribution badges. Empty map is safe. */
+  campaignNames?: Map<string, string>;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
@@ -85,7 +87,7 @@ export function UnifiedInbox(props: {
         </ul>
       ) : null}
       {jobsVisible ? (
-        <RecommendationInbox recommendations={props.jobRecommendations} />
+        <RecommendationInbox recommendations={props.jobRecommendations} campaignNames={props.campaignNames ?? new Map()} />
       ) : null}
     </div>
   );

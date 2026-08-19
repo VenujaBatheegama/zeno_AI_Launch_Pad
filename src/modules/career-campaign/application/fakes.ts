@@ -244,6 +244,22 @@ export class InMemoryCareerCampaignRepository
     return new Set([...rejected, ...applied]);
   }
 
+  async listResurfaceCandidates(_input: {
+    userId: string;
+    windowDays: number;
+    asOf: string;
+  }): Promise<
+    Array<{
+      recommendationId: string;
+      listingId: string;
+      dismissedAt: string;
+      lastSeenAt: string | null;
+    }>
+  > {
+    // Fake: no re-surfacing in unit tests unless a subclass overrides this.
+    return [];
+  }
+
   async createOrGetPacket(input: CreatePacketInput) {
     const existingId = this.packetsByRec.get(input.recommendationId);
     if (existingId) {

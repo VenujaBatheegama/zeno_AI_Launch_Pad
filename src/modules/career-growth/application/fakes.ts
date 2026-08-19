@@ -36,6 +36,7 @@ export const DEFAULT_GROWTH_CAPS: GrowthCaps = {
   marketMinAnalysedJobs: 5,
   assessmentLeaseMs: 120_000,
   publicAppBaseUrl: "https://zeno.example",
+  preliminaryStallDays: 14,
 };
 
 export class InMemoryCareerGrowthRepository implements CareerGrowthRepository {

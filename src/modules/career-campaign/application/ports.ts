@@ -125,6 +125,24 @@ export interface CareerCampaignRepository {
     userId: string,
   ): Promise<Set<string>>;
   listRejectedOrAppliedListingIds(userId: string): Promise<Set<string>>;
+  /**
+   * Returns dismissed recommendations where the underlying listing has been
+   * newly sighted by a campaign after dismissal AND `windowDays` have passed.
+   * Jobs-tab re-surfacing only — Growth tab is FU-5.
+   */
+  listResurfaceCandidates(input: {
+    userId: string;
+    windowDays: number;
+    asOf: string;
+  }): Promise<
+    Array<{
+      recommendationId: string;
+      listingId: string;
+      dismissedAt: string;
+      lastSeenAt: string | null;
+    }>
+  >;
+
 
   createOrGetPacket(input: CreatePacketInput): Promise<{
     packet: ApplicationPacket;

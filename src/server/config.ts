@@ -169,6 +169,31 @@ const configSchema = z
       .min(1)
       .max(20)
       .default(5),
+    RESURFACING_WINDOW_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .default(30),
+    GROWTH_NUDGE_DELAY_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(90)
+      .default(7),
+    GROWTH_NUDGE_MAX_REMINDERS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(3),
+    GROWTH_PRELIMINARY_STALL_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(90)
+      .default(14),
+
     CAREER_EXTRACTION_CONCURRENCY: z.coerce
       .number()
       .int()

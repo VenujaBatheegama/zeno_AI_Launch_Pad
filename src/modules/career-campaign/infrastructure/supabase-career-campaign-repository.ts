@@ -513,6 +513,74 @@ export class SupabaseCareerCampaignRepository
     ]);
   }
 
+  async listResurfaceCandidates(input: {
+    userId: string;
+    windowDays: number;
+    asOf: string;
+  }): Promise<
+    Array<{
+      recommendationId: string;
+      listingId: string;
+      dismissedAt: string;
+      lastSeenAt: string | null;
+    }>
+  > {
+    // Find rejected recs older than windowDays with a new campaign sighting after dismissal.
+    // We use a raw Supabase RPC-style query via PostgREST — join on campaign_listing_sightings.
+    // The window cutoff: dismissed before (asOf - windowDays).
+    const windowCutoff = new Date(
+      new Date(input.asOf).getTime() - input.windowDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const { data, error } = await this.client
+      .from("job_recommendations")
+      .select(
+        `id, listing_id, reviewed_at,
+         campaign_listing_sightings!inner(seen_at)`,
+      )
+      .eq("user_id", input.userId)
+      .eq("status", "rejected")
+      .lt("reviewed_at", windowCutoff)
+      .limit(100);
+
+    if (error) {
+      // Non-fatal: if the sightings table isn't available yet, skip re-surfacing.
+      return [];
+    }
+
+    type Row = {
+      id: string;
+      listing_id: string;
+      reviewed_at: string;
+      campaign_listing_sightings: Array<{ seen_at: string }> | { seen_at: string };
+    };
+
+    return (data as Row[]).flatMap((row) => {
+      const sightings = Array.isArray(row.campaign_listing_sightings)
+        ? row.campaign_listing_sightings
+        : [row.campaign_listing_sightings];
+      const latestSighting =
+        sightings
+          .map((s) => s.seen_at)
+          .filter(Boolean)
+          .sort()
+          .at(-1) ?? null;
+
+      // Only include rows where the latest sighting is strictly after dismissal
+      if (!latestSighting || latestSighting <= row.reviewed_at) return [];
+
+      return [
+        {
+          recommendationId: row.id,
+          listingId: row.listing_id,
+          dismissedAt: row.reviewed_at,
+          lastSeenAt: latestSighting,
+        },
+      ];
+    });
+  }
+
+
   async createOrGetPacket(input: CreatePacketInput): Promise<{
     packet: ApplicationPacket;
     created: boolean;

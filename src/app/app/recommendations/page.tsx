@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
 import { UnifiedInbox } from "@/modules/career-growth/presentation/unified-inbox";
+import { classifyMissingMigration } from "@/lib/migration-guard";
 import { requireUserId } from "@/server/auth";
 import {
   getCareerCampaignApplication,
@@ -10,16 +11,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function isMissingCampaignSchema(error: unknown): boolean {
-  if (!(error instanceof CareerCampaignError)) return false;
-  if (error.code !== "PERSISTENCE_FAILED") return false;
-  const cause = error.cause as { code?: string; message?: string } | undefined;
-  const message = `${cause?.message ?? ""} ${error.message}`.toLocaleLowerCase();
-  return (
-    cause?.code === "PGRST205" ||
-    message.includes("could not find the table") ||
-    message.includes("schema cache")
-  );
+function wrapCampaignError(error: unknown): unknown {
+  if (error instanceof CareerCampaignError && error.code === "PERSISTENCE_FAILED") {
+    return error;
+  }
+  return null;
 }
 
 export default async function RecommendationsPage() {
@@ -28,19 +24,22 @@ export default async function RecommendationsPage() {
 
   let recommendations: Awaited<ReturnType<typeof app.listRecommendations>> = [];
   let notifications: Awaited<ReturnType<typeof app.listNotifications>> = [];
-  let schemaMissing = false;
+  let migrationGap = null;
 
   let growthItems: Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["listInbox"]>> = [];
+  let campaignNames = new Map<string, string>();
   try {
     recommendations = await app.listRecommendations({
       statuses: ["pending_review", "saved", "accepted"],
       limit: 50,
     });
     notifications = await app.listNotifications(10);
+    const campaigns = await app.listCampaigns();
+    campaignNames = new Map(campaigns.map((c) => [c.id, c.name]));
   } catch (error) {
-    if (isMissingCampaignSchema(error)) {
-      schemaMissing = true;
-    } else {
+    const wrapped = wrapCampaignError(error);
+    migrationGap = wrapped ? classifyMissingMigration(wrapped) : null;
+    if (!migrationGap) {
       throw error;
     }
   }
@@ -49,18 +48,19 @@ export default async function RecommendationsPage() {
   } catch {
     growthItems = [];
   }
+  const schemaMissing = migrationGap !== null;
 
   return (
     <div className="space-y-6">
-      {schemaMissing ? (
+      {migrationGap ? (
         <section className="rounded-[var(--zeno-radius-lg)] border border-amber-300 bg-amber-50 p-5">
           <h2 className="text-lg font-semibold text-amber-950">
-            Campaign database migration required
+            {migrationGap.feature} database migration required
           </h2>
           <p className="mt-1 text-sm leading-6 text-amber-900">
-            Apply{" "}
+            {migrationGap.description} Apply{" "}
             <code className="rounded bg-amber-100 px-1">
-              supabase/migrations/0010_career_campaign.sql
+              {migrationGap.migrationFile}
             </code>{" "}
             in your Supabase SQL editor, then reload.
           </p>
@@ -89,7 +89,7 @@ export default async function RecommendationsPage() {
         </section>
       ) : null}
 
-      <UnifiedInbox growth={growthItems} jobRecommendations={recommendations} />
+      <UnifiedInbox growth={growthItems} jobRecommendations={recommendations} campaignNames={campaignNames} />
 
       <p className="text-sm">
         <Link href="/app/applications" className="font-semibold text-[var(--zeno-primary)]">

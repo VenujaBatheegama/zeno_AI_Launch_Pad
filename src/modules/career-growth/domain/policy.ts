@@ -20,6 +20,41 @@ export const MAX_ASSESSMENT_ATTEMPTS = 5;
 export const ASSESSMENT_LEASE_MS = 120_000;
 export const MALFORMED_OUTPUT_RETRY_LIMIT = 1;
 
+/**
+ * Market-stall: after this many days pending without enough data for a
+ * market-refined assessment, fall back to a preliminary one using the actual
+ * (partial) data rather than staying stuck.
+ */
+export const DEFAULT_PRELIMINARY_STALL_DAYS = 14;
+
+/**
+ * Label attached to the `marketEvidenceSummary` field when a preliminary
+ * assessment is generated from partial market data due to a stall.
+ * FU-5: Surface this label as a badge in growth-recommendation-workspace.
+ */
+export const PRELIMINARY_MARKET_LABEL = "preliminary — limited market data";
+
+/**
+ * Nudge policy for unconfirmed evidence handoffs.
+ * After all milestones complete, Zeno sends a first nudge after this many days,
+ * then repeats up to DEFAULT_NUDGE_MAX_REMINDERS times (each cycle = delay).
+ */
+export const DEFAULT_NUDGE_DELAY_DAYS = 7;
+export const DEFAULT_NUDGE_MAX_REMINDERS = 3;
+
+/**
+ * Feedback signal weights for application outcomes.
+ * Referenced by FU-1 (scoring integration). Defined here so the signal emitter
+ * and the future scoring consumer share the same source of truth.
+ */
+export const APPLICATION_OUTCOME_SIGNAL_WEIGHTS: Record<string, number> = {
+  offer: 1.0,
+  rejected: -0.5,
+  withdrawn: 0.0,
+};
+
+
+
 export const ASSESSMENT_DIMENSION_KEYS = [
   "role_alignment",
   "technical_relevance",

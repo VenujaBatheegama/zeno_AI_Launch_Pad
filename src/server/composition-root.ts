@@ -836,6 +836,72 @@ function telegramConfigured(
   );
 }
 
+function extractRoleAndCompany(text: string): {
+  jobTitle: string;
+  organizationName: string | null;
+} {
+  const clean = text.trim();
+
+  // 1. Match patterns like "H2O.ai hiring Software Engineer in Colombo"
+  const hiringMatch =
+    /([a-zA-Z0-9\s.,&-]+?)\s+(?:is\s+)?hiring\s+(?:a\s+|an\s+)?([a-zA-Z0-9\s.,&/()-]+?)(?:\s+in|\s+at|\s+\||$|\n)/iu.exec(
+      clean,
+    );
+  if (hiringMatch && hiringMatch[1] && hiringMatch[2]) {
+    const org = hiringMatch[1].trim().replace(/^Linkedin\s*/iu, "").trim();
+    const title = hiringMatch[2].trim();
+    if (org.length < 50 && title.length < 60) {
+      return { jobTitle: title, organizationName: org };
+    }
+  }
+
+  // 2. Match patterns like "Software Engineer at H2O.ai" or "Software Engineer — H2O.ai"
+  const atMatch =
+    /([a-zA-Z0-9\s.,&/()-]+?)\s+(?:at|@|—|-)\s+([a-zA-Z0-9\s.,&-]+?)(?:\s+in|\s+\||$|\n)/iu.exec(
+      clean,
+    );
+  if (atMatch && atMatch[1] && atMatch[2]) {
+    const title = atMatch[1].trim();
+    const org = atMatch[2].trim();
+    if (
+      title.length < 60 &&
+      org.length < 50 &&
+      !/^(here|attached|this|the|my|these)$/iu.test(title)
+    ) {
+      return { jobTitle: title, organizationName: org };
+    }
+  }
+
+  // 3. Match common tech roles
+  const commonRoles = [
+    "software engineer",
+    "frontend developer",
+    "frontend engineer",
+    "backend developer",
+    "backend engineer",
+    "full stack developer",
+    "full stack engineer",
+    "mobile developer",
+    "flutter developer",
+    "devops engineer",
+    "cloud engineer",
+    "data engineer",
+    "qa engineer",
+    "ui/ux designer",
+  ];
+  for (const r of commonRoles) {
+    if (clean.toLowerCase().includes(r)) {
+      const formatted = r
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      return { jobTitle: formatted, organizationName: null };
+    }
+  }
+
+  return { jobTitle: "Software Engineer", organizationName: null };
+}
+
 export type CareerFriendApplication = ReturnType<
   typeof createCareerFriendApplication
 >;
@@ -924,9 +990,17 @@ function createCareerFriendApplication(userId: string) {
     }) => {
       const snapshot = await getSnapshot();
       const lowerMsg = input.message.toLowerCase();
-      const isCoverLetter = /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg);
-      const isCv = /(?:\bcv\b|\bresume\b)/iu.test(lowerMsg);
-      const isJobSearch = isJobSearchMessage(input.message) && !isCoverLetter && !isCv;
+      const isCoverLetter =
+        /(?:write|generate|give|send|create|make|tailor|draft|get\s+a|need\s+a|want\s+a).*(?:cover\s*letter|coverletter)|\b(?:cover\s*letter|coverletter)\b/iu.test(
+          lowerMsg,
+        );
+      const isCv =
+        !isCoverLetter &&
+        /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv).*(?:cv|resume)|\b(?:my\s+cv|my\s+resume|send\s+cv|download\s+cv)\b/iu.test(
+          lowerMsg,
+        );
+      const isJobSearch =
+        isJobSearchMessage(input.message) && !isCoverLetter && !isCv;
 
       if (isJobSearch) {
         try {
@@ -947,13 +1021,33 @@ function createCareerFriendApplication(userId: string) {
             },
           );
           if (searchResult.formattedText) {
+            const conversationId = input.conversationId ?? randomUUID();
+            const nowIso = new Date().toISOString();
+            await repository.addMessage({
+              id: input.clientMessageId,
+              userId,
+              conversationId,
+              role: "user",
+              content: input.message,
+              metadata: {},
+              createdAt: nowIso,
+            });
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "assistant",
+              content: searchResult.formattedText,
+              metadata: { isJobSearch: true },
+              createdAt: new Date().toISOString(),
+            });
             return {
-              conversationId: input.conversationId ?? randomUUID(),
+              conversationId,
               messageId: randomUUID(),
               clientMessageId: input.clientMessageId,
               answer: searchResult.formattedText,
               suggestedActions: ["tailor_cv", "growth_sprint"],
-              createdAt: new Date().toISOString(),
+              createdAt: nowIso,
             };
           }
         } catch {
@@ -976,8 +1070,10 @@ function createCareerFriendApplication(userId: string) {
             );
             coverDraftText = cover.draft;
           } else {
+            const extracted = extractRoleAndCompany(input.message);
             const cover = await campaign.generateCustomCoverLetter({
-              jobTitle: snapshot.profile.headline ?? "Software Engineer",
+              jobTitle: extracted.jobTitle,
+              organizationName: extracted.organizationName ?? undefined,
               jobDescription: input.message,
             });
             coverDraftText = cover.draft;
@@ -999,36 +1095,25 @@ function createCareerFriendApplication(userId: string) {
       const conversationId =
         await repository.findOrCreateTelegramConversation(userId);
       const snapshot = await getSnapshot();
-      const reply = await askCareerFriend(
-        {
-          userId,
-          conversationId,
-          clientMessageId: randomUUID(),
-          message,
-          snapshot,
-        },
-        { repository, advisor, createId: randomUUID, now },
-      );
 
       let attachment: { bytes: Uint8Array; filename: string } | undefined;
-      let answerText = reply.answer;
+      let answerText = "";
 
-      const lowerReply = reply.answer.toLowerCase();
       const lowerMsg = message.toLowerCase();
 
       const isCoverLetter =
-        /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg) ||
-        /(?:cover\s*letter|coverletter)/iu.test(lowerReply);
+        /(?:write|generate|give|send|create|make|tailor|draft|get\s+a|need\s+a|want\s+a).*(?:cover\s*letter|coverletter)|\b(?:cover\s*letter|coverletter)\b/iu.test(
+          lowerMsg,
+        );
 
       const isCvRequest =
         !isCoverLetter &&
-        (/(?:\bcv\b|\bresume\b)/iu.test(lowerMsg) ||
-          lowerReply.includes("attached") ||
-          /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv)/iu.test(
-            lowerMsg,
-          ));
+        /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv).*(?:cv|resume)|\b(?:my\s+cv|my\s+resume|send\s+cv|download\s+cv)\b/iu.test(
+          lowerMsg,
+        );
 
-      const isJobSearch = isJobSearchMessage(message) && !isCoverLetter && !isCvRequest;
+      const isJobSearch =
+        isJobSearchMessage(message) && !isCoverLetter && !isCvRequest;
 
       // 1. Natural Language Job Search Flow
       if (isJobSearch) {
@@ -1051,11 +1136,41 @@ function createCareerFriendApplication(userId: string) {
           );
           if (searchResult.formattedText) {
             answerText = searchResult.formattedText;
+            const nowIso = new Date().toISOString();
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "user",
+              content: message,
+              metadata: {},
+              createdAt: nowIso,
+            });
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "assistant",
+              content: searchResult.formattedText,
+              metadata: { isJobSearch: true },
+              createdAt: new Date().toISOString(),
+            });
+            return {
+              conversationId,
+              messageId: randomUUID(),
+              clientMessageId: randomUUID(),
+              answer: answerText,
+              suggestedActions: ["tailor_cv", "growth_sprint"],
+              createdAt: nowIso,
+            };
           }
         } catch {
           // fallback
         }
-      } else if (isCoverLetter) {
+      }
+
+      // 2. Cover Letter Flow
+      if (isCoverLetter) {
         try {
           const recs = await campaign.listRecommendations({ limit: 1 });
           let coverDraftText = "";
@@ -1070,13 +1185,15 @@ function createCareerFriendApplication(userId: string) {
             coverJobTitle = coverResult.jobTitle || "Software Engineer";
             coverOrg = coverResult.organizationName || null;
           } else {
+            const extracted = extractRoleAndCompany(message);
             const coverResult = await campaign.generateCustomCoverLetter({
-              jobTitle: snapshot.profile.headline ?? "Software Engineer",
+              jobTitle: extracted.jobTitle,
+              organizationName: extracted.organizationName ?? undefined,
               jobDescription: message,
             });
             coverDraftText = coverResult.draft;
-            coverJobTitle = coverResult.jobTitle || "Software Engineer";
-            coverOrg = coverResult.organizationName || null;
+            coverJobTitle = coverResult.jobTitle || extracted.jobTitle;
+            coverOrg = coverResult.organizationName || extracted.organizationName;
           }
 
           if (coverDraftText) {
@@ -1104,12 +1221,44 @@ function createCareerFriendApplication(userId: string) {
 
             const companySnippet = coverOrg ? ` at ${coverOrg}` : "";
             answerText = `Here is your tailored cover letter for ${coverJobTitle}${companySnippet}, attached below as a PDF. Let me know if you'd like any tweaks!`;
+
+            const nowIso = new Date().toISOString();
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "user",
+              content: message,
+              metadata: {},
+              createdAt: nowIso,
+            });
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "assistant",
+              content: answerText,
+              metadata: { isCoverLetter: true },
+              createdAt: new Date().toISOString(),
+            });
+
+            return {
+              conversationId,
+              messageId: randomUUID(),
+              clientMessageId: randomUUID(),
+              answer: answerText,
+              suggestedActions: ["tailor_cv", "growth_sprint"],
+              createdAt: nowIso,
+              attachment,
+            };
           }
         } catch {
           // If cover letter generation fails, proceed with the model's text response
         }
-      } else if (isCvRequest) {
-        // 2. CV Flow
+      }
+
+      // 3. CV Flow
+      if (isCvRequest) {
         const cvApp = createCvTailoringApplication(userId);
         try {
           const variants = await cvApp.listForUser({
@@ -1186,20 +1335,56 @@ function createCareerFriendApplication(userId: string) {
           // If attachment generation fails, proceed with the text answer
         }
 
-        if (
-          /###\s+(?:profile|education|technical\s+skills|projects|experience)/iu.test(
-            answerText,
-          )
-        ) {
-          answerText =
-            "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
-        }
+        answerText =
+          "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
+
+        const nowIso = new Date().toISOString();
+        await repository.addMessage({
+          id: randomUUID(),
+          userId,
+          conversationId,
+          role: "user",
+          content: message,
+          metadata: {},
+          createdAt: nowIso,
+        });
+        await repository.addMessage({
+          id: randomUUID(),
+          userId,
+          conversationId,
+          role: "assistant",
+          content: answerText,
+          metadata: { isCv: true },
+          createdAt: new Date().toISOString(),
+        });
+
+        return {
+          conversationId,
+          messageId: randomUUID(),
+          clientMessageId: randomUUID(),
+          answer: answerText,
+          suggestedActions: ["tailor_cv", "growth_sprint"],
+          createdAt: nowIso,
+          attachment,
+        };
       }
+
+      // 4. Conversational / Gap Analysis / Advice Flow
+      const reply = await askCareerFriend(
+        {
+          userId,
+          conversationId,
+          clientMessageId: randomUUID(),
+          message,
+          snapshot,
+        },
+        { repository, advisor, createId: randomUUID, now },
+      );
 
       return {
         ...reply,
-        answer: answerText,
-        attachment,
+        answer: reply.answer,
+        attachment: undefined,
       };
     },
   };
@@ -1254,6 +1439,7 @@ function createCareerCampaignApplication(userId: string) {
             const link = await repository.getTelegramLink(uid);
             return Boolean(link?.optedInAt && !link.optedOutAt);
           },
+          resurfacingWindowDays: config.RESURFACING_WINDOW_DAYS ?? 30,
           executeSearch: async (uid) => {
             const search = await careerApp.searchForJobs({ origin: "campaign" });
             const jobs = await jobRepository.listJobs({
@@ -1884,6 +2070,8 @@ function createCareerCampaignApplication(userId: string) {
       });
       return result;
     },
+    listCampaigns: () =>
+      new SupabaseFreshWatchRepository(supabase).listCampaignsByUserId(userId),
     repository,
   };
 }

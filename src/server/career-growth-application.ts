@@ -22,6 +22,7 @@ import {
 } from "@/modules/career-growth/application/projects";
 import { listGrowthInboxItems } from "@/modules/career-growth/application/inbox";
 import { campaignGrowthState } from "@/modules/career-growth/application/campaign-state";
+import { nudgeUnconfirmedHandoffs } from "@/modules/career-growth/application/nudge-evidence-handoff";
 import { ASSESSMENT_LEASE_MS } from "@/modules/career-growth/domain/policy";
 import { GroqGrowthAdvisor } from "@/modules/career-growth/infrastructure/groq-growth-advisor";
 import { SupabaseCareerGrowthRepository } from "@/modules/career-growth/infrastructure/supabase-career-growth-repository";
@@ -57,6 +58,7 @@ function createCareerGrowthApplication(userId: string) {
     marketMinAnalysedJobs: config.GROWTH_MARKET_MIN_ANALYSED_JOBS,
     assessmentLeaseMs: ASSESSMENT_LEASE_MS,
     publicAppBaseUrl: config.PUBLIC_APP_BASE_URL ?? "http://localhost:3000",
+    preliminaryStallDays: config.GROWTH_PRELIMINARY_STALL_DAYS,
   };
   const campaigns: GrowthCampaignReader = {
     getCampaign: (id) => fresh.getCampaignById(id),
@@ -171,6 +173,19 @@ function createCareerGrowthApplication(userId: string) {
     ) => updateGrowthMilestone({ userId, milestoneId, status }, deps),
     exportCalendar: (projectId: string) =>
       exportGrowthProjectCalendar({ userId, projectId }, deps),
+    nudgeHandoffs: () =>
+      nudgeUnconfirmedHandoffs(
+        { userId },
+        {
+          repository,
+          evidence,
+          notifier,
+          createId: randomUUID,
+          now,
+          delayDays: config.GROWTH_NUDGE_DELAY_DAYS,
+          maxReminders: config.GROWTH_NUDGE_MAX_REMINDERS,
+        },
+      ),
   };
 }
 

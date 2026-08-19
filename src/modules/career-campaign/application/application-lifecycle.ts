@@ -6,6 +6,7 @@ import {
   assertUserAppliedTransition,
   isTerminalApplicationStatus,
 } from "../domain/application-transitions";
+import { APPLICATION_OUTCOME_SIGNAL_WEIGHTS } from "../domain/policy";
 import { applicationStatusSchema } from "../domain/schemas";
 import type {
   CareerCampaignRepository,
@@ -323,6 +324,20 @@ export async function updateApplicationStatus(
       relatedEntityType: "job_application",
       relatedEntityId: application.id,
       eventTypes: ["follow_up_due"],
+    });
+  }
+
+  if (isTerminalApplicationStatus(command.status)) {
+    const weight =
+      APPLICATION_OUTCOME_SIGNAL_WEIGHTS[command.status] ?? 0;
+    await deps.repository.addFeedbackSignal({
+      id: deps.createId(),
+      userId: command.userId,
+      recommendationId: application.recommendationId,
+      signalType: "application_outcome",
+      signalValue: command.status,
+      weight,
+      createdAt: occurredAt,
     });
   }
 
