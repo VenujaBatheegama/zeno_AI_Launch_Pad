@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
@@ -229,6 +230,29 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
       .limit(input.limit);
     if (error) throw persistenceError("Career messages could not be listed.", error);
     return ((data ?? []) as MessageRow[]).reverse().map(mapMessage);
+  }
+
+  async findOrCreateTelegramConversation(userId: string): Promise<string> {
+    const { data, error } = await this.client
+      .from("career_conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("title", "Telegram Chat")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw persistenceError("Career conversation could not be loaded.", error);
+    if (data?.id) return data.id;
+
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    await this.createConversation({
+      id,
+      userId,
+      title: "Telegram Chat",
+      createdAt: now,
+    });
+    return id;
   }
 
   private async withMilestones(row: SprintRow): Promise<CareerSprint> {

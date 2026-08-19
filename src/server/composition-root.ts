@@ -912,6 +912,20 @@ function createCareerFriendApplication(userId: string) {
         { userId, ...input, snapshot: await getSnapshot() },
         { repository, advisor, createId: randomUUID, now },
       ),
+    askTelegram: async (message: string) => {
+      const conversationId = await repository.findOrCreateTelegramConversation(userId);
+      const snapshot = await getSnapshot();
+      return askCareerFriend(
+        {
+          userId,
+          conversationId,
+          clientMessageId: randomUUID(),
+          message,
+          snapshot,
+        },
+        { repository, advisor, createId: randomUUID, now },
+      );
+    },
   };
 }
 
