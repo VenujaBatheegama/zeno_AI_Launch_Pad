@@ -99,6 +99,13 @@ import { PdfKitCvRenderer } from "@/modules/cv-tailoring/infrastructure/pdfkit-c
 import { ReactPdfCvRenderer } from "@/modules/cv-tailoring/infrastructure/react-pdf-cv-renderer";
 import { SupabaseCvTailoringRepository } from "@/modules/cv-tailoring/infrastructure/supabase-cv-tailoring-repository";
 import { SupabaseTailoredCvStorage } from "@/modules/cv-tailoring/infrastructure/supabase-tailored-cv-storage";
+import { buildEvidenceSnapshot } from "@/modules/cv-tailoring/domain/facts";
+import {
+  buildContentPlan,
+  sanitizeJobTitleForCv,
+} from "@/modules/cv-tailoring/domain/content-plan";
+import { buildDeterministicResume } from "@/modules/cv-tailoring/domain/deterministic-resume";
+import { recoverEvidenceFromCvText } from "@/modules/cv-tailoring/domain/recover-evidence-from-cv-text";
 
 import { getServerConfig } from "./config";
 import { getGroqKeyPool } from "./groq";
@@ -928,9 +935,11 @@ function createCareerFriendApplication(userId: string) {
 
       let attachment: { bytes: Uint8Array; filename: string } | undefined;
       const cvApp = createCvTailoringApplication(userId);
+      const lowerReply = reply.answer.toLowerCase();
+      const lowerMsg = message.toLowerCase();
       const shouldAttachCv =
-        reply.answer.toLowerCase().includes("attached") ||
-        /(?:send|give|download|export|tailor).*(?:cv|resume)/iu.test(message);
+        lowerReply.includes("attached") ||
+        /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv)/iu.test(lowerMsg);
 
       if (shouldAttachCv) {
         try {
@@ -949,13 +958,75 @@ function createCareerFriendApplication(userId: string) {
               attachment = { bytes: dl.bytes, filename: dl.filename };
             }
           }
+
+          if (!attachment) {
+            const evidenceSet = await evidenceRepository.getCurrent(userId);
+            if (evidenceSet && evidenceSet.status === "verified") {
+              const sourceText = await evidenceRepository
+                .getDocumentExtractedText({
+                  documentId: evidenceSet.sourceDocumentId,
+                  userId,
+                })
+                .catch(() => "");
+              const recovered = recoverEvidenceFromCvText(
+                evidenceSet.evidence,
+                sourceText,
+              );
+              const evidenceSnapshot = buildEvidenceSnapshot(
+                evidenceSet.id,
+                recovered,
+              );
+              const jobTitle = sanitizeJobTitleForCv(
+                evidenceSet.evidence.work_experience[0]?.role ??
+                  "Software Engineer",
+              );
+              const plan = buildContentPlan({
+                mode: "one_page",
+                snapshot: evidenceSnapshot,
+                requirements: [],
+                jobTitle,
+              });
+              const resume = buildDeterministicResume({
+                plan,
+                snapshot: evidenceSnapshot,
+                keywordAudit: [],
+              });
+              const renderer =
+                process.env.CV_PDF_RENDERER === "pdfkit"
+                  ? new PdfKitCvRenderer()
+                  : new ReactPdfCvRenderer();
+              const rendered = await renderer.render({
+                mode: "one_page",
+                content: resume,
+                snapshot: evidenceSnapshot,
+                plan,
+                jobTitle,
+              });
+              const nameSlug = (
+                evidenceSet.evidence.profile.full_name || "Candidate"
+              )
+                .trim()
+                .replace(/[^a-zA-Z0-9_-]/gu, "_");
+              attachment = {
+                bytes: rendered.bytes,
+                filename: `${nameSlug}_CV.pdf`,
+              };
+            }
+          }
         } catch {
-          // If attachment download fails, proceed with the text answer
+          // If attachment generation fails, proceed with the text answer
         }
+      }
+
+      // If reply originally contained raw markdown sections (e.g. ### Profile / ### Education), clean it into a concise message
+      let answerText = reply.answer;
+      if (/###\s+(?:profile|education|technical\s+skills|projects|experience)/iu.test(answerText)) {
+        answerText = "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
       }
 
       return {
         ...reply,
+        answer: answerText,
         attachment,
       };
     },
