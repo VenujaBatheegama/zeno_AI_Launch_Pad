@@ -34,6 +34,54 @@ export class TelegramBotNotificationSender implements NotificationSender {
     }
   }
 
+  async sendChatAction(
+    chatId: string,
+    action: "typing" | "upload_document" = "typing",
+  ): Promise<void> {
+    await this.fetchImpl(
+      `https://api.telegram.org/bot${this.config.botToken}/sendChatAction`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, action }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    ).catch(() => undefined);
+  }
+
+  async sendDocument(
+    chatId: string,
+    document: Uint8Array | Buffer,
+    filename: string,
+    caption?: string,
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append(
+      "document",
+      new Blob([document as BlobPart], { type: "application/pdf" }),
+      filename,
+    );
+    if (caption) {
+      formData.append("caption", caption.slice(0, 1024));
+    }
+
+    const response = await this.fetchImpl(
+      `https://api.telegram.org/bot${this.config.botToken}/sendDocument`,
+      {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const body = (await response.json().catch(() => ({}))) as TelegramResponse;
+    if (!response.ok || body.ok === false) {
+      throw new Error(
+        `Telegram sendDocument HTTP ${response.status}: ${body.description ?? "failed"}`,
+      );
+    }
+  }
+
   async send(notification: PendingNotification): Promise<DeliveryResult> {
     const chatId = this.config.resolveChatId
       ? await this.config.resolveChatId(notification.userId)
