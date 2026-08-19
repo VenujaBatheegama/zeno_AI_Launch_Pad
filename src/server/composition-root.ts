@@ -47,6 +47,10 @@ import { LinkedInGuestJobSource } from "@/modules/job-discovery/infrastructure/l
 import { SupabaseJobDiscoveryRepository } from "@/modules/job-discovery/infrastructure/supabase-job-discovery-repository";
 import { TheirStackJobSource } from "@/modules/job-discovery/infrastructure/theirstack-job-source";
 import {
+  isJobSearchMessage,
+  executeNaturalLanguageJobSearch,
+} from "@/modules/job-discovery/application/natural-language-job-search";
+import {
   analyseAndMatchBatch,
   analyseAndMatchJob,
   type AnalyseAndMatchBatchCommand,
@@ -729,6 +733,7 @@ function createCvTailoringApplication(userId: string) {
 
 function createHybridJobSource(config: ReturnType<typeof getServerConfig>): {
   source: JobSource;
+  sources: JobSource[];
   enabledKeys: string[];
 } {
   const sources: JobSource[] = [];
@@ -791,6 +796,7 @@ function createHybridJobSource(config: ReturnType<typeof getServerConfig>): {
   // Preserve JOB_SOURCES order as configured — no provider is promoted.
   return {
     source: new HybridJobSource(sources),
+    sources,
     enabledKeys,
   };
 }
@@ -917,13 +923,48 @@ function createCareerFriendApplication(userId: string) {
       message: string;
     }) => {
       const snapshot = await getSnapshot();
+      const lowerMsg = input.message.toLowerCase();
+      const isCoverLetter = /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg);
+      const isCv = /(?:\bcv\b|\bresume\b)/iu.test(lowerMsg);
+      const isJobSearch = isJobSearchMessage(input.message) && !isCoverLetter && !isCv;
+
+      if (isJobSearch) {
+        try {
+          const { sources } = createHybridJobSource(config);
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const searchResult = await executeNaturalLanguageJobSearch(
+            {
+              userId,
+              message: input.message,
+              userSkills: snapshot.profile.skills,
+              userHeadline: snapshot.profile.headline,
+            },
+            {
+              sources,
+              repository: jobDiscoveryRepo,
+              keyPool: getGroqKeyPool(),
+              model: config.GROQ_MODEL,
+            },
+          );
+          if (searchResult.formattedText) {
+            return {
+              conversationId: input.conversationId ?? randomUUID(),
+              messageId: randomUUID(),
+              clientMessageId: input.clientMessageId,
+              answer: searchResult.formattedText,
+              suggestedActions: ["tailor_cv", "growth_sprint"],
+              createdAt: new Date().toISOString(),
+            };
+          }
+        } catch {
+          // fallback
+        }
+      }
+
       const reply = await askCareerFriend(
         { userId, ...input, snapshot },
         { repository, advisor, createId: randomUUID, now },
       );
-
-      const lowerMsg = input.message.toLowerCase();
-      const isCoverLetter = /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg);
 
       if (isCoverLetter && (!reply.answer || reply.answer.length < 150)) {
         try {
@@ -987,8 +1028,34 @@ function createCareerFriendApplication(userId: string) {
             lowerMsg,
           ));
 
-      // 1. Cover Letter Flow
-      if (isCoverLetter) {
+      const isJobSearch = isJobSearchMessage(message) && !isCoverLetter && !isCvRequest;
+
+      // 1. Natural Language Job Search Flow
+      if (isJobSearch) {
+        try {
+          const { sources } = createHybridJobSource(config);
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const searchResult = await executeNaturalLanguageJobSearch(
+            {
+              userId,
+              message,
+              userSkills: snapshot.profile.skills,
+              userHeadline: snapshot.profile.headline,
+            },
+            {
+              sources,
+              repository: jobDiscoveryRepo,
+              keyPool: getGroqKeyPool(),
+              model: config.GROQ_MODEL,
+            },
+          );
+          if (searchResult.formattedText) {
+            answerText = searchResult.formattedText;
+          }
+        } catch {
+          // fallback
+        }
+      } else if (isCoverLetter) {
         try {
           const recs = await campaign.listRecommendations({ limit: 1 });
           let coverDraftText = "";

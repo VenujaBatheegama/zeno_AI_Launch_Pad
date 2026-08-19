@@ -175,7 +175,7 @@ export async function handleTelegramInboundMessage(input: {
       input.chatId,
       [
         "Zeno Career Agent Commands:",
-        "/jobs — open job search & active campaigns",
+        "/jobs [query] — search jobs (e.g. /jobs remote react or /jobs python)",
         "/inbox — review high-fit & growth recommendations",
         "/applications — open your application tracker",
         "/growth — review growth projects & sprints",
@@ -183,11 +183,11 @@ export async function handleTelegramInboundMessage(input: {
         "/stop — pause proactive alerts",
         "/start — resume proactive alerts",
         "",
-        "💡 You can also ask me anything directly in chat — like:",
+        "💡 You can also ask me anything directly in natural chat — like:",
         "• 'Find junior remote DevOps jobs'",
-        "• 'Notify me when Python AI roles appear'",
+        "• 'Search for Flutter developer roles in Sri Lanka'",
         "• 'What skills should I learn next?'",
-        "• 'Tailor my CV for this job: [JD]'",
+        "• 'Send me my CV' or 'Write a cover letter'",
       ].join("\n"),
     );
     return { status: "replied", command: "help", userId };
