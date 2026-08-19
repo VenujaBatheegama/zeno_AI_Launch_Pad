@@ -1024,6 +1024,49 @@ function createCareerFriendApplication(userId: string) {
         answerText = "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
       }
 
+      // Cover Letter generation and attachment when requested
+      const isCoverLetterRequest =
+        /(?:cover\s*letter|coverletter)/iu.test(lowerMsg) ||
+        /(?:cover\s*letter|coverletter)/iu.test(lowerReply);
+
+      if (isCoverLetterRequest && !attachment) {
+        try {
+          const recs = await campaign.listRecommendations({ limit: 1 });
+          let coverDraftText = "";
+          let coverRole = "Application";
+
+          if (recs[0]) {
+            const coverResult = await campaign.generateCoverLetterForListing(
+              recs[0].listingId,
+            );
+            coverDraftText = coverResult.draft;
+            coverRole = (coverResult.jobTitle || "Role").replace(
+              /[^a-zA-Z0-9_-]/gu,
+              "_",
+            );
+          } else {
+            const coverResult = await campaign.generateCustomCoverLetter({
+              jobTitle: snapshot.profile.headline ?? "Software Engineer",
+              jobDescription: message,
+            });
+            coverDraftText = coverResult.draft;
+          }
+
+          if (coverDraftText) {
+            const encoder = new TextEncoder();
+            attachment = {
+              bytes: encoder.encode(coverDraftText),
+              filename: `Cover_Letter_${coverRole}.txt`,
+            };
+            if (!answerText || answerText.length < 60) {
+              answerText = `Here is your tailored cover letter, attached below as a document. Let me know if you want any edits!`;
+            }
+          }
+        } catch {
+          // If cover letter generation fails, proceed with the model's text response
+        }
+      }
+
       return {
         ...reply,
         answer: answerText,
