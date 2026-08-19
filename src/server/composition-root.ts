@@ -97,6 +97,7 @@ import {
 import { GroqCvLanguageTailorer } from "@/modules/cv-tailoring/infrastructure/groq-cv-tailorer";
 import { PdfKitCvRenderer } from "@/modules/cv-tailoring/infrastructure/pdfkit-cv-renderer";
 import { ReactPdfCvRenderer } from "@/modules/cv-tailoring/infrastructure/react-pdf-cv-renderer";
+import { renderCoverLetterPdf } from "@/modules/career-campaign/infrastructure/react-pdf-cover-letter-renderer";
 import { SupabaseCvTailoringRepository } from "@/modules/cv-tailoring/infrastructure/supabase-cv-tailoring-repository";
 import { SupabaseTailoredCvStorage } from "@/modules/cv-tailoring/infrastructure/supabase-tailored-cv-storage";
 import { buildEvidenceSnapshot } from "@/modules/cv-tailoring/domain/facts";
@@ -914,13 +915,48 @@ function createCareerFriendApplication(userId: string) {
       conversationId?: string;
       clientMessageId: string;
       message: string;
-    }) =>
-      askCareerFriend(
-        { userId, ...input, snapshot: await getSnapshot() },
+    }) => {
+      const snapshot = await getSnapshot();
+      const reply = await askCareerFriend(
+        { userId, ...input, snapshot },
         { repository, advisor, createId: randomUUID, now },
-      ),
+      );
+
+      const lowerMsg = input.message.toLowerCase();
+      const isCoverLetter = /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg);
+
+      if (isCoverLetter && (!reply.answer || reply.answer.length < 150)) {
+        try {
+          const recs = await campaign.listRecommendations({ limit: 1 });
+          let coverDraftText = "";
+          if (recs[0]) {
+            const cover = await campaign.generateCoverLetterForListing(
+              recs[0].listingId,
+            );
+            coverDraftText = cover.draft;
+          } else {
+            const cover = await campaign.generateCustomCoverLetter({
+              jobTitle: snapshot.profile.headline ?? "Software Engineer",
+              jobDescription: input.message,
+            });
+            coverDraftText = cover.draft;
+          }
+          if (coverDraftText) {
+            return {
+              ...reply,
+              answer: `Here is your tailored cover letter:\n\n${coverDraftText}\n\nLet me know if you want to tweak any sections!`,
+            };
+          }
+        } catch {
+          // fallback
+        }
+      }
+
+      return reply;
+    },
     askTelegram: async (message: string) => {
-      const conversationId = await repository.findOrCreateTelegramConversation(userId);
+      const conversationId =
+        await repository.findOrCreateTelegramConversation(userId);
       const snapshot = await getSnapshot();
       const reply = await askCareerFriend(
         {
@@ -934,14 +970,80 @@ function createCareerFriendApplication(userId: string) {
       );
 
       let attachment: { bytes: Uint8Array; filename: string } | undefined;
-      const cvApp = createCvTailoringApplication(userId);
+      let answerText = reply.answer;
+
       const lowerReply = reply.answer.toLowerCase();
       const lowerMsg = message.toLowerCase();
-      const shouldAttachCv =
-        lowerReply.includes("attached") ||
-        /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv)/iu.test(lowerMsg);
 
-      if (shouldAttachCv) {
+      const isCoverLetter =
+        /(?:cover\s*letter|coverletter|\bcl\b)/iu.test(lowerMsg) ||
+        /(?:cover\s*letter|coverletter)/iu.test(lowerReply);
+
+      const isCvRequest =
+        !isCoverLetter &&
+        (/(?:\bcv\b|\bresume\b)/iu.test(lowerMsg) ||
+          lowerReply.includes("attached") ||
+          /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv)/iu.test(
+            lowerMsg,
+          ));
+
+      // 1. Cover Letter Flow
+      if (isCoverLetter) {
+        try {
+          const recs = await campaign.listRecommendations({ limit: 1 });
+          let coverDraftText = "";
+          let coverJobTitle = "Software Engineer";
+          let coverOrg: string | null = null;
+
+          if (recs[0]) {
+            const coverResult = await campaign.generateCoverLetterForListing(
+              recs[0].listingId,
+            );
+            coverDraftText = coverResult.draft;
+            coverJobTitle = coverResult.jobTitle || "Software Engineer";
+            coverOrg = coverResult.organizationName || null;
+          } else {
+            const coverResult = await campaign.generateCustomCoverLetter({
+              jobTitle: snapshot.profile.headline ?? "Software Engineer",
+              jobDescription: message,
+            });
+            coverDraftText = coverResult.draft;
+            coverJobTitle = coverResult.jobTitle || "Software Engineer";
+            coverOrg = coverResult.organizationName || null;
+          }
+
+          if (coverDraftText) {
+            const evidenceSet = await evidenceRepository.getCurrent(userId);
+            const prof = evidenceSet?.evidence?.profile;
+            const pdfBytes = await renderCoverLetterPdf({
+              candidateName: prof?.full_name || snapshot.profile.name || "Candidate",
+              contact: {
+                email: prof?.email ?? null,
+                phone: prof?.phone ?? null,
+                location: prof?.location ?? null,
+                linkedinUrl: prof?.linkedin_url ?? null,
+                githubUrl: prof?.github_url ?? null,
+              },
+              jobTitle: coverJobTitle,
+              organizationName: coverOrg,
+              letterText: coverDraftText,
+            });
+
+            const coverRole = coverJobTitle.replace(/[^a-zA-Z0-9_-]/gu, "_");
+            attachment = {
+              bytes: pdfBytes,
+              filename: `Cover_Letter_${coverRole}.pdf`,
+            };
+
+            const companySnippet = coverOrg ? ` at ${coverOrg}` : "";
+            answerText = `Here is your tailored cover letter for ${coverJobTitle}${companySnippet}, attached below as a PDF. Let me know if you'd like any tweaks!`;
+          }
+        } catch {
+          // If cover letter generation fails, proceed with the model's text response
+        }
+      } else if (isCvRequest) {
+        // 2. CV Flow
+        const cvApp = createCvTailoringApplication(userId);
         try {
           const variants = await cvApp.listForUser({
             statuses: ["ready", "ready_to_render"],
@@ -1016,54 +1118,14 @@ function createCareerFriendApplication(userId: string) {
         } catch {
           // If attachment generation fails, proceed with the text answer
         }
-      }
 
-      // If reply originally contained raw markdown sections (e.g. ### Profile / ### Education), clean it into a concise message
-      let answerText = reply.answer;
-      if (/###\s+(?:profile|education|technical\s+skills|projects|experience)/iu.test(answerText)) {
-        answerText = "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
-      }
-
-      // Cover Letter generation and attachment when requested
-      const isCoverLetterRequest =
-        /(?:cover\s*letter|coverletter)/iu.test(lowerMsg) ||
-        /(?:cover\s*letter|coverletter)/iu.test(lowerReply);
-
-      if (isCoverLetterRequest && !attachment) {
-        try {
-          const recs = await campaign.listRecommendations({ limit: 1 });
-          let coverDraftText = "";
-          let coverRole = "Application";
-
-          if (recs[0]) {
-            const coverResult = await campaign.generateCoverLetterForListing(
-              recs[0].listingId,
-            );
-            coverDraftText = coverResult.draft;
-            coverRole = (coverResult.jobTitle || "Role").replace(
-              /[^a-zA-Z0-9_-]/gu,
-              "_",
-            );
-          } else {
-            const coverResult = await campaign.generateCustomCoverLetter({
-              jobTitle: snapshot.profile.headline ?? "Software Engineer",
-              jobDescription: message,
-            });
-            coverDraftText = coverResult.draft;
-          }
-
-          if (coverDraftText) {
-            const encoder = new TextEncoder();
-            attachment = {
-              bytes: encoder.encode(coverDraftText),
-              filename: `Cover_Letter_${coverRole}.txt`,
-            };
-            if (!answerText || answerText.length < 60) {
-              answerText = `Here is your tailored cover letter, attached below as a document. Let me know if you want any edits!`;
-            }
-          }
-        } catch {
-          // If cover letter generation fails, proceed with the model's text response
+        if (
+          /###\s+(?:profile|education|technical\s+skills|projects|experience)/iu.test(
+            answerText,
+          )
+        ) {
+          answerText =
+            "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
         }
       }
 
@@ -1262,6 +1324,23 @@ function createCareerCampaignApplication(userId: string) {
               userId,
               recommendationId,
             );
+            const matchedReqs = details.analysis.requirements
+              .filter((r) =>
+                details.match.matches.some(
+                  (m) =>
+                    m.requirement_id === r.id &&
+                    (m.status === "matched" || m.status === "partial"),
+                ),
+              )
+              .map((r) => r.statement);
+            const missingReqs = details.analysis.requirements
+              .filter((r) =>
+                details.match.matches.some(
+                  (m) => m.requirement_id === r.id && m.status === "gap",
+                ),
+              )
+              .map((r) => r.statement);
+
             return {
               evidenceSetId: evidence.id,
               evidenceVersion: evidence.evidence.schema_version,
@@ -1272,8 +1351,11 @@ function createCareerCampaignApplication(userId: string) {
                 details.analysis.requirements
                   .map((req) => req.statement)
                   .join("\n") || details.card.explanation,
-              matchedRequirements: details.card.topMatched,
-              missingRequirements: details.card.primaryGaps,
+              matchedRequirements:
+                matchedReqs.length > 0
+                  ? matchedReqs
+                  : details.analysis.requirements.map((r) => r.statement),
+              missingRequirements: missingReqs,
               applicationUrl:
                 details.card.applicationUrl ??
                 recommendation?.fitSummarySnapshot.applicationUrl ??
@@ -1292,6 +1374,23 @@ function createCareerCampaignApplication(userId: string) {
         );
       }
       const details = await careerApp.getMatchDetails({ listingId });
+      const matchedReqs = details.analysis.requirements
+        .filter((r) =>
+          details.match.matches.some(
+            (m) =>
+              m.requirement_id === r.id &&
+              (m.status === "matched" || m.status === "partial"),
+          ),
+        )
+        .map((r) => r.statement);
+      const missingReqs = details.analysis.requirements
+        .filter((r) =>
+          details.match.matches.some(
+            (m) => m.requirement_id === r.id && m.status === "gap",
+          ),
+        )
+        .map((r) => r.statement);
+
       const cover = await coverLetterGenerator.generate({
         evidenceJson: evidence.evidence,
         jobTitle: details.card.title,
@@ -1300,8 +1399,11 @@ function createCareerCampaignApplication(userId: string) {
           details.analysis.requirements
             .map((req) => req.statement)
             .join("\n") || details.card.explanation,
-        matchedRequirements: details.card.topMatched,
-        missingRequirements: details.card.primaryGaps,
+        matchedRequirements:
+          matchedReqs.length > 0
+            ? matchedReqs
+            : details.analysis.requirements.map((r) => r.statement),
+        missingRequirements: missingReqs,
         applicationUrl: details.card.applicationUrl ?? null,
       });
       return {
