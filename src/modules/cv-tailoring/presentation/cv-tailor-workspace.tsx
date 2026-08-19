@@ -218,6 +218,8 @@ export function CvTailorWorkspace({ listingId }: Props) {
     }
   }
 
+  const [coverPdfBusy, setCoverPdfBusy] = useState(false);
+
   async function copyCoverLetter() {
     if (!coverDraft) return;
     try {
@@ -241,6 +243,42 @@ export function CvTailorWorkspace({ listingId }: Props) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadCoverLetterPdf() {
+    if (!coverDraft) return;
+    setCoverPdfBusy(true);
+    setCoverError(null);
+    try {
+      const res = await fetch("/api/cover-letters/render-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          letterText: coverDraft,
+          jobTitle: job?.title ?? "Software Engineer",
+          organizationName: job?.organization_name ?? null,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to render Cover Letter PDF.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const titleSlug = (job?.title || "Job").replace(/[^a-zA-Z0-9]/g, "_");
+      a.href = url;
+      a.download = `Cover_Letter_${titleSlug}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setCoverError(
+        err instanceof Error ? err.message : "Failed to download PDF.",
+      );
+    } finally {
+      setCoverPdfBusy(false);
+    }
   }
 
   const loadPage = useCallback(async () => {
@@ -1004,10 +1042,18 @@ export function CvTailorWorkspace({ listingId }: Props) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void copyCoverLetter()}
-                    className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-xs font-medium text-white transition hover:bg-[var(--zeno-primary-deep)]"
+                    disabled={coverPdfBusy}
+                    onClick={() => void downloadCoverLetterPdf()}
+                    className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-xs font-medium text-white transition hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
                   >
-                    {coverCopied ? "✓ Copied!" : "Copy to Clipboard"}
+                    {coverPdfBusy ? "Generating PDF…" : "Download PDF"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCoverLetter()}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs font-medium text-[var(--zeno-ink)] transition hover:bg-[var(--zeno-surface-sunken)]"
+                  >
+                    {coverCopied ? "✓ Copied!" : "Copy"}
                   </button>
                 </>
               ) : null}
@@ -1237,6 +1283,14 @@ export function CvTailorWorkspace({ listingId }: Props) {
                     >
                       ⬇ Download .txt
                     </button>
+                    <button
+                      type="button"
+                      disabled={coverPdfBusy}
+                      onClick={() => void downloadCoverLetterPdf()}
+                      className="rounded-[6px] bg-[var(--zeno-primary)] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--zeno-primary-deep)] shadow-sm disabled:opacity-50"
+                    >
+                      {coverPdfBusy ? "Generating PDF…" : "📄 Download PDF"}
+                    </button>
                   </div>
                 </div>
 
@@ -1286,9 +1340,9 @@ export function CvTailorWorkspace({ listingId }: Props) {
                 💡 Application Tips
               </p>
               <ul className="mt-2 space-y-2 text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
-                <li>• <strong>Target 250–350 words</strong>: Keep your cover letter punchy and easy to scan.</li>
-                <li>• <strong>Highlight 2 top achievements</strong>: Focus on concrete outcomes and relevant tech stack.</li>
-                <li>• <strong>Align with company mission</strong>: Customize the opening paragraph with why this specific team excites you.</li>
+                <li>• <strong>Target 250–320 words</strong>: Keep your cover letter punchy, specific, and easy to scan.</li>
+                <li>• <strong>Show concrete outcomes</strong>: Highlight situation → action → result without empty adjectives.</li>
+                <li>• <strong>Cut throat-clearing</strong>: Open directly with technical proof and role purpose.</li>
               </ul>
             </div>
           </aside>
