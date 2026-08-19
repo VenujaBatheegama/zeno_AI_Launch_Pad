@@ -10,11 +10,12 @@ const ACTION_LINKS = {
   review_recommendations: { href: "/app/recommendations", label: "Review recommendations" },
   start_sprint: { href: "/app/growth", label: "Open growth plan" },
   update_profile: { href: "/app/career-profile", label: "Update profile" },
-  tailor_cv: { href: "/app/cvs", label: "Open CV Hub" },
+  tailor_cv: { href: "/app/cvs", label: "Open CV & Cover Letter Hub" },
 } as const;
 
 const STARTERS = [
   "Find junior remote DevOps jobs",
+  "Write a cover letter for my matched job",
   "What skills should I learn next?",
   "What's the biggest gap in my profile?",
   "Tailor my CV for a specific role",

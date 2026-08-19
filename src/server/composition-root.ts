@@ -1193,6 +1193,8 @@ function createCareerCampaignApplication(userId: string) {
         { repository, createId: randomUUID, now },
       ),
     getPacket: (packetId: string) => repository.getPacket(userId, packetId),
+    getPacketByRecommendation: (recommendationId: string) =>
+      repository.getPacketByRecommendation(userId, recommendationId),
     preparePacket: async (packetId: string) =>
       prepareApplicationPacket(
         { userId, packetId },
@@ -1238,6 +1240,62 @@ function createCareerCampaignApplication(userId: string) {
           },
         },
       ),
+    generateCoverLetterForListing: async (listingId: string) => {
+      const evidence = await evidenceRepository.getCurrent(userId);
+      if (!evidence || evidence.status !== "verified") {
+        throw new CareerCampaignError(
+          "EVIDENCE_REQUIRED",
+          "Verify your career profile before generating a cover letter.",
+        );
+      }
+      const details = await careerApp.getMatchDetails({ listingId });
+      const cover = await coverLetterGenerator.generate({
+        evidenceJson: evidence.evidence,
+        jobTitle: details.card.title,
+        organizationName: details.card.organizationName,
+        jobDescription:
+          details.analysis.requirements
+            .map((req) => req.statement)
+            .join("\n") || details.card.explanation,
+        matchedRequirements: details.card.topMatched,
+        missingRequirements: details.card.primaryGaps,
+        applicationUrl: details.card.applicationUrl ?? null,
+      });
+      return {
+        draft: cover.draft,
+        meta: cover.meta,
+        jobTitle: details.card.title,
+        organizationName: details.card.organizationName,
+      };
+    },
+    generateCustomCoverLetter: async (input: {
+      jobTitle?: string;
+      organizationName?: string;
+      jobDescription: string;
+    }) => {
+      const evidence = await evidenceRepository.getCurrent(userId);
+      if (!evidence || evidence.status !== "verified") {
+        throw new CareerCampaignError(
+          "EVIDENCE_REQUIRED",
+          "Verify your career profile before generating a cover letter.",
+        );
+      }
+      const cover = await coverLetterGenerator.generate({
+        evidenceJson: evidence.evidence,
+        jobTitle: input.jobTitle || "Software Engineer",
+        organizationName: input.organizationName || null,
+        jobDescription: input.jobDescription,
+        matchedRequirements: [],
+        missingRequirements: [],
+        applicationUrl: null,
+      });
+      return {
+        draft: cover.draft,
+        meta: cover.meta,
+        jobTitle: input.jobTitle || "Software Engineer",
+        organizationName: input.organizationName || null,
+      };
+    },
     listApplications: (input?: {
       statuses?: Array<
         "ready" | "applied" | "interview" | "rejected" | "offer" | "withdrawn"

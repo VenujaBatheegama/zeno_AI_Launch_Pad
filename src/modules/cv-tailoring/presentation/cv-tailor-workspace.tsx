@@ -132,6 +132,14 @@ export function CvTailorWorkspace({ listingId }: Props) {
   const [prerequisite, setPrerequisite] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Cover Letter Studio States
+  const [activeTab, setActiveTab] = useState<"cv" | "cover_letter">("cv");
+  const [coverDraft, setCoverDraft] = useState<string | null>(null);
+  const [coverMeta, setCoverMeta] = useState<Record<string, unknown>>({});
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverCopied, setCoverCopied] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+
   const draftRef = useRef<TailoredResume | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** True while a PATCH is in flight — keeps saves serialized. */
@@ -156,6 +164,84 @@ export function CvTailorWorkspace({ listingId }: Props) {
   useEffect(() => {
     variantRef.current = variant;
   }, [variant]);
+
+  // Load existing cover letter draft if present
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch(`/api/cover-letters/listing/${listingId}`, {
+          credentials: "same-origin",
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            draft?: string | null;
+            meta?: Record<string, unknown>;
+          };
+          if (data.draft) {
+            setCoverDraft(data.draft);
+            setCoverMeta(data.meta ?? {});
+          }
+        }
+      } catch {
+        // Non-fatal
+      }
+    })();
+  }, [listingId]);
+
+  async function generateCoverLetter() {
+    setCoverBusy(true);
+    setCoverError(null);
+    try {
+      const res = await fetch("/api/cover-letters/generate", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      });
+      const data = (await res.json()) as {
+        draft?: string;
+        meta?: Record<string, unknown>;
+        error?: string;
+      };
+      if (!res.ok || !data.draft) {
+        throw new Error(data.error ?? "Failed to generate cover letter.");
+      }
+      setCoverDraft(data.draft);
+      setCoverMeta(data.meta ?? {});
+      setActiveTab("cover_letter");
+    } catch (err) {
+      setCoverError(
+        err instanceof Error ? err.message : "Cover letter generation failed.",
+      );
+    } finally {
+      setCoverBusy(false);
+    }
+  }
+
+  async function copyCoverLetter() {
+    if (!coverDraft) return;
+    try {
+      await navigator.clipboard.writeText(coverDraft);
+      setCoverCopied(true);
+      setTimeout(() => setCoverCopied(false), 2000);
+    } catch {
+      setCoverError("Failed to copy to clipboard.");
+    }
+  }
+
+  function downloadCoverLetter() {
+    if (!coverDraft) return;
+    const blob = new Blob([coverDraft], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const titleSlug = (job?.title || "Job").replace(/[^a-zA-Z0-9]/g, "_");
+    a.href = url;
+    a.download = `Cover_Letter_${titleSlug}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   const loadPage = useCallback(async () => {
     setLoading(true);
@@ -762,7 +848,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      {/* Top action bar — Lovable-style */}
+      {/* Top action bar — Lovable-style with Tab Switcher */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--zeno-border)] px-4 py-2.5">
         <Link
           href="/app/cvs/matched"
@@ -772,96 +858,165 @@ export function CvTailorWorkspace({ listingId }: Props) {
         </Link>
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-[var(--zeno-ink)]">
-            {job?.title ?? "Tailor CV"}
+            {job?.title ?? "Tailor Application"}
           </p>
           <p className="truncate text-xs text-[var(--zeno-ink-muted)]">
             {job?.organization_name ?? "Selected job"}
             {match ? ` · ${Math.round(match.evidenceFitScore)}% match` : ""}
           </p>
         </div>
+
+        {/* Tab switcher: CV vs Cover Letter */}
+        <div className="flex items-center rounded-[8px] bg-[var(--zeno-surface-sunken)] p-0.5 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => setActiveTab("cv")}
+            className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
+              activeTab === "cv"
+                ? "bg-white font-semibold text-[var(--zeno-ink)] shadow-sm"
+                : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+            }`}
+          >
+            <span>📄</span> Tailored CV
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("cover_letter");
+              if (!coverDraft && !coverBusy) {
+                void generateCoverLetter();
+              }
+            }}
+            className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
+              activeTab === "cover_letter"
+                ? "bg-white font-semibold text-[var(--zeno-ink)] shadow-sm"
+                : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+            }`}
+          >
+            <span>✉️</span> Cover Letter
+            {coverDraft ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            ) : null}
+          </button>
+        </div>
+
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-[var(--zeno-ink-muted)]">
-            {saveState === "unsaved"
-              ? "Unsaved changes"
-              : saveState === "saving"
-                ? "Saving…"
-                : saveState === "saved" || saveState === "idle"
-                  ? "All changes saved"
-                  : saveState === "error"
-                    ? "Save failed"
-                    : ""}
-          </span>
-          {saveState === "error" ? (
-            <button
-              type="button"
-              className="text-[11px] font-semibold text-[var(--zeno-danger)] underline"
-              onClick={() => {
-                if (!draftRef.current) return;
-                pendingSaveRef.current = true;
-                void runSaveLoop();
-              }}
-            >
-              Retry
-            </button>
-          ) : null}
-          {draft ? (
+          {activeTab === "cv" ? (
             <>
-              <button
-                type="button"
-                disabled={
-                  busy !== null ||
-                  saveState === "saving" ||
-                  saveState === "idle" ||
-                  saveState === "saved"
-                }
-                onClick={() => {
-                  void (async () => {
-                    const result = await flushSave();
-                    if (result.ok) {
-                      setMessage("CV saved. Your career profile was not changed.");
-                    }
-                  })();
-                }}
-                className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs font-medium transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
-              >
-                {saveState === "saving" ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => void generateContent(true)}
-                className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
-              >
-                {busy === "regenerate" ? "Regenerating…" : "Regenerate"}
-              </button>
-              <button
-                type="button"
-                disabled={busy !== null || !canRender}
-                onClick={() => void renderPdf()}
-                className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
-              >
-                {busy === "render"
-                  ? "Rendering…"
-                  : variant?.status === "ready"
-                    ? "Regenerate PDF"
-                    : "Generate PDF"}
-              </button>
-              {canDownload ? (
+              <span className="text-[11px] text-[var(--zeno-ink-muted)]">
+                {saveState === "unsaved"
+                  ? "Unsaved changes"
+                  : saveState === "saving"
+                    ? "Saving…"
+                    : saveState === "saved" || saveState === "idle"
+                      ? "All changes saved"
+                      : saveState === "error"
+                        ? "Save failed"
+                        : ""}
+              </span>
+              {saveState === "error" ? (
                 <button
                   type="button"
-                  disabled={busy !== null}
-                  onClick={() => void downloadPdf()}
-                  className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-xs font-medium text-white transition hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
+                  className="text-[11px] font-semibold text-[var(--zeno-danger)] underline"
+                  onClick={() => {
+                    if (!draftRef.current) return;
+                    pendingSaveRef.current = true;
+                    void runSaveLoop();
+                  }}
                 >
-                  {busy === "download" ? "Preparing…" : "Download"}
+                  Retry
                 </button>
               ) : null}
+              {draft ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={
+                      busy !== null ||
+                      saveState === "saving" ||
+                      saveState === "idle" ||
+                      saveState === "saved"
+                    }
+                    onClick={() => {
+                      void (async () => {
+                        const result = await flushSave();
+                        if (result.ok) {
+                          setMessage("CV saved. Your career profile was not changed.");
+                        }
+                      })();
+                    }}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs font-medium transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
+                  >
+                    {saveState === "saving" ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void generateContent(true)}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
+                  >
+                    {busy === "regenerate" ? "Regenerating…" : "Regenerate"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy !== null || !canRender}
+                    onClick={() => void renderPdf()}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
+                  >
+                    {busy === "render"
+                      ? "Rendering…"
+                      : variant?.status === "ready"
+                        ? "Regenerate PDF"
+                        : "Generate PDF"}
+                  </button>
+                  {canDownload ? (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void downloadPdf()}
+                      className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-xs font-medium text-white transition hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
+                    >
+                      {busy === "download" ? "Preparing…" : "Download"}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
             </>
-          ) : null}
+          ) : (
+            /* Cover Letter Action Buttons */
+            <>
+              {coverDraft ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={coverBusy}
+                    onClick={() => void generateCoverLetter()}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)] disabled:opacity-50"
+                  >
+                    {coverBusy ? "Regenerating…" : "Regenerate"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadCoverLetter}
+                    className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)]"
+                  >
+                    Export .txt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCoverLetter()}
+                    className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-xs font-medium text-white transition hover:bg-[var(--zeno-primary-deep)]"
+                  >
+                    {coverCopied ? "✓ Copied!" : "Copy to Clipboard"}
+                  </button>
+                </>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 
-      {busy === "generate" || busy === "regenerate" || busy === "render" ? (
+      {activeTab === "cv" && (busy === "generate" || busy === "regenerate" || busy === "render") ? (
         <div className="shrink-0 border-b border-[var(--zeno-border)] bg-[var(--zeno-violet-wash)] px-4 py-4">
           <ProgressStepper
             steps={
@@ -882,16 +1037,16 @@ export function CvTailorWorkspace({ listingId }: Props) {
         </div>
       ) : null}
 
-      {(message || error || saveError) && (
+      {(message || error || saveError || coverError) && (
         <div className="shrink-0 space-y-1 border-b border-[var(--zeno-border)] px-4 py-2">
           {message ? (
             <p className="rounded-[8px] bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
               {message}
             </p>
           ) : null}
-          {error ? (
+          {error || coverError ? (
             <p className="rounded-[8px] bg-rose-50 px-3 py-2 text-xs text-rose-900">
-              {error}
+              {error ?? coverError}
             </p>
           ) : null}
           {saveError ? (
@@ -902,88 +1057,243 @@ export function CvTailorWorkspace({ listingId }: Props) {
         </div>
       )}
 
-      {/* Three-column editor: library | canvas | properties */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[248px_minmax(0,1fr)_288px]">
-        {draft ? (
-          <CvBlockLibrary
-            draft={draft}
-            sectionOrder={variant?.sectionOrder}
-          />
-        ) : (
-          <div className="hidden border-r border-[var(--zeno-border)] bg-white lg:block" />
-        )}
-
-        <section className="min-h-0 min-w-0 overflow-hidden">
-          {!draft ? (
-            <div className="cv-dotted-canvas flex h-full items-start justify-center overflow-y-auto p-8 md:p-12">
-              <div className="w-full max-w-lg rounded-[10px] border border-[var(--zeno-border)] bg-white p-6 shadow-[var(--zeno-shadow-sm)]">
-                <p className="text-sm font-semibold">Generate validated content</p>
-                <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
-                  {recommendation
-                    ? `Recommended: ${recommendation.recommendedMode === "one_page" ? "one page" : "two pages"} — ${recommendation.reason}`
-                    : "Choose a page mode, then generate."}
-                </p>
-                <div className="mt-3 flex gap-4 text-sm">
-                  {(
-                    [
-                      ["one_page", "One page"],
-                      ["two_page", "Two pages"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <label key={value} className="inline-flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="cv-mode"
-                        checked={mode === value}
-                        onChange={() => setMode(value)}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-                <label className="mt-3 block text-xs text-[var(--zeno-ink-muted)]">
-                  Optional emphasis
-                  <textarea
-                    value={context}
-                    onChange={(event) => setContext(event.target.value)}
-                    rows={3}
-                    className="mt-1 w-full rounded-[8px] border border-[var(--zeno-border)] px-3 py-2 text-sm"
-                    placeholder="e.g. emphasise internship tooling and reporting"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void generateContent(false)}
-                  className="mt-4 inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3.5 text-[13px] font-semibold text-white disabled:opacity-50"
-                >
-                  {busy === "generate" ? "Generating…" : "Generate content"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <EditableCvA4Preview
+      {/* Main Content Area: CV Editor vs Cover Letter Studio */}
+      {activeTab === "cv" ? (
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[248px_minmax(0,1fr)_288px]">
+          {draft ? (
+            <CvBlockLibrary
               draft={draft}
-              mode={variant?.mode ?? mode}
               sectionOrder={variant?.sectionOrder}
-              status={variant?.status ?? ""}
-              onChange={queueSave}
             />
+          ) : (
+            <div className="hidden border-r border-[var(--zeno-border)] bg-white lg:block" />
           )}
-        </section>
 
-        {draft ? (
-          <CvPropertiesPanel
-            draft={draft}
-            onChange={queueSave}
-            job={job}
-            match={match}
-            mode={variant?.mode ?? mode}
-          />
-        ) : (
-          <div className="hidden border-l border-[var(--zeno-border)] bg-white lg:block" />
-        )}
-      </div>
+          <section className="min-h-0 min-w-0 overflow-hidden">
+            {!draft ? (
+              <div className="cv-dotted-canvas flex h-full items-start justify-center overflow-y-auto p-8 md:p-12">
+                <div className="w-full max-w-lg rounded-[10px] border border-[var(--zeno-border)] bg-white p-6 shadow-[var(--zeno-shadow-sm)]">
+                  <p className="text-sm font-semibold">Generate validated content</p>
+                  <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
+                    {recommendation
+                      ? `Recommended: ${recommendation.recommendedMode === "one_page" ? "one page" : "two pages"} — ${recommendation.reason}`
+                      : "Choose a page mode, then generate."}
+                  </p>
+                  <div className="mt-3 flex gap-4 text-sm">
+                    {(
+                      [
+                        ["one_page", "One page"],
+                        ["two_page", "Two pages"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <label key={value} className="inline-flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="cv-mode"
+                          checked={mode === value}
+                          onChange={() => setMode(value)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <label className="mt-3 block text-xs text-[var(--zeno-ink-muted)]">
+                    Optional emphasis
+                    <textarea
+                      value={context}
+                      onChange={(event) => setContext(event.target.value)}
+                      rows={3}
+                      className="mt-1 w-full rounded-[8px] border border-[var(--zeno-border)] px-3 py-2 text-sm"
+                      placeholder="e.g. emphasise internship tooling and reporting"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void generateContent(false)}
+                    className="mt-4 inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3.5 text-[13px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {busy === "generate" ? "Generating…" : "Generate content"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <EditableCvA4Preview
+                draft={draft}
+                mode={variant?.mode ?? mode}
+                sectionOrder={variant?.sectionOrder}
+                status={variant?.status ?? ""}
+                onChange={queueSave}
+              />
+            )}
+          </section>
+
+          {draft ? (
+            <CvPropertiesPanel
+              draft={draft}
+              onChange={queueSave}
+              job={job}
+              match={match}
+              mode={variant?.mode ?? mode}
+            />
+          ) : (
+            <div className="hidden border-l border-[var(--zeno-border)] bg-white lg:block" />
+          )}
+        </div>
+      ) : (
+        /* Cover Letter Studio View */
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
+          {/* Left Context Column */}
+          <aside className="space-y-4 border-r border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-4 overflow-y-auto">
+            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-muted)]">
+                Target Role
+              </p>
+              <h3 className="mt-1 text-sm font-bold text-[var(--zeno-ink)]">
+                {job?.title ?? "Selected Job"}
+              </h3>
+              <p className="text-xs text-[var(--zeno-ink-muted)]">
+                {job?.organization_name ?? "Company"}
+              </p>
+              {match ? (
+                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                  <span>🎯</span> {Math.round(match.evidenceFitScore)}% Evidence Match
+                </div>
+              ) : null}
+            </div>
+
+            {match?.topMatched && match.topMatched.length > 0 ? (
+              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                  ✓ Matched Strengths
+                </p>
+                <ul className="mt-2 space-y-1.5 text-xs text-[var(--zeno-ink)]">
+                  {match.topMatched.slice(0, 5).map((m, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5">
+                      <span className="text-emerald-600 font-bold">•</span>
+                      <span>{m}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {match?.primaryGaps && match.primaryGaps.length > 0 ? (
+              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                  ⚠️ Handled Gaps
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--zeno-ink-muted)]">
+                  Addressed truthfully without pretending experience you do not have.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-amber-900">
+                  {match.primaryGaps.slice(0, 3).map((g, idx) => (
+                    <li key={idx}>• {g}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </aside>
+
+          {/* Center Canvas / Textarea Column */}
+          <section className="flex flex-col min-h-0 bg-white overflow-hidden">
+            {coverBusy ? (
+              <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                <span
+                  className="inline-block h-8 w-8 animate-spin rounded-full border-3 border-[var(--zeno-primary)] border-t-transparent"
+                  aria-hidden
+                />
+                <p className="mt-4 text-sm font-semibold text-[var(--zeno-ink)]">
+                  Synthesizing tailored cover letter…
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-[var(--zeno-ink-muted)]">
+                  Grounding every claim strictly in your verified career profile and addressing role requirements.
+                </p>
+              </div>
+            ) : coverDraft ? (
+              <div className="flex flex-col flex-1 min-h-0 p-6 overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-[var(--zeno-border)] pb-3 mb-4">
+                  <div className="flex items-center gap-3 text-xs text-[var(--zeno-ink-muted)]">
+                    <span>
+                      Words: <strong>{coverDraft.trim().split(/\s+/).filter(Boolean).length}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Characters: <strong>{coverDraft.length}</strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void copyCoverLetter()}
+                      className="rounded-[6px] border border-[var(--zeno-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
+                    >
+                      {coverCopied ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadCoverLetter}
+                      className="rounded-[6px] border border-[var(--zeno-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
+                    >
+                      ⬇ Download .txt
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  value={coverDraft}
+                  onChange={(e) => setCoverDraft(e.target.value)}
+                  className="flex-1 w-full resize-none font-sans text-sm leading-relaxed text-[var(--zeno-ink)] border-0 focus:ring-0 focus:outline-none bg-transparent"
+                  placeholder="Your cover letter text..."
+                />
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                <div className="max-w-md rounded-[12px] border border-[var(--zeno-border)] bg-white p-6 shadow-sm">
+                  <span className="text-3xl">✉️</span>
+                  <h3 className="mt-3 text-base font-bold text-[var(--zeno-ink)]">
+                    Create a Grounded Cover Letter
+                  </h3>
+                  <p className="mt-1.5 text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
+                    Generate a targeted, high-impact cover letter tailored specifically to {job?.organization_name ? `${job.title} at ${job.organization_name}` : "this job"}, truthful to your verified profile.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={coverBusy}
+                    onClick={() => void generateCoverLetter()}
+                    className="mt-4 inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-4 text-xs font-semibold text-white hover:bg-[var(--zeno-primary-deep)] transition"
+                  >
+                    Generate Cover Letter
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Right Guidance Column */}
+          <aside className="border-l border-[var(--zeno-border)] bg-white p-4 overflow-y-auto space-y-4">
+            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3.5">
+              <p className="text-xs font-bold text-[var(--zeno-ink)]">
+                🛡 Grounded in Evidence
+              </p>
+              <p className="mt-1 text-[11px] text-[var(--zeno-ink-muted)] leading-relaxed">
+                Zeno only references projects, achievements, and metrics that exist in your verified profile. Never fake credentials or invent experiences.
+              </p>
+            </div>
+
+            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+              <p className="text-xs font-bold text-[var(--zeno-ink)]">
+                💡 Application Tips
+              </p>
+              <ul className="mt-2 space-y-2 text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
+                <li>• <strong>Target 250–350 words</strong>: Keep your cover letter punchy and easy to scan.</li>
+                <li>• <strong>Highlight 2 top achievements</strong>: Focus on concrete outcomes and relevant tech stack.</li>
+                <li>• <strong>Align with company mission</strong>: Customize the opening paragraph with why this specific team excites you.</li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
