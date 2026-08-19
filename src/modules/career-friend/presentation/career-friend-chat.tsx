@@ -6,16 +6,18 @@ import { useState } from "react";
 type Message = { role: "user" | "assistant"; content: string };
 
 const ACTION_LINKS = {
-  view_jobs: { href: "/app/jobs", label: "View jobs" },
-  review_recommendations: { href: "/app/recommendations", label: "Review inbox" },
+  view_jobs: { href: "/app/jobs", label: "View jobs & campaigns" },
+  review_recommendations: { href: "/app/recommendations", label: "Review recommendations" },
   start_sprint: { href: "/app/growth", label: "Open growth plan" },
   update_profile: { href: "/app/career-profile", label: "Update profile" },
+  tailor_cv: { href: "/app/cvs", label: "Open CV Hub" },
 } as const;
 
 const STARTERS = [
-  "What should I focus on this week?",
-  "Any new matches I should look at?",
+  "Find junior remote DevOps jobs",
+  "What skills should I learn next?",
   "What's the biggest gap in my profile?",
+  "Tailor my CV for a specific role",
 ];
 
 export function CareerFriendChat(props: {

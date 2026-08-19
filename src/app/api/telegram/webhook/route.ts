@@ -8,6 +8,7 @@ import {
 } from "@/modules/career-campaign/infrastructure/telegram-bot-sender";
 import { getServerConfig } from "@/server/config";
 import { createSupabaseClient } from "@/server/supabase-client";
+import { getCareerFriendApplication } from "@/server/composition-root";
 
 export const runtime = "nodejs";
 
@@ -75,6 +76,11 @@ export async function POST(request: Request) {
       repository,
       publicBaseUrl: config.PUBLIC_APP_BASE_URL,
       sendText: (targetChatId, text) => sender.sendText(targetChatId, text),
+      askAgent: async ({ userId, message }) => {
+        const app = getCareerFriendApplication(userId);
+        const result = await app.askTelegram(message);
+        return { answer: result.answer };
+      },
     });
   } catch (error) {
     await repository

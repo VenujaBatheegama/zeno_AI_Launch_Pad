@@ -42,6 +42,7 @@ export interface CareerFriendRepository {
     conversationId: string;
     limit: number;
   }): Promise<CareerConversationMessage[]>;
+  findOrCreateTelegramConversation(userId: string): Promise<string>;
 }
 
 export interface CareerAdvisor {

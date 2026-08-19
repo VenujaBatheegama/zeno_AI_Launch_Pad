@@ -1,5 +1,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
+import {
+  detectAdversarialJailbreak,
+  formatTelegramAppLinks,
+  getDeflectionMessage,
+  sanitizeUserInput,
+} from "@/modules/career-friend/domain/guardrails";
 import type { CareerCampaignRepository } from "./ports";
 
 const LINK_CODE_TTL_MINUTES = 15;
@@ -69,6 +75,10 @@ export async function handleTelegramInboundMessage(input: {
   text: string | null;
   repository: CareerCampaignRepository;
   sendText: (chatId: string, text: string) => Promise<void>;
+  askAgent?: (agentInput: {
+    userId: string;
+    message: string;
+  }) => Promise<{ answer: string }>;
   publicBaseUrl?: string;
   now?: () => Date;
 }): Promise<TelegramInboundResult> {
@@ -102,10 +112,10 @@ export async function handleTelegramInboundMessage(input: {
       existingLink?.optedInAt && !existingLink.optedOutAt,
     );
     const reply = userId
-      ? "Telegram is connected to Zeno. Proactive alerts are on. Send /help to see available commands."
+      ? "Telegram is connected to Zeno. Proactive alerts are on. Ask me any career question or send /help to see commands."
       : linkedUserId
         ? existingAlertsEnabled
-          ? "This Telegram chat is already connected to Zeno. Proactive alerts are on. Send /help to see available commands."
+          ? "This Telegram chat is already connected to Zeno. Proactive alerts are on. Ask me any career question or send /help to see commands."
           : "This Telegram chat is already connected to Zeno, but proactive alerts are paused. Send /start to resume them."
         : "That connection link is invalid, expired, or already used. Generate a new one in Zeno Settings.";
     await input.sendText(
@@ -117,10 +127,8 @@ export async function handleTelegramInboundMessage(input: {
 
   const userId = await input.repository.getUserIdByTelegramChatId(input.chatId);
   if (!userId) {
-    await input.sendText(
-      input.chatId,
-      "This Telegram chat is not connected to Zeno yet. Open Zeno Settings and choose Connect Telegram.",
-    );
+    const unlinkedDeflection = getDeflectionMessage("unlinked", input.publicBaseUrl);
+    await input.sendText(input.chatId, unlinkedDeflection);
     return { status: "replied", command: "unlinked", userId: null };
   }
 
@@ -141,9 +149,32 @@ export async function handleTelegramInboundMessage(input: {
     await input.repository.setTelegramOptIn(userId, now.toISOString());
     await input.sendText(
       input.chatId,
-      "Zeno Telegram alerts are on. Send /help to see available commands.",
+      "Zeno Telegram alerts are on. You can ask me any career question or send /help to see commands.",
     );
     return { status: "replied", command: "start", userId };
+  }
+
+  if (command === "help" && text.startsWith("/")) {
+    await input.sendText(
+      input.chatId,
+      [
+        "Zeno Career Agent Commands:",
+        "/jobs — open job search & active campaigns",
+        "/inbox — review high-fit & growth recommendations",
+        "/applications — open your application tracker",
+        "/growth — review growth projects & sprints",
+        "/cvs — access tailored CVs & cover letters",
+        "/stop — pause proactive alerts",
+        "/start — resume proactive alerts",
+        "",
+        "💡 You can also ask me anything directly in chat — like:",
+        "• 'Find junior remote DevOps jobs'",
+        "• 'Notify me when Python AI roles appear'",
+        "• 'What skills should I learn next?'",
+        "• 'Tailor my CV for this job: [JD]'",
+      ].join("\n"),
+    );
+    return { status: "replied", command: "help", userId };
   }
 
   const links: Record<string, { label: string; path: string }> = {
@@ -154,6 +185,7 @@ export async function handleTelegramInboundMessage(input: {
       path: "/app/applications",
     },
     growth: { label: "Open your Growth plan", path: "/app/growth" },
+    cvs: { label: "Open your CV Hub", path: "/app/cvs" },
   };
   const selected = links[command];
   if (selected && text.startsWith("/")) {
@@ -164,6 +196,25 @@ export async function handleTelegramInboundMessage(input: {
     return { status: "replied", command, userId };
   }
 
+  // Pre-LLM Guardrail check for jailbreak / prompt injection
+  if (detectAdversarialJailbreak(text)) {
+    const jailbreakDeflection = getDeflectionMessage("jailbreak");
+    await input.sendText(input.chatId, jailbreakDeflection);
+    return { status: "replied", command: "jailbreak_deflected", userId };
+  }
+
+  // Route to Conversational Agent
+  if (input.askAgent) {
+    const sanitized = sanitizeUserInput(text);
+    const agentResult = await input.askAgent({
+      userId,
+      message: sanitized,
+    });
+    const formatted = formatTelegramAppLinks(agentResult.answer, input.publicBaseUrl);
+    await input.sendText(input.chatId, formatted);
+    return { status: "replied", command: "conversational", userId };
+  }
+
   await input.sendText(
     input.chatId,
     [
@@ -172,6 +223,7 @@ export async function handleTelegramInboundMessage(input: {
       "/inbox — review job and Growth recommendations",
       "/applications — open your application tracker",
       "/growth — continue your Growth plan",
+      "/cvs — access tailored CVs & cover letters",
       "/stop — pause proactive alerts",
       "/start — resume proactive alerts",
     ].join("\n"),
