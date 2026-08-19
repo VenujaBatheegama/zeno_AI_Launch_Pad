@@ -295,12 +295,12 @@ export function formatOpportunitiesForChat(input: {
 }): string {
   if (input.jobs.length === 0) {
     return [
-      `🔍 I searched for **${input.querySummary}**, but didn't find any direct openings right now.`,
+      `I searched for "${input.querySummary}", but didn't find any direct openings right now.`,
       "",
-      "💡 **Suggestions:**",
+      "Suggestions:",
       "• Try broadening the role title (e.g. 'Software Engineer' or 'Developer')",
       "• Include 'remote' or expand the location",
-      "• Send `/jobs` to review your saved preferences and active campaigns",
+      "• Send /jobs to review your saved preferences and active campaigns",
     ].join("\n");
   }
 
@@ -325,21 +325,21 @@ export function formatOpportunitiesForChat(input: {
     );
     const skillHint =
       matchedSkills.length > 0
-        ? `\n   💡 *Matches:* ${matchedSkills.slice(0, 3).join(", ")}`
+        ? `\n   Matches: ${matchedSkills.slice(0, 3).join(", ")}`
         : "";
 
     const linkUrl = job.application_url ?? job.source_url;
-    const link = linkUrl ? `\n   🔗 [View & Apply](${linkUrl})` : "";
+    const link = linkUrl ? `\n   🔗 ${linkUrl}` : "";
 
-    return `${num}. 🏢 **${job.title}**${company}\n   📍 ${loc}${mode}${exp}${skillHint}${link}`;
+    return `${num}. ${job.title}${company}\n   📍 ${loc}${mode}${exp}${skillHint}${link}`;
   });
 
   return [
-    `🎯 Found **${topJobs.length} opportunities** matching *"${input.querySummary}"*:`,
+    `Found ${topJobs.length} opportunities for ${input.querySummary}:`,
     "",
     formattedItems.join("\n\n"),
     "",
-    "👉 **Next step:** Want me to tailor your CV or write a cover letter for one of these? Just tell me which role!",
+    "Let me know if you'd like me to analyze your fit for any of these, tailor your CV, or prepare a cover letter!",
   ].join("\n");
 }
 

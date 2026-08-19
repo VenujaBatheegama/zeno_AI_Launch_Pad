@@ -148,12 +148,12 @@ describe("Natural Language Job Search", () => {
         userSkills: ["React", "TypeScript", "Node.js"],
       });
 
-      expect(formatted).toContain("Found **2 opportunities** matching");
-      expect(formatted).toContain("1. 🏢 **Frontend Engineer (React)** — TechCorp");
+      expect(formatted).toContain("Found 2 opportunities for Remote React Developer:");
+      expect(formatted).toContain("1. Frontend Engineer (React) — TechCorp");
       expect(formatted).toContain("📍 Remote, Germany • Remote • Mid");
-      expect(formatted).toContain("💡 *Matches:* React, TypeScript");
-      expect(formatted).toContain("[View & Apply](https://example.com/apply/1)");
-      expect(formatted).toContain("Want me to tailor your CV or write a cover letter");
+      expect(formatted).toContain("Matches: React, TypeScript");
+      expect(formatted).toContain("https://example.com/apply/1");
+      expect(formatted).toContain("Let me know if you'd like me to analyze your fit");
     });
 
     it("returns helpful suggestions when no jobs found", () => {

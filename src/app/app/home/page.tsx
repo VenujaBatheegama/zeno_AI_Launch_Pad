@@ -4,22 +4,19 @@ import { redirect } from "next/navigation";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
 import { CareerFriendChat } from "@/modules/career-friend/presentation/career-friend-chat";
 import { HomeGreeting } from "@/modules/product-shell/home-greeting";
+import { classifyMissingMigration } from "@/lib/migration-guard";
 import { requireUserId } from "@/server/auth";
 import { getCareerCampaignApplication } from "@/server/composition-root";
 import { requireProfile } from "@/server/identity";
 
 export const dynamic = "force-dynamic";
 
-function isMissingCampaignSchema(error: unknown): boolean {
-  if (!(error instanceof CareerCampaignError)) return false;
-  if (error.code !== "PERSISTENCE_FAILED") return false;
-  const cause = error.cause as { code?: string; message?: string } | undefined;
-  const message = `${cause?.message ?? ""} ${error.message}`.toLocaleLowerCase();
-  return (
-    cause?.code === "PGRST205" ||
-    message.includes("could not find the table") ||
-    message.includes("schema cache")
-  );
+function wrapCampaignError(error: unknown): unknown {
+  // Surface PERSISTENCE_FAILED errors so classifyMissingMigration can inspect them.
+  if (error instanceof CareerCampaignError && error.code === "PERSISTENCE_FAILED") {
+    return error;
+  }
+  return null;
 }
 
 export default async function HomePage() {
@@ -40,33 +37,33 @@ export default async function HomePage() {
     (error: unknown) => ({ ok: false as const, error }),
   );
 
-  let schemaMissing = false;
+  let migrationGap = null;
   if (!dashboardResult.ok) {
-    if (isMissingCampaignSchema(dashboardResult.error)) {
-      schemaMissing = true;
-    } else {
+    const wrappedError = wrapCampaignError(dashboardResult.error);
+    migrationGap = wrappedError ? classifyMissingMigration(wrappedError) : null;
+    if (!migrationGap) {
       throw dashboardResult.error;
     }
   }
 
+  const schemaMissing = migrationGap !== null;
   const name = profile.displayName?.trim() || "there";
   const incomplete = profile.onboardingStatus !== "completed";
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      {schemaMissing ? (
+      {migrationGap ? (
         <section className="rounded-[20px] border border-amber-300 bg-amber-50 p-5">
           <h2 className="text-lg font-semibold text-amber-950">
-            Campaign database migration required
+            {migrationGap.feature} database migration required
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-amber-900">
-            Tables from{" "}
+            {migrationGap.description} Apply{" "}
             <code className="rounded bg-amber-100 px-1">
-              supabase/migrations/0010_career_campaign.sql
+              {migrationGap.migrationFile}
             </code>{" "}
-            are not in your Supabase project yet. Apply that migration in the
-            Supabase SQL editor (or via the Supabase CLI), then reload this
-            page.
+            in the Supabase SQL editor (or via the Supabase CLI), then reload
+            this page.
           </p>
         </section>
       ) : null}

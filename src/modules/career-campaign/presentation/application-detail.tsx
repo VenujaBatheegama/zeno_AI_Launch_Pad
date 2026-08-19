@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { isTerminalApplicationStatus } from "../domain/application-transitions";
 import type {
   ApplicationStatus,
   JobApplication,
@@ -53,9 +54,16 @@ export function ApplicationDetail(props: {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em]">
-          {props.title ?? "Application"}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em]">
+            {props.title ?? "Application"}
+          </h1>
+          {isTerminalApplicationStatus(props.application.status) ? (
+            <span className="rounded-full bg-[var(--zeno-surface)] px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-muted)]">
+              Closed ({props.application.status})
+            </span>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
           {[props.company, props.application.status].filter(Boolean).join(" · ")}
         </p>
@@ -73,8 +81,16 @@ export function ApplicationDetail(props: {
           <dd>{props.application.appliedAt?.slice(0, 10) ?? "—"}</dd>
         </div>
         <div>
-          <dt className="text-[var(--zeno-ink-faint)]">Follow-up due</dt>
-          <dd>{props.application.followUpDueAt?.slice(0, 10) ?? "—"}</dd>
+          <dt className="text-[var(--zeno-ink-faint)]">
+            {isTerminalApplicationStatus(props.application.status)
+              ? "Outcome recorded"
+              : "Follow-up due"}
+          </dt>
+          <dd>
+            {isTerminalApplicationStatus(props.application.status)
+              ? props.application.outcomeAt?.slice(0, 10) ?? "—"
+              : props.application.followUpDueAt?.slice(0, 10) ?? "—"}
+          </dd>
         </div>
         <div>
           <dt className="text-[var(--zeno-ink-faint)]">CV variant</dt>
@@ -89,6 +105,12 @@ export function ApplicationDetail(props: {
           </dd>
         </div>
       </dl>
+
+      {isTerminalApplicationStatus(props.application.status) ? (
+        <p className="text-xs text-[var(--zeno-ink-faint)]">
+          Outcomes are logged and will be factored into future match scoring.
+        </p>
+      ) : null}
 
       {nextStatuses.length > 0 ? (
         <div className="flex flex-wrap gap-2">

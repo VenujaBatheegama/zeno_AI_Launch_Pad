@@ -4,6 +4,7 @@ import type { EnqueueNotificationInput } from "@/modules/career-campaign/applica
 import type { NotificationOutboxItem } from "@/modules/career-campaign/domain/schemas";
 
 import type { AnalysedCampaignJob } from "../domain/market-requirements";
+export type { AnalysedCampaignJob };
 import type {
   AdvisorAssessment,
   AdvisorChatResponse,
@@ -25,6 +26,8 @@ export type GrowthCaps = {
   marketMinAnalysedJobs: number;
   assessmentLeaseMs: number;
   publicAppBaseUrl: string;
+  /** Days after creation before a stalled market-refined request falls back to preliminary. */
+  preliminaryStallDays: number;
 };
 
 export type CompactAssessmentInput = {

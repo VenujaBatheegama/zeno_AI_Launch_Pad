@@ -18,7 +18,7 @@ import {
   marketEvidenceSummary,
   shouldRefineFromMarket,
 } from "../domain/market-requirements";
-import { MAX_ASSESSMENT_ATTEMPTS } from "../domain/policy";
+import { MAX_ASSESSMENT_ATTEMPTS, PRELIMINARY_MARKET_LABEL } from "../domain/policy";
 import {
   advisorAssessmentSchema,
   advisorRecommendationSchema,
@@ -179,6 +179,7 @@ async function runAssessment(
   if (!request) {
     throw new CareerGrowthError("NOT_FOUND", "Growth assessment request was not found.");
   }
+  const log = deps.log ?? defaultLog;
   const campaign = await deps.campaigns.getCampaign(request.campaignId);
   if (!campaign || campaign.userId !== request.userId) {
     await deps.repository.updateAssessmentRequest(request.id, {
@@ -210,24 +211,49 @@ async function runAssessment(
   const market = aggregateMarketRequirements(analysedJobs, {
     minScore: campaign.minimumScore,
   });
+  let isStallFallback = false;
   if (
     request.mode === "market_refined" &&
     !shouldRefineFromMarket(market, deps.caps.marketMinAnalysedJobs)
   ) {
-    await deps.repository.updateAssessmentRequest(request.id, {
-      status: "completed",
-      errorCategory: "market_below_threshold",
-      completedAt: now,
-      updatedAt: now,
-      leaseOwner: null,
-      leaseExpiresAt: null,
+    // Check if this request has been stalled long enough to fall back to preliminary.
+    const stalledDays =
+      (new Date(now).getTime() - new Date(request.createdAt).getTime()) /
+      (1000 * 60 * 60 * 24);
+    const isStalled = stalledDays >= deps.caps.preliminaryStallDays;
+
+    if (!isStalled) {
+      // Not yet stalled — skip silently as before.
+      await deps.repository.updateAssessmentRequest(request.id, {
+        status: "completed",
+        errorCategory: "market_below_threshold",
+        completedAt: now,
+        updatedAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      });
+      return {
+        requestStatus: "completed",
+        assessment: null,
+        recommendation: null,
+        cacheHit: false,
+      };
+    }
+
+    // Stalled: downgrade to preliminary using actual partial data.
+    // Do NOT hardcode marketSampleSize: 0 — use the real count so the label
+    // accurately represents the basis for the assessment.
+    log("growth_assessment_stall_fallback", {
+      requestId: request.id,
+      campaignId: request.campaignId,
+      stalledDays: Math.round(stalledDays),
+      actualJobCount: analysedJobs.length,
+      marketMinRequired: deps.caps.marketMinAnalysedJobs,
     });
-    return {
-      requestStatus: "completed",
-      assessment: null,
-      recommendation: null,
-      cacheHit: false,
-    };
+    // Downgrade mode in-place so the rest of the function treats this as preliminary.
+    // The real partial job count (analysedJobs.length) flows into marketSampleSize below.
+    (request as { mode: string }).mode = "preliminary";
+    isStallFallback = true;
   }
 
   const projects = await deps.repository.listProjects({
@@ -296,8 +322,14 @@ async function runAssessment(
     }),
   );
 
+  // For stall fallbacks, force the preliminary label so the assessment clearly
+  // communicates it was generated from partial market data.
   const marketSummary =
-    request.mode === "market_refined" ? marketEvidenceSummary(market) : null;
+    request.mode === "market_refined"
+      ? marketEvidenceSummary(market)
+      : isStallFallback
+        ? PRELIMINARY_MARKET_LABEL
+        : null;
   let usedModel = false;
   let modelName: string | null = null;
   let assessmentPayload = advisorAssessmentSchema.parse({
@@ -332,8 +364,12 @@ async function runAssessment(
     mode: request.mode,
     dimensions: assessmentPayload.dimensions,
     highestPriorityGapKey: assessmentPayload.highestPriorityGapKey,
+    // For market_refined: use the validated relevantJobCount.
+    // For preliminary (including stall-fallback): use the actual count of analysed
+    // jobs so the label accurately represents the data that was available.
     marketSampleSize:
-      request.mode === "market_refined" ? market.relevantJobCount : 0,
+      request.mode === "market_refined" ? market.relevantJobCount : analysedJobs.length,
+
     marketEvidenceSummary: assessmentPayload.marketEvidenceSummary,
     inputFingerprint,
     workloadSnapshot: workload,

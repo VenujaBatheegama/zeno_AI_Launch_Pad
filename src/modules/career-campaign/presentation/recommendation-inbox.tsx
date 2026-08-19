@@ -21,6 +21,8 @@ const REJECTION_REASONS: Array<{ value: DecisionReason; label: string }> = [
 
 export function RecommendationInbox(props: {
   recommendations: JobRecommendation[];
+  /** Map of campaign id → campaign name for attribution. Empty map is safe — no badge rendered. */
+  campaignNames: Map<string, string>;
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -67,7 +69,8 @@ export function RecommendationInbox(props: {
   if (props.recommendations.length === 0) {
     return (
       <p className="text-sm text-[var(--zeno-ink-muted)]">
-        No recommendations yet. Run Zeno to check for matching jobs.
+        No job recommendations yet — your active campaigns will surface matches
+        here as they run.
       </p>
     );
   }
@@ -97,6 +100,16 @@ export function RecommendationInbox(props: {
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {(() => {
+                  const campaignName = rec.jobSearchCampaignId
+                    ? props.campaignNames.get(rec.jobSearchCampaignId)
+                    : undefined;
+                  return campaignName ? (
+                    <span className="mt-1 inline-block rounded-full border border-[var(--zeno-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--zeno-ink-faint)]">
+                      via {campaignName}
+                    </span>
+                  ) : null;
+                })()}
               </div>
               <p className="text-sm font-medium text-[var(--zeno-primary-deep)]">
                 Evidence fit {score.evidenceFitScore}%

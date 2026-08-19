@@ -67,10 +67,16 @@ external scheduler:
 
 On Vercel Pro you may instead set a 15-minute cron for `/api/cron/campaign`.
 
-## Recommendations follow-up (deferred)
+## Inbox attribution and re-surfacing
 
-This change does not redesign `/app/recommendations`. Background campaigns still
-create Inbox items when the score meets the threshold, the listing is
-hard-constraint eligible, the listing is not already recommended, and the
-per-run cap is not exceeded. Instant Search does not. Campaign attribution is
-stored on `job_recommendations.job_search_campaign_id` for a later Inbox UI.
+Background campaigns create Inbox items when the fit score meets the threshold,
+the listing is hard-constraint eligible, the listing is not already recommended,
+and the per-run cap is not exceeded.
+
+- **Attribution**: Inbox recommendation cards display a `via {campaign_name}` badge.
+- **Jobs re-surfacing**: Dismissed recommendations are eligible to re-surface in the
+  Inbox if `RESURFACING_WINDOW_DAYS` (default 30 days) have elapsed since dismissal
+  AND the underlying listing has a new campaign sighting (`seen_at > dismissed_at`).
+- **Growth re-surfacing (FU-5, deferred)**: Re-surfacing on the Growth tab is
+  keyed on assessment refresh events rather than listing sightings, and is deferred.
+
