@@ -63,6 +63,15 @@ function ErrorBanner({ message }: { message: string | null }) {
   );
 }
 
+function InfoBanner({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p className="rounded-[var(--zeno-radius-sm)] border border-[color-mix(in_srgb,var(--zeno-primary)_25%,white)] bg-[var(--zeno-violet-wash)] px-3 py-2 text-sm text-[var(--zeno-primary)]">
+      {message}
+    </p>
+  );
+}
+
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -70,13 +79,19 @@ export function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error")
+      ? humanizeAuthError(searchParams.get("error"))
+      : null,
+  );
+  const [info, setInfo] = useState<string | null>(searchParams.get("info"));
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setInfo(null);
     try {
       const supabase = createBrowserSupabaseClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -114,6 +129,7 @@ export function SignInForm() {
         </div>
       ) : null}
       <ErrorBanner message={error} />
+      <InfoBanner message={info} />
       <Field
         id="email"
         label="Email"

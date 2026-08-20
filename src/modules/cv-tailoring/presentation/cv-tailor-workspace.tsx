@@ -384,10 +384,43 @@ export function CvTailorWorkspace({ listingId }: Props) {
         }),
       ]);
 
+      let finalDetailsRes = detailsRes;
+      let finalRecommendRes = recommendRes;
+
+      if (!finalDetailsRes.ok) {
+        setLoadingHint("Extracting job requirements & matching against your profile…");
+        try {
+          const autoAnalyseRes = await fetch(
+            `/api/career-intelligence/matches/${listingId}`,
+            {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ force: false }),
+            },
+          );
+          if (autoAnalyseRes.ok) {
+            [finalRecommendRes, finalDetailsRes] = await Promise.all([
+              fetch("/api/cv-tailoring/recommend", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ listingId }),
+              }),
+              fetch(`/api/career-intelligence/matches/${listingId}`, {
+                credentials: "same-origin",
+              }),
+            ]);
+          }
+        } catch {
+          // Continue to fallback
+        }
+      }
+
       setLoadingHint("Preparing editor…");
 
-      if (detailsRes.ok) {
-        const details = (await detailsRes.json()) as {
+      if (finalDetailsRes.ok) {
+        const details = (await finalDetailsRes.json()) as {
           card: RankedJobMatchCard;
         };
         setMatch(details.card);
@@ -422,7 +455,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         });
       } else {
         setLoadingHint("Looking up discovered job…");
-        const jobsRes = await fetch("/api/jobs", { credentials: "same-origin" });
+        const jobsRes = await fetch("/api/jobs?includeDismissed=true", { credentials: "same-origin" });
         if (!jobsRes.ok) {
           throw new Error("Could not load jobs for this account.");
         }
@@ -437,18 +470,18 @@ export function CvTailorWorkspace({ listingId }: Props) {
       }
 
       let recommendError: string | null = null;
-      if (recommendRes.ok) {
-        const body = (await recommendRes.json()) as {
+      if (finalRecommendRes.ok) {
+        const body = (await finalRecommendRes.json()) as {
           recommendedMode: "one_page" | "two_page";
           reason: string;
         };
         setRecommendation(body);
         setMode(body.recommendedMode);
       } else {
-        const body = (await recommendRes.json()) as { error?: string };
+        const body = (await finalRecommendRes.json()) as { error?: string };
         if (
           body.error &&
-          [400, 404, 409, 422].includes(recommendRes.status)
+          [400, 404, 409, 422].includes(finalRecommendRes.status)
         ) {
           recommendError = body.error;
         }

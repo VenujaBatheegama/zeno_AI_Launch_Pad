@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { NextResponse } from "next/server";
 
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
@@ -22,7 +23,7 @@ export class AuthError extends Error {
   }
 }
 
-export async function getSessionUser(): Promise<AppUser | null> {
+export const getSessionUser = cache(async function getSessionUser(): Promise<AppUser | null> {
   if (!isSupabaseAuthConfigured()) return null;
 
   const supabase = await createServerSupabaseClient();
@@ -33,9 +34,9 @@ export async function getSessionUser(): Promise<AppUser | null> {
 
   if (error || !user) return null;
   return user;
-}
+});
 
-export async function requireUser(): Promise<AppUser> {
+export const requireUser = cache(async function requireUser(): Promise<AppUser> {
   const user = await getSessionUser();
   if (user) return user;
 
@@ -50,12 +51,12 @@ export async function requireUser(): Promise<AppUser> {
   }
 
   throw new AuthError("Sign in to continue.");
-}
+});
 
-export async function requireUserId(): Promise<string> {
+export const requireUserId = cache(async function requireUserId(): Promise<string> {
   const user = await requireUser();
   return user.id;
-}
+});
 
 export function authErrorResponse(error: unknown): NextResponse | null {
   if (error instanceof AuthError) {

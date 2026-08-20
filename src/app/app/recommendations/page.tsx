@@ -25,28 +25,35 @@ export default async function RecommendationsPage() {
   let recommendations: Awaited<ReturnType<typeof app.listRecommendations>> = [];
   let notifications: Awaited<ReturnType<typeof app.listNotifications>> = [];
   let migrationGap = null;
-
   let growthItems: Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["listInbox"]>> = [];
   let campaignNames = new Map<string, string>();
+
+  const growthPromise = getCareerGrowthApplication(userId)
+    .listInbox()
+    .catch(() => []);
+
   try {
-    recommendations = await app.listRecommendations({
-      statuses: ["pending_review", "saved", "accepted"],
-      limit: 50,
-    });
-    notifications = await app.listNotifications(10);
-    const campaigns = await app.listCampaigns();
-    campaignNames = new Map(campaigns.map((c) => [c.id, c.name]));
+    const [recResult, notifResult, campResult, growthResult] =
+      await Promise.all([
+        app.listRecommendations({
+          statuses: ["pending_review", "saved", "accepted"],
+          limit: 50,
+        }),
+        app.listNotifications(10),
+        app.listCampaigns(),
+        growthPromise,
+      ]);
+
+    recommendations = recResult;
+    notifications = notifResult;
+    campaignNames = new Map(campResult.map((c) => [c.id, c.name]));
+    growthItems = growthResult;
   } catch (error) {
     const wrapped = wrapCampaignError(error);
     migrationGap = wrapped ? classifyMissingMigration(wrapped) : null;
     if (!migrationGap) {
       throw error;
     }
-  }
-  try {
-    growthItems = await getCareerGrowthApplication(userId).listInbox();
-  } catch {
-    growthItems = [];
   }
   const schemaMissing = migrationGap !== null;
 

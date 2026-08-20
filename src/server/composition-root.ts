@@ -462,6 +462,7 @@ function createJobDiscoveryApplication(userId: string) {
         { userId, includeSaved: command.includeSaved },
         repository,
       ),
+    repository,
   };
 }
 
