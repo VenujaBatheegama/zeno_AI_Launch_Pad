@@ -1,37 +1,40 @@
 export default function HomeLoading() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6 animate-pulse">
-      <div className="min-h-[calc(100vh-5rem)] rounded-[32px] border border-white/10 bg-[#161223]/90 p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
-        {/* Top bar skeleton */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-5">
-          <div className="h-8 w-52 rounded-full bg-white/10" />
-          <div className="flex gap-2">
-            <div className="h-8 w-28 rounded-full bg-white/10" />
-            <div className="h-8 w-28 rounded-full bg-white/10" />
-          </div>
+    <div className="mx-auto max-w-5xl py-2 px-2 sm:px-4 space-y-8 animate-pulse">
+      {/* Top Header skeleton */}
+      <div className="flex items-center justify-between">
+        <div className="h-4 w-28 rounded bg-gray-200" />
+        <div className="h-7 w-24 rounded-full bg-gray-200" />
+      </div>
+
+      {/* Hero Center skeleton */}
+      <div className="mx-auto max-w-2xl text-center space-y-5 pt-4 flex flex-col items-center">
+        <div className="size-24 rounded-full bg-sky-100" />
+        <div className="space-y-2 flex flex-col items-center">
+          <div className="h-6 w-36 rounded bg-gray-200" />
+          <div className="h-9 w-96 rounded-lg bg-gray-200" />
+          <div className="h-4 w-80 rounded bg-gray-100" />
         </div>
 
-        {/* Center hero skeleton */}
-        <div className="mx-auto max-w-2xl py-10 text-center space-y-6 flex flex-col items-center">
-          <div className="size-28 rounded-full bg-purple-500/20 blur-md" />
-          <div className="h-10 w-96 rounded-2xl bg-white/10" />
-          <div className="flex gap-2 justify-center">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-7 w-28 rounded-full bg-white/5" />
-            ))}
-          </div>
-          <div className="w-full h-32 rounded-2xl border border-purple-500/20 bg-[#1d162d]/80" />
-        </div>
+        {/* Input box skeleton */}
+        <div className="w-full h-32 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" />
+      </div>
 
-        {/* Bottom cards skeleton */}
-        <div className="grid gap-4 sm:grid-cols-3 pt-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-28 rounded-2xl border border-white/10 bg-[#1b1528]/70 p-5"
-            />
-          ))}
-        </div>
+      {/* Bottom cards skeleton */}
+      <div className="grid gap-4 sm:grid-cols-3 pt-4">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-28 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+          >
+            <div className="flex justify-between">
+              <div className="size-5 rounded bg-gray-200" />
+              <div className="h-4 w-16 rounded bg-gray-100" />
+            </div>
+            <div className="mt-4 h-4 w-1/2 rounded bg-gray-200" />
+            <div className="mt-2 h-3 w-3/4 rounded bg-gray-100" />
+          </div>
+        ))}
       </div>
     </div>
   );

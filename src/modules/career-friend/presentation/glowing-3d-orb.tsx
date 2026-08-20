@@ -10,12 +10,12 @@ export function Glowing3dOrb() {
     const container = containerRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 140;
-    const height = container.clientHeight || 140;
+    const width = container.clientWidth || 100;
+    const height = container.clientHeight || 100;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.z = 4.2;
+    camera.position.z = 3.8;
 
     let renderer: THREE.WebGLRenderer | null = null;
     try {
@@ -27,81 +27,61 @@ export function Glowing3dOrb() {
       return;
     }
 
-    // Outer Glass Bubble
-    const outerGeo = new THREE.SphereGeometry(1.15, 64, 64);
+    // Outer Sapphire / Cosmic Liquid Glass Sphere
+    const outerGeo = new THREE.SphereGeometry(1.05, 64, 64);
     const outerMat = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(0x9d5bfe),
-      emissive: new THREE.Color(0x3a106b),
-      emissiveIntensity: 0.4,
-      roughness: 0.12,
-      metalness: 0.1,
-      transmission: 0.7,
-      ior: 1.4,
+      color: new THREE.Color(0x0f2b48),
+      emissive: new THREE.Color(0x041322),
+      emissiveIntensity: 0.3,
+      roughness: 0.08,
+      metalness: 0.15,
+      transmission: 0.75,
+      ior: 1.5,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
     });
     const outerMesh = new THREE.Mesh(outerGeo, outerMat);
     scene.add(outerMesh);
 
-    // Inner Glowing Core
-    const innerGeo = new THREE.SphereGeometry(0.75, 48, 48);
+    // Inner Glowing Cyan/Deep Blue Core
+    const innerGeo = new THREE.SphereGeometry(0.68, 48, 48);
     const innerMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0xe066ff),
-      emissive: new THREE.Color(0xd946ef),
-      emissiveIntensity: 1.6,
-      roughness: 0.4,
+      color: new THREE.Color(0x0ea5e9),
+      emissive: new THREE.Color(0x0284c7),
+      emissiveIntensity: 1.4,
+      roughness: 0.3,
     });
     const innerMesh = new THREE.Mesh(innerGeo, innerMat);
     scene.add(innerMesh);
 
-    // Floating Orbiting Ring / Swirl
-    const torusGeo = new THREE.TorusGeometry(1.4, 0.03, 16, 100);
+    // Iridescent Shimmer Torus
+    const torusGeo = new THREE.TorusGeometry(1.22, 0.022, 16, 100);
     const torusMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0xc084fc),
+      color: new THREE.Color(0x38bdf8),
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.45,
     });
     const torusMesh = new THREE.Mesh(torusGeo, torusMat);
-    torusMesh.rotation.x = Math.PI / 3;
+    torusMesh.rotation.x = Math.PI / 3.2;
     scene.add(torusMesh);
 
-    // Star / Sparkle Particles around the orb
-    const particleCount = 45;
-    const particleGeo = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(Math.random() * 2 - 1);
-      const r = 1.3 + Math.random() * 0.7;
-      particlePositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      particlePositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      particlePositions[i * 3 + 2] = r * Math.cos(phi);
-    }
-    particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0xf5d0fe,
-      size: 0.04,
-      transparent: true,
-      opacity: 0.8,
-    });
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
-
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
-    const pinkLight = new THREE.PointLight(0xf43f5e, 4, 10);
-    pinkLight.position.set(2, 2, 3);
-    scene.add(pinkLight);
-
-    const purpleLight = new THREE.PointLight(0x8b5cf6, 4, 10);
-    purpleLight.position.set(-2, -2, 2);
-    scene.add(purpleLight);
-
-    const cyanLight = new THREE.PointLight(0x38bdf8, 2.5, 10);
-    cyanLight.position.set(0, 3, -1);
+    const cyanLight = new THREE.PointLight(0x38bdf8, 4, 10);
+    cyanLight.position.set(2, 2, 3);
     scene.add(cyanLight);
+
+    const blueLight = new THREE.PointLight(0x1d4ed8, 3.5, 10);
+    blueLight.position.set(-2, -2, 2);
+    scene.add(blueLight);
+
+    const whiteHighlight = new THREE.PointLight(0xffffff, 2, 8);
+    whiteHighlight.position.set(0, 3, 2);
+    scene.add(whiteHighlight);
 
     let animationFrameId: number;
     let clock = new THREE.Clock();
@@ -109,21 +89,16 @@ export function Glowing3dOrb() {
     const animate = () => {
       const elapsedTime = clock.getElapsedTime();
 
-      // Fluid rotations
-      outerMesh.rotation.y = elapsedTime * 0.35;
-      outerMesh.rotation.x = Math.sin(elapsedTime * 0.25) * 0.15;
+      outerMesh.rotation.y = elapsedTime * 0.4;
+      outerMesh.rotation.x = Math.sin(elapsedTime * 0.3) * 0.15;
 
       innerMesh.rotation.y = -elapsedTime * 0.5;
-      innerMesh.rotation.z = Math.cos(elapsedTime * 0.3) * 0.2;
+      innerMesh.rotation.z = Math.cos(elapsedTime * 0.25) * 0.2;
 
-      torusMesh.rotation.z = elapsedTime * 0.4;
-      torusMesh.rotation.y = Math.sin(elapsedTime * 0.3) * 0.4;
+      torusMesh.rotation.z = elapsedTime * 0.35;
+      torusMesh.rotation.y = Math.sin(elapsedTime * 0.3) * 0.35;
 
-      particles.rotation.y = elapsedTime * 0.15;
-      particles.rotation.x = elapsedTime * 0.08;
-
-      // Pulse emissive intensity
-      const pulse = 1.4 + Math.sin(elapsedTime * 2.5) * 0.3;
+      const pulse = 1.2 + Math.sin(elapsedTime * 2.2) * 0.3;
       innerMat.emissiveIntensity = pulse;
 
       renderer?.render(scene, camera);
@@ -146,18 +121,16 @@ export function Glowing3dOrb() {
       innerMat.dispose();
       torusGeo.dispose();
       torusMat.dispose();
-      particleGeo.dispose();
-      particleMat.dispose();
     };
   }, []);
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Background glow halo */}
-      <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-purple-600/40 via-fuchsia-500/30 to-pink-500/20 blur-2xl pointer-events-none" />
+      {/* Subtle cyan/blue ambient glow */}
+      <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-sky-400/20 via-blue-500/20 to-indigo-500/15 blur-xl pointer-events-none" />
       <div
         ref={containerRef}
-        className="relative size-28 sm:size-32 flex items-center justify-center cursor-pointer transition-transform duration-500 hover:scale-105"
+        className="relative size-20 sm:size-24 flex items-center justify-center cursor-pointer transition-transform duration-500 hover:scale-105"
       />
     </div>
   );

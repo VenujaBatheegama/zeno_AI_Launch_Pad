@@ -206,7 +206,7 @@ export async function getJobMatchDetails(
     dependencies.jobRepository.listJobs({
       userId: parsed.userId,
       includeDismissed: true,
-      limit: 100,
+      limit: 500,
       offset: 0,
     }),
     dependencies.repository.getJobAnalysisByListing(
