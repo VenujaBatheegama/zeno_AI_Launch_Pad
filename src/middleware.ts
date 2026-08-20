@@ -8,6 +8,7 @@ const AUTH_PATHS = [
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/callback",
+  "/auth/confirm",
   "/auth/verify",
 ];
 
@@ -57,7 +58,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (authenticated && isAuthPath(pathname) && pathname !== "/auth/callback") {
+  if (
+    authenticated &&
+    isAuthPath(pathname) &&
+    pathname !== "/auth/callback" &&
+    pathname !== "/auth/confirm"
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/app/home";
     url.search = "";

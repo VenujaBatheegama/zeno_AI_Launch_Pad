@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { MemoryProfileRepository } from "@/modules/identity/infrastructure/memory-profile-repository";
 import { SupabaseProfileRepository } from "@/modules/identity/infrastructure/supabase-profile-repository";
 import type {
@@ -108,14 +110,14 @@ export function getProfileRepository(): ProfileRepository {
   return cachedRepository;
 }
 
-export async function requireProfile(): Promise<UserProfile> {
+export const requireProfile = cache(async function requireProfile(): Promise<UserProfile> {
   const user = await requireUser();
   const repository = getProfileRepository();
   return repository.getOrCreate(
     user.id,
     (user.user_metadata?.display_name as string | undefined) ?? null,
   );
-}
+});
 
 export async function updateProfileOnboarding(
   userId: string,

@@ -40,9 +40,42 @@ export default async function JobsPage() {
       });
     }
   }
-  for (const item of campaigns) {
+  const growthByCampaignId: Record<
+    string,
+    Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["campaignState"]>>
+  > = {};
+
+  const topCampaigns = campaigns.slice(0, 5);
+  const [campaignListingsResults, growthResults] = await Promise.all([
+    Promise.all(
+      topCampaigns.map((c) =>
+        campaign.listCampaignListings(c.id).catch(() => []),
+      ),
+    ),
+    Promise.all(
+      campaigns.map(async (item) => {
+        try {
+          const state = await getCareerGrowthApplication(userId).campaignState(
+            item.id,
+          );
+          return { id: item.id, state };
+        } catch {
+          return { id: item.id, state: null };
+        }
+      }),
+    ),
+  ]);
+
+  for (const { id, state } of growthResults) {
+    if (state) {
+      growthByCampaignId[id] = state;
+    }
+  }
+
+  for (let i = 0; i < topCampaigns.length; i++) {
     if (recentOpportunities.length >= 5) break;
-    const listings = await campaign.listCampaignListings(item.id);
+    const item = topCampaigns[i];
+    const listings = campaignListingsResults[i] ?? [];
     for (const listing of listings) {
       if (recentOpportunities.length >= 5) break;
       const job = jobById.get(listing.listingId);
@@ -59,18 +92,6 @@ export default async function JobsPage() {
         seenAt: listing.lastSeenAt,
       });
     }
-  }
-
-  const growthByCampaignId: Record<string, Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["campaignState"]>>> = {};
-  try {
-    const growth = getCareerGrowthApplication(userId);
-    await Promise.all(
-      campaigns.map(async (item) => {
-        growthByCampaignId[item.id] = await growth.campaignState(item.id);
-      }),
-    );
-  } catch {
-    // Growth schema may not be applied yet.
   }
 
   return (

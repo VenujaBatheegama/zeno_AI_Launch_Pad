@@ -727,7 +727,7 @@ async function findJob(
   const jobs = await jobRepository.listJobs({
     userId,
     includeDismissed: true,
-    limit: 100,
+    limit: 500,
     offset: 0,
   });
   const job = jobs.find((item) => item.listing_id === listingId);
