@@ -1628,6 +1628,20 @@ function createCareerCampaignApplication(userId: string) {
         );
       }
       const details = await careerApp.getMatchDetails({ listingId });
+      const jobs = await jobRepository.listJobs({
+        userId,
+        includeDismissed: true,
+        limit: 500,
+        offset: 0,
+      });
+      const job = jobs.find((j) => j.listing_id === listingId);
+      const fullJobDescription =
+        job?.description ||
+        details.analysis.requirements
+          .map((req) => req.statement)
+          .join("\n") ||
+        details.card.explanation;
+
       const matchedReqs = details.analysis.requirements
         .filter((r) =>
           details.match.matches.some(
@@ -1649,10 +1663,7 @@ function createCareerCampaignApplication(userId: string) {
         evidenceJson: evidence.evidence,
         jobTitle: details.card.title,
         organizationName: details.card.organizationName,
-        jobDescription:
-          details.analysis.requirements
-            .map((req) => req.statement)
-            .join("\n") || details.card.explanation,
+        jobDescription: fullJobDescription,
         matchedRequirements:
           matchedReqs.length > 0
             ? matchedReqs

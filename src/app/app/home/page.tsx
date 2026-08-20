@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
-import { ZyriconHomeExperience } from "@/modules/career-friend/presentation/zyricon-home-experience";
+import { FluxHomeExperience } from "@/modules/career-friend/presentation/flux-home-experience";
 import { classifyMissingMigration } from "@/lib/migration-guard";
 import { requireUserId } from "@/server/auth";
 import { getCareerCampaignApplication } from "@/server/composition-root";
@@ -49,15 +49,15 @@ export default async function HomePage() {
   const incomplete = profile.onboardingStatus !== "completed";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       {migrationGap ? (
-        <section className="rounded-[24px] border border-amber-300/40 bg-amber-950/40 backdrop-blur-xl p-5 text-amber-200 shadow-xl">
-          <h2 className="text-base font-semibold text-amber-300">
+        <section className="rounded-[20px] border border-amber-300 bg-amber-50 p-5 text-amber-950 shadow-sm">
+          <h2 className="text-base font-semibold text-amber-900">
             {migrationGap.feature} database migration required
           </h2>
-          <p className="mt-1 max-w-2xl text-xs leading-6 text-amber-200/80">
+          <p className="mt-1 max-w-2xl text-xs leading-6 text-amber-800">
             {migrationGap.description} Apply{" "}
-            <code className="rounded bg-amber-900/60 px-1.5 py-0.5 text-amber-300">
+            <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-amber-900">
               {migrationGap.migrationFile}
             </code>{" "}
             in the Supabase SQL editor, then reload this page.
@@ -66,25 +66,25 @@ export default async function HomePage() {
       ) : null}
 
       {incomplete ? (
-        <section className="rounded-[24px] border border-purple-500/30 bg-purple-950/40 backdrop-blur-xl px-6 py-4 text-purple-200 shadow-xl flex items-center justify-between gap-4">
+        <section className="rounded-[20px] border border-gray-200 bg-white p-5 shadow-sm flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-white">
+            <h2 className="text-sm font-semibold text-gray-900">
               Complete your Zeno profile
             </h2>
-            <p className="mt-0.5 text-xs text-purple-300/70">
+            <p className="mt-0.5 text-xs text-gray-500">
               Zeno needs a verified career profile before automated campaign matches can run.
             </p>
           </div>
           <Link
             href="/onboarding"
-            className="shrink-0 rounded-full bg-purple-500/20 border border-purple-400/40 px-4 py-1.5 text-xs font-semibold text-white hover:bg-purple-500/30 transition"
+            className="shrink-0 rounded-full bg-black px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
           >
             Continue setup →
           </Link>
         </section>
       ) : null}
 
-      <ZyriconHomeExperience
+      <FluxHomeExperience
         userName={name}
         disabled={schemaMissing || incomplete}
       />
