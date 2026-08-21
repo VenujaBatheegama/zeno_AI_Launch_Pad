@@ -313,14 +313,14 @@ export function CareerFriendChat(props: {
         </div>
       ) : null}
       {emptyFeatured ? (
-        <div className="mb-3 flex flex-wrap sm:flex-nowrap sm:overflow-x-auto gap-1.5 justify-center px-1 pb-1 scrollbar-none">
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto px-2">
           {STARTERS.map((starter) => (
             <button
               key={starter}
               type="button"
               disabled={props.disabled}
               onClick={() => void send(starter)}
-              className="shrink-0 rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3 py-1.5 text-[11px] sm:text-[12px] font-medium text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
+              className="rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)]/80 backdrop-blur-sm px-3.5 py-1.5 text-[12px] font-medium text-[var(--zeno-ink-muted)] shadow-[var(--zeno-shadow-sm)] transition-all duration-200 hover:scale-[1.03] hover:border-[var(--zeno-primary)]/70 hover:bg-[var(--zeno-surface-elevated)] hover:text-[var(--zeno-ink)] hover:shadow-[0_0_15px_rgba(99,102,241,0.25)] active:scale-95 disabled:opacity-50"
             >
               {starter}
             </button>
@@ -332,9 +332,9 @@ export function CareerFriendChat(props: {
         className={featured ? "sticky bottom-0 pt-2 pb-1" : "border-t border-[var(--zeno-border)] p-3 sm:p-4"}
       >
         <div
-          className={`flex items-center gap-2 ${
+          className={`flex items-center gap-2 transition-all duration-300 ${
             featured
-              ? "rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 py-2.5 sm:px-4 sm:py-3.5 shadow-[var(--zeno-shadow-md)]"
+              ? "rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)]/90 backdrop-blur-md px-3 py-2.5 sm:px-4 sm:py-3.5 shadow-[0_8px_32px_rgba(0,0,0,0.36)] focus-within:border-[var(--zeno-primary)]/80 focus-within:shadow-[0_0_25px_rgba(99,102,241,0.25)]"
               : ""
           }`}
         >
