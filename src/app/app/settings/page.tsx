@@ -316,7 +316,7 @@ export default function SettingsPage() {
                   href={whatsappLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-ink)] px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-[var(--zeno-radius-sm)] bg-[#25D366] hover:bg-[#20bd5a] px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
                 >
                   Open WhatsApp
                 </a>
@@ -405,7 +405,7 @@ export default function SettingsPage() {
                 href={telegramCode.botUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-ink)] px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-[var(--zeno-radius-sm)] bg-[#229ED9] hover:bg-[#1e8ec3] px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
               >
                 Open Telegram
               </a>

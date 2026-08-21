@@ -171,7 +171,7 @@ export function EditableCvA4Preview({
               width: contentWidthPx,
             }}
           >
-            <div ref={measureRef} style={{ width: contentWidthPx }}>
+            <div ref={measureRef} className="text-[#111827]" style={{ width: contentWidthPx }}>
               {measureAtoms.map((atom) => (
                 <div key={`measure-${atom.id}`} data-cv-atom={atom.id}>
                   {atom.node}
@@ -191,7 +191,7 @@ export function EditableCvA4Preview({
             {pageAtomIds.map((ids, pageIndex) => (
               <div
                 key={`page-${pageIndex}`}
-                className="absolute left-0 overflow-hidden bg-white"
+                className="absolute left-0 overflow-hidden bg-white text-[#111827]"
                 style={{
                   top: pageIndex * (pageHeightPx + PAGE_GAP_PX),
                   width: pageWidthPx,
@@ -330,7 +330,11 @@ function buildCvAtoms({
             ] as const
           ).map(([key, value, placeholder], index) => (
             <span key={key} className="inline-flex min-w-0 items-center">
-              {index > 0 ? <span className="px-0.5">|</span> : null}
+              {index > 0 ? (
+                <span className="px-0.5" style={{ color: tokens.colors.muted }}>
+                  |
+                </span>
+              ) : null}
               <input
                 value={value}
                 placeholder={placeholder}
@@ -397,7 +401,10 @@ function buildCvAtoms({
                 >
                   <span
                     className="shrink-0 font-bold"
-                    style={{ fontSize: pt(tokens.type.body) }}
+                    style={{
+                      fontSize: pt(tokens.type.body),
+                      color: tokens.colors.text,
+                    }}
                   >
                     {group.category}:
                   </span>
@@ -549,8 +556,11 @@ function buildCvAtoms({
                     style={{ marginBottom: pt(tokens.space.bulletGap) }}
                   >
                     <span
-                      className="shrink-0"
-                      style={{ width: pt(tokens.space.bulletIndent) }}
+                      className="shrink-0 font-bold"
+                      style={{
+                        width: pt(tokens.space.bulletIndent),
+                        color: tokens.colors.text,
+                      }}
                     >
                       •
                     </span>
@@ -977,8 +987,11 @@ function buildCvAtoms({
                 style={{ marginBottom: pt(tokens.space.bulletGap) }}
               >
                 <span
-                  className="shrink-0"
-                  style={{ width: pt(tokens.space.bulletIndent) }}
+                  className="shrink-0 font-bold"
+                  style={{
+                    width: pt(tokens.space.bulletIndent),
+                    color: tokens.colors.text,
+                  }}
                 >
                   •
                 </span>

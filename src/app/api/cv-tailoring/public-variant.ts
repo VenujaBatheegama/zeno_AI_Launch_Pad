@@ -15,18 +15,18 @@ export function publicCvVariant(variant: CvTailoringVariant) {
     warnings: variant.warnings,
     targetTitle: isResume
       ? resume.targetTitle
-      : variant.contentPlan.targetTitle,
-    jobAlignment: variant.contentPlan.jobAlignment,
-    sectionOrder: variant.contentPlan.sectionOrder.filter(
+      : (variant.contentPlan?.targetTitle || "Target Role"),
+    jobAlignment: variant.contentPlan?.jobAlignment || "",
+    sectionOrder: (variant.contentPlan?.sectionOrder || []).filter(
       (section) => section !== "contact",
     ),
-    earlyCareer: variant.contentPlan.earlyCareer,
-    assessment: variant.assessment ?? variant.contentPlan.assessment ?? null,
-    selectedProjects: variant.contentPlan.projectItemIds,
-    selectedExperience: variant.contentPlan.experienceItemIds,
-    includedFifthProject: variant.contentPlan.projectSelection.includedFifth,
-    fifthProjectReasons: variant.contentPlan.projectSelection.fifthReasons,
-    keywordAudit: variant.keywordAudit,
+    earlyCareer: variant.contentPlan?.earlyCareer ?? false,
+    assessment: variant.assessment ?? variant.contentPlan?.assessment ?? null,
+    selectedProjects: variant.contentPlan?.projectItemIds || [],
+    selectedExperience: variant.contentPlan?.experienceItemIds || [],
+    includedFifthProject: variant.contentPlan?.projectSelection?.includedFifth ?? false,
+    fifthProjectReasons: variant.contentPlan?.projectSelection?.fifthReasons || [],
+    keywordAudit: variant.keywordAudit || [],
     tailoredContent: resume,
     changeNotes: isResume ? resume.changeNotes : [],
     pageCount: variant.artifactPageCount,
@@ -46,7 +46,7 @@ export function publicCvVariantCard(variant: CvTailoringVariant) {
   const isResume = resume && isTailoredResume(resume);
   const targetTitle = isResume
     ? resume.targetTitle
-    : variant.contentPlan.targetTitle;
+    : (variant.contentPlan?.targetTitle || "Target Role");
 
   return {
     id: variant.id,
@@ -54,10 +54,10 @@ export function publicCvVariantCard(variant: CvTailoringVariant) {
     mode: variant.mode,
     status: variant.status,
     targetTitle,
-    jobAlignment: variant.contentPlan.jobAlignment,
+    jobAlignment: variant.contentPlan?.jobAlignment || "",
     pageCount: variant.artifactPageCount,
-    projectCount: variant.contentPlan.projectItemIds.length,
-    experienceCount: variant.contentPlan.experienceItemIds.length,
+    projectCount: variant.contentPlan?.projectItemIds?.length ?? 0,
+    experienceCount: variant.contentPlan?.experienceItemIds?.length ?? 0,
     canDownload: variant.status === "ready" && Boolean(variant.artifactStoragePath),
     canRender:
       variant.status === "ready_to_render" ||

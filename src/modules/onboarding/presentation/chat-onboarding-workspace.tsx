@@ -141,7 +141,7 @@ export function ChatOnboardingWorkspace(props: {
     setMessages(dedupeMessages(pending));
 
     try {
-      const response = await fetch("/api/onboarding/turn", {
+      const response = await fetch("/api/onboarding/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -229,7 +229,7 @@ export function ChatOnboardingWorkspace(props: {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-6xl flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)] lg:flex-row">
+    <div className="mx-auto flex h-screen max-w-6xl flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)] lg:flex-row">
       {/* Left Chat & Guided Form Section */}
       <section className="flex min-h-0 flex-1 flex-col border-[var(--zeno-border)] lg:w-[60%] lg:border-r">
         {/* Header Strip */}

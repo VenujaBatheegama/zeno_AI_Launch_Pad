@@ -177,7 +177,7 @@ export function ApplicationPacketView(props: {
                 type="button"
                 disabled={busy}
                 onClick={() => void markApplied()}
-                className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-ink)] px-4 py-2.5 text-sm font-semibold text-white"
+                className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-4 py-2.5 text-sm font-semibold text-white transition"
               >
                 Confirm I applied
               </button>

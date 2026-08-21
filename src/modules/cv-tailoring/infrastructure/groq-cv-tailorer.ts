@@ -71,13 +71,11 @@ References:
 - Do not put referee contact details into summary, experience, or projects.
 
 Summary:
-- one_page: 35-50 words within the soft char budget - concise positioning only
-- two_page: 55-85 words within the soft char budget - richer professional intro
-Lead with who the candidate is and the target role, then concrete experience and
-strongest technical direction. Mention internship/professional experience when present.
+- one_page: 35-50 words within the soft char budget - concise, high-impact positioning
+- two_page: 55-85 words within the soft char budget - richer professional positioning
+Lead with who the candidate is, framed strategically and favorably toward the target role. Highlight transferable engineering depth, core technical capabilities, and strongest technical direction. If pivoting or stretching across stacks (e.g., mobile to backend, frontend to fullstack), position their engineering fundamentals and fast ramp-up agility as key strengths.
 Never use internal terms such as "verified evidence" or "Zeno".
-Avoid filler: results-driven, passionate, highly motivated, proven track record,
-delivery-focused environment, eager to learn, team player, targeting roles that.
+Avoid generic fluff: results-driven, passionate, highly motivated, proven track record, delivery-focused environment, eager to learn, team player, targeting roles that. Instead, highlight concrete technical capability and domain enthusiasm.
 
 Target title:
 - Set targetTitle to the suggested target title EXACTLY

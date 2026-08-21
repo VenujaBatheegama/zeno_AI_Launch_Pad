@@ -253,14 +253,30 @@ export function CvImportFlow() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-12">
-      <Link
-        href="/onboarding"
-        className="text-sm text-[var(--zeno-ink-muted)] hover:underline"
-      >
-        ← Back
-      </Link>
-      <h1 className="mt-4 text-2xl font-semibold">Import your CV</h1>
+    <div>
+      <header className="border-b border-[var(--zeno-border)] bg-[var(--zeno-surface)]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link href="/onboarding" className="inline-flex">
+            <span className="font-[family-name:var(--zeno-font-display)] text-[1.1rem] font-bold text-[var(--zeno-ink)]">
+              Zeno
+            </span>
+          </Link>
+          <Link
+            href="/app/home"
+            className="text-xs font-medium text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+          >
+            Finish later
+          </Link>
+        </div>
+      </header>
+      <div className="mx-auto max-w-xl px-4 py-12">
+        <Link
+          href="/onboarding"
+          className="text-sm text-[var(--zeno-ink-muted)] hover:underline"
+        >
+          ← Back
+        </Link>
+        <h1 className="mt-4 text-2xl font-semibold text-[var(--zeno-ink)]">Import your CV</h1>
       <p className="mt-2 text-sm leading-6 text-[var(--zeno-ink-muted)]">
         Your CV is used to build your private Zeno career profile. You&apos;ll
         review everything before it is confirmed.
@@ -317,6 +333,7 @@ export function CvImportFlow() {
       >
         Upload and extract
       </button>
+    </div>
     </div>
   );
 }
