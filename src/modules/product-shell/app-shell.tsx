@@ -20,6 +20,15 @@ const NAV = [
   { href: "/app/settings", label: "Settings", icon: "settings" },
 ] as const;
 
+// 5 primary thumb-accessible items for phone bottom navigation
+const BOTTOM_NAV = [
+  { href: "/app/home", label: "Home", icon: "home" },
+  { href: "/app/recommendations", label: "Inbox", icon: "jobs" },
+  { href: "/app/jobs", label: "Jobs", icon: "jobs" },
+  { href: "/app/cvs", label: "CVs", icon: "cvs" },
+  { href: "/app/career-profile", label: "Profile", icon: "profile" },
+] as const;
+
 export function AppShell(props: {
   profile: UserProfile;
   children: React.ReactNode;
@@ -98,31 +107,35 @@ export function AppShell(props: {
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer backdrop and slide-over */}
       {mobileNavOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/30"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             aria-label="Close navigation"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[232px] flex-col bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-lg)]">
-            <div className="flex items-center justify-between px-4 py-4">
-              <ZenoMark className="font-[family-name:var(--zeno-font-display)]" />
+          <aside className="absolute inset-y-0 left-0 flex w-[260px] flex-col border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-lg)]">
+            <div className="flex items-center justify-between border-b border-[var(--zeno-border)] px-4 py-4">
+              <ZenoMark className="font-[family-name:var(--zeno-font-display)] text-[1.1rem]" />
               <button
                 type="button"
-                className="rounded-md px-2 py-1 text-sm text-[var(--zeno-ink-muted)]"
+                className="flex size-8 items-center justify-center rounded-full text-[var(--zeno-ink-muted)] hover:bg-[var(--zeno-surface-elevated)] hover:text-[var(--zeno-ink)]"
                 onClick={() => setMobileNavOpen(false)}
+                aria-label="Close navigation drawer"
               >
-                Close
+                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
               </button>
             </div>
-            <nav className="flex-1 px-3" aria-label="Mobile">
+
+            <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="Mobile">
               <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--zeno-ink-faint)]">
                 Workspace
               </p>
-              <ul className="space-y-0.5">
+              <ul className="space-y-1">
                 {NAV.map((item) => {
                   const active = isNavActive(pathname, item.href);
                   return (
@@ -130,10 +143,10 @@ export function AppShell(props: {
                       <Link
                         href={item.href}
                         onClick={() => setMobileNavOpen(false)}
-                        className={`flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium ${
+                        className={`flex min-h-[44px] items-center gap-3 rounded-[var(--zeno-radius-sm)] px-3 py-2.5 text-[14px] font-semibold transition ${
                           active
                             ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
-                            : "text-[var(--zeno-ink-muted)]"
+                            : "text-[var(--zeno-ink-muted)] hover:bg-[var(--zeno-surface-elevated)] hover:text-[var(--zeno-ink)]"
                         }`}
                       >
                         <NavIcon name={item.icon} active={active} />
@@ -144,26 +157,63 @@ export function AppShell(props: {
                 })}
               </ul>
             </nav>
+
+            <div className="border-t border-[var(--zeno-border)] p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--zeno-violet-soft)] text-[12px] font-semibold text-[var(--zeno-primary-deep)]">
+                  {initials}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-[var(--zeno-ink)]">
+                    {props.profile.displayName || "Account"}
+                  </p>
+                  <p className="truncate text-[11px] text-[var(--zeno-ink-muted)]">
+                    Job seeker
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  void signOut();
+                }}
+                className="mt-3 flex min-h-[40px] w-full items-center justify-center rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] text-xs font-semibold text-[var(--zeno-ink-muted)] hover:bg-[var(--zeno-surface-elevated)] hover:text-[var(--zeno-ink)]"
+              >
+                Sign out
+              </button>
+            </div>
           </aside>
         </div>
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--zeno-border)] bg-[var(--zeno-bg)] px-4 sm:px-6">
-          <button
-            type="button"
-            className="rounded-md border border-[var(--zeno-border)] px-2 py-1 text-sm lg:hidden"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Open navigation"
-          >
-            Menu
-          </button>
+        {/* Header */}
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--zeno-border)] bg-[var(--zeno-bg)]/90 px-4 backdrop-blur-md sm:px-6">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="flex size-9 items-center justify-center rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface)] lg:hidden"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation menu"
+            >
+              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
 
-          <p className="hidden text-[13px] text-[var(--zeno-ink-muted)] sm:block">
-            <span className="text-[var(--zeno-ink-faint)]">Zeno</span>
-            <span className="mx-1.5 text-[var(--zeno-ink-faint)]">/</span>
-            <span className="font-medium text-[var(--zeno-ink)]">{crumb}</span>
-          </p>
+            <Link href="/app/home" className="inline-flex lg:hidden">
+              <ZenoMark className="font-[family-name:var(--zeno-font-display)] text-[1.1rem]" />
+            </Link>
+
+            <p className="hidden text-[13px] text-[var(--zeno-ink-muted)] sm:block">
+              <span className="text-[var(--zeno-ink-faint)]">Zeno</span>
+              <span className="mx-1.5 text-[var(--zeno-ink-faint)]">/</span>
+              <span className="font-medium text-[var(--zeno-ink)]">{crumb}</span>
+            </p>
+          </div>
 
           <div className="mx-auto hidden w-full max-w-md md:block">
             <label className="relative block">
@@ -179,7 +229,7 @@ export function AppShell(props: {
             </label>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {incomplete ? (
               <Link
                 href="/onboarding"
@@ -195,13 +245,14 @@ export function AppShell(props: {
                 onClick={() => setMenuOpen((value) => !value)}
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
+                aria-label="User account menu"
               >
                 {initials}
               </button>
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-44 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-1 shadow-[var(--zeno-shadow-md)]"
+                  className="absolute right-0 mt-2 w-44 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-1 shadow-[var(--zeno-shadow-md)] z-50"
                 >
                   <Link
                     href="/app/settings"
@@ -225,11 +276,12 @@ export function AppShell(props: {
           </div>
         </header>
 
+        {/* Main Content Area */}
         <main
           className={
             bleedWorkspace
-              ? "min-h-0 flex-1 overflow-hidden"
-              : "min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8"
+              ? "min-h-0 flex-1 overflow-hidden pb-16 lg:pb-0"
+              : "min-h-0 flex-1 overflow-y-auto px-3.5 py-4 pb-20 sm:px-6 sm:py-8 lg:px-8 lg:pb-8"
           }
         >
           {bleedWorkspace ? (
@@ -238,6 +290,30 @@ export function AppShell(props: {
             <div className="mx-auto w-full max-w-6xl">{props.children}</div>
           )}
         </main>
+
+        {/* Mobile Bottom Navigation Bar (< lg screens) */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-[var(--zeno-border)] bg-[var(--zeno-surface)]/95 px-2 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-lg lg:hidden"
+          aria-label="Mobile Bottom Navigation"
+        >
+          {BOTTOM_NAV.map((item) => {
+            const active = isNavActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-3 py-1.5 transition ${
+                  active
+                    ? "text-[var(--zeno-primary)] font-semibold"
+                    : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+                }`}
+              >
+                <NavIcon name={item.icon} active={active} />
+                <span className="text-[10px] tracking-tight">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
@@ -274,7 +350,7 @@ function NavIcon({
   name: (typeof NAV)[number]["icon"];
   active: boolean;
 }) {
-  const className = `size-4 shrink-0 ${active ? "opacity-100" : "opacity-80"}`;
+  const className = `size-4 shrink-0 ${active ? "opacity-100" : "opacity-75"}`;
   switch (name) {
     case "home":
       return (

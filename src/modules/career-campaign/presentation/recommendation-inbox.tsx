@@ -182,7 +182,7 @@ export function RecommendationInbox(props: {
                   type="button"
                   disabled={busyId === rec.id}
                   onClick={() => void decide(rec.id, "save")}
-                  className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm font-semibold"
+                  className="flex-1 sm:flex-none min-h-[42px] rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-4 py-2 text-sm font-semibold text-[var(--zeno-ink)] transition hover:border-[var(--zeno-border-hover)] disabled:opacity-50"
                 >
                   Save
                 </button>
@@ -190,12 +190,12 @@ export function RecommendationInbox(props: {
                   type="button"
                   disabled={busyId === rec.id}
                   onClick={() => void decide(rec.id, "accept")}
-                  className="inline-flex items-center gap-2 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-3 py-2 text-sm font-semibold text-white"
+                  className="flex-1 sm:flex-none min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 >
                   {busyId === rec.id ? (
                     <>
                       <span
-                        className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"
+                        className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
                         aria-hidden
                       />
                       Working…
@@ -208,7 +208,7 @@ export function RecommendationInbox(props: {
                   type="button"
                   disabled={busyId === rec.id}
                   onClick={() => setRejectId(rec.id)}
-                  className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm font-semibold"
+                  className="flex-1 sm:flex-none min-h-[42px] rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-4 py-2 text-sm font-semibold text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
                 >
                   Reject
                 </button>
@@ -216,11 +216,11 @@ export function RecommendationInbox(props: {
             ) : null}
 
             {rejectId === rec.id ? (
-              <div className="mt-3 flex flex-wrap items-end gap-2">
-                <label className="text-sm">
-                  Reason
+              <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3">
+                <label className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-[var(--zeno-ink-muted)] flex-1">
+                  <span>Reason:</span>
                   <select
-                    className="ml-2 rounded border border-[var(--zeno-border)] px-2 py-1"
+                    className="h-10 flex-1 rounded border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3 text-sm text-[var(--zeno-ink)] outline-none"
                     value={reason}
                     onChange={(event) =>
                       setReason(event.target.value as DecisionReason)
@@ -233,14 +233,23 @@ export function RecommendationInbox(props: {
                     ))}
                   </select>
                 </label>
-                <button
-                  type="button"
-                  disabled={busyId === rec.id}
-                  onClick={() => void decide(rec.id, "reject", reason)}
-                  className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-ink)] px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Confirm reject
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busyId === rec.id}
+                    onClick={() => void decide(rec.id, "reject", reason)}
+                    className="flex-1 sm:flex-none min-h-[40px] rounded bg-[var(--zeno-danger)] px-4 py-2 text-xs font-semibold text-white"
+                  >
+                    Confirm reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectId(null)}
+                    className="flex-1 sm:flex-none min-h-[40px] rounded border border-[var(--zeno-border)] px-3 py-2 text-xs text-[var(--zeno-ink-muted)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : null}
 

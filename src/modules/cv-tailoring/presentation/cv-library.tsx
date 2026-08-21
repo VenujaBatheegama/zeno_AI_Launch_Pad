@@ -143,11 +143,11 @@ export function CvLibrary({ embedded = false }: Props) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search tailored CVs"
-            className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] pl-9 pr-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
+            className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] pl-9 pr-3 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
           />
         </label>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {(
             [
               ["all", "All"],
@@ -161,9 +161,9 @@ export function CvLibrary({ embedded = false }: Props) {
                 key={value}
                 type="button"
                 onClick={() => setStyleFilter(value)}
-                className={`inline-flex h-9 items-center rounded-full px-3.5 text-[12px] font-medium transition ${
+                className={`shrink-0 inline-flex h-9 items-center rounded-full px-3.5 text-[12px] font-medium transition ${
                   active
-                    ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
+                    ? "border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
                     : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
                 }`}
               >

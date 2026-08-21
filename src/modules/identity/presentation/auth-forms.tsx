@@ -31,7 +31,7 @@ function Field(props: {
           autoComplete={props.autoComplete}
           required={props.required}
           onChange={(event) => props.onChange(event.target.value)}
-          className="w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2.5 text-[15px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)]"
+          className="w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2.5 text-[16px] sm:text-[15px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)]"
         />
         {props.children}
       </div>

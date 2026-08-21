@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,12 +7,20 @@ export const metadata: Metadata = {
     "Find better opportunities, tailor stronger CVs and keep your career moving.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b0b10",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)]">
+      <body className="min-h-full flex flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)] selection:bg-[var(--zeno-primary)] selection:text-white">
         {children}
       </body>
     </html>

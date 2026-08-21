@@ -887,21 +887,23 @@ export function CvTailorWorkspace({ listingId }: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--zeno-surface)]">
       {/* Top action bar — Lovable-style with Tab Switcher */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--zeno-border)] px-4 py-2.5">
-        <Link
-          href="/app/cvs/matched"
-          className="inline-flex h-8 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)]"
-        >
-          Back to matched jobs
-        </Link>
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-[var(--zeno-ink)]">
-            {job?.title ?? "Tailor Application"}
-          </p>
-          <p className="truncate text-xs text-[var(--zeno-ink-muted)]">
-            {job?.organization_name ?? "Selected job"}
-            {match ? ` · ${Math.round(match.evidenceFitScore)}% match` : ""}
-          </p>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2 sm:px-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <Link
+            href="/app/cvs/matched"
+            className="inline-flex h-8 shrink-0 items-center rounded-[8px] border border-[var(--zeno-border)] px-2.5 text-xs transition hover:bg-[var(--zeno-surface-sunken)]"
+          >
+            ← Back
+          </Link>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-[var(--zeno-ink)]">
+              {job?.title ?? "Tailor Application"}
+            </p>
+            <p className="truncate text-xs text-[var(--zeno-ink-muted)]">
+              {job?.organization_name ?? "Selected job"}
+              {match ? ` · ${Math.round(match.evidenceFitScore)}% match` : ""}
+            </p>
+          </div>
         </div>
 
         {/* Tab switcher: CV vs Cover Letter */}
@@ -911,11 +913,11 @@ export function CvTailorWorkspace({ listingId }: Props) {
             onClick={() => setActiveTab("cv")}
             className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
               activeTab === "cv"
-                ? "bg-[var(--zeno-surface)] font-semibold text-[var(--zeno-ink)] shadow-sm"
+                ? "bg-[var(--zeno-surface-elevated)] font-semibold text-[var(--zeno-ink)] shadow-sm"
                 : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
             }`}
           >
-            <span>📄</span> Tailored CV
+            <span>📄</span> CV
           </button>
           <button
             type="button"
@@ -927,18 +929,18 @@ export function CvTailorWorkspace({ listingId }: Props) {
             }}
             className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
               activeTab === "cover_letter"
-                ? "bg-[var(--zeno-surface)] font-semibold text-[var(--zeno-ink)] shadow-sm"
+                ? "bg-[var(--zeno-surface-elevated)] font-semibold text-[var(--zeno-ink)] shadow-sm"
                 : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
             }`}
           >
             <span>✉️</span> Cover Letter
             {coverDraft ? (
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--zeno-success-soft)]0" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--zeno-primary)]" />
             ) : null}
           </button>
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {activeTab === "cv" ? (
             <>
               <span className="text-[11px] text-[var(--zeno-ink-muted)]">
