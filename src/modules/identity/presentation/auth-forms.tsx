@@ -170,13 +170,15 @@ export function SignUpForm() {
     setInfo(null);
     try {
       const supabase = createBrowserSupabaseClient();
-      const origin = window.location.origin;
+      const origin =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "");
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { display_name: displayName.trim() || undefined },
-          emailRedirectTo: `${origin}/auth/callback`,
+          emailRedirectTo: `${origin}/auth/callback?next=/onboarding`,
         },
       });
       if (signUpError) throw signUpError;

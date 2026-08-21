@@ -15,6 +15,13 @@ import {
 } from "../domain/conversation-machine";
 import { openingScriptMessage } from "../domain/conversation-script";
 import { progressFromEvidence } from "../domain/profile-operations";
+import {
+  BasicsContactCard,
+  RolesAndSkillsCard,
+  ExperienceCard,
+  ProjectsEducationCard,
+  ReviewVerificationCard,
+} from "./onboarding-interactive-cards";
 
 export function ChatOnboardingWorkspace(props: {
   initialStage?: OnboardingStage;
@@ -43,13 +50,21 @@ export function ChatOnboardingWorkspace(props: {
   const [busy, setBusy] = useState(false);
   const [saveLabel, setSaveLabel] = useState("Saved");
   const [error, setError] = useState<string | null>(null);
-  const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [composerContext, setComposerContext] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const openedRef = useRef(false);
   const sendingRef = useRef(false);
 
   const progress = useMemo(() => progressFromEvidence(evidence), [evidence]);
+
+  // Determine active interactive card step
+  const activeStep = useMemo(() => {
+    if (!evidence.profile.full_name?.trim()) return "basics";
+    if (evidence.skills.length === 0 && !completedScriptKeys.includes("skills_done")) return "roles_skills";
+    if (evidence.work_experience.length === 0 && !completedScriptKeys.includes("experience_skipped")) return "experience";
+    if (evidence.projects.length === 0 && evidence.education.length === 0 && !completedScriptKeys.includes("projects_skipped")) return "projects_education";
+    return "review";
+  }, [evidence, completedScriptKeys]);
 
   useEffect(() => {
     if (messages.length > 0 || openedRef.current) return;
@@ -76,7 +91,7 @@ export function ChatOnboardingWorkspace(props: {
       top: scrollerRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, busy]);
+  }, [messages, busy, activeStep]);
 
   async function persist(next: {
     stage: OnboardingStage;
@@ -98,54 +113,58 @@ export function ChatOnboardingWorkspace(props: {
           progressForStage(next.stage),
           progressFromEvidence(next.evidence),
         ),
-        onboardingState: {
-          stage: next.stage,
-          messages: next.messages,
-          draftEvidence: next.evidence,
-          focusedEntityId: next.focusedEntityId,
-          completedScriptKeys: next.completedScriptKeys,
-        },
-        draftEvidence: next.evidence,
-        displayName: next.evidence.profile.full_name,
+        onboardingEvidenceSnapshot: next.evidence,
+        conversationHistory: next.messages,
+        focusedEntityId: next.focusedEntityId,
+        completedScriptKeys: next.completedScriptKeys,
       }),
     });
     setSaveLabel("Saved just now");
   }
 
-  async function sendAnswer(text: string) {
-    const answer = text.trim();
-    if (!answer || busy || sendingRef.current) return;
+  async function sendAnswer(rawAnswer: string) {
+    const trimmed = rawAnswer.trim();
+    if (!trimmed || busy || sendingRef.current) return;
     sendingRef.current = true;
     setBusy(true);
     setError(null);
+    setDraft("");
+    setComposerContext(null);
+
     const clientMessageId = crypto.randomUUID();
     const userMessage: ConversationMessage = {
       id: clientMessageId,
       role: "user",
-      text: composerContext
-        ? `${composerContext}\n\n${answer}`
-        : answer,
+      text: trimmed,
     };
-    const pending = dedupeMessages([...messages, userMessage]);
-    setMessages(pending);
-    setDraft("");
-    setComposerContext(null);
+    const pending = [...messages, userMessage];
+    setMessages(dedupeMessages(pending));
 
     try {
-      const response = await fetch("/api/onboarding/chat", {
+      const response = await fetch("/api/onboarding/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMessage.text,
           clientMessageId,
+          message: trimmed,
           stage,
           evidence,
-          messages: pending,
+          messages,
+          focusedEntityId,
+          completedScriptKeys,
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Could not process that answer.");
+      const payload = (await response.json()) as {
+        assistantMessage?: string;
+        evidence?: CareerEvidence;
+        stage?: OnboardingStage;
+        messages?: ConversationMessage[];
+        focusedEntityId?: string | null;
+        completedScriptKeys?: string[];
+        error?: string;
+      };
+      if (!response.ok || !payload.evidence || !payload.stage) {
+        throw new Error(payload.error ?? "Zeno couldn't process that turn.");
       }
 
       setEvidence(payload.evidence);
@@ -210,86 +229,143 @@ export function ChatOnboardingWorkspace(props: {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-6xl flex-col lg:flex-row">
+    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-6xl flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)] lg:flex-row">
+      {/* Left Chat & Guided Form Section */}
       <section className="flex min-h-0 flex-1 flex-col border-[var(--zeno-border)] lg:w-[60%] lg:border-r">
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--zeno-border)] px-4 py-3">
+        {/* Header Strip */}
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3">
           <div>
-            <p className="text-xs font-medium text-[var(--zeno-ink-muted)]">
-              {stageLabel(stage)} · {progress}%
+            <p className="text-xs font-semibold text-[var(--zeno-primary)]">
+              {stageLabel(stage)} · {progress}% complete
             </p>
-            <p className="text-sm text-[var(--zeno-ink-faint)]">{saveLabel}</p>
+            <p className="text-xs text-[var(--zeno-ink-faint)]">{saveLabel}</p>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/app/home"
-              className="rounded-full border border-[var(--zeno-border)] px-3 py-1 text-sm"
+              className="rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 py-1 text-xs font-medium text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
             >
               Finish later
             </Link>
-            <button
-              type="button"
-              className="rounded-full border border-[var(--zeno-border)] px-3 py-1 text-sm lg:hidden"
-              onClick={() => setMobileProfileOpen(true)}
-            >
-              View profile
-            </button>
           </div>
         </div>
+
+        {/* Message Feed & Interactive Cards Container */}
         <div
           ref={scrollerRef}
-          className="flex-1 space-y-4 overflow-y-auto bg-[#f6f5fb] px-4 py-5"
+          className="flex-1 space-y-4 overflow-y-auto bg-[var(--zeno-bg)] px-4 py-5"
           aria-live="polite"
         >
-          <p className="text-center text-xs text-[var(--zeno-ink-faint)]">
-            We’re online …
-          </p>
-          {dedupeMessages(messages).map((message, index) =>
-            message.role === "zeno" ? (
-              <div
-                key={`${message.id}-${index}`}
-                className="flex items-end gap-2.5"
-              >
-                <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-[var(--zeno-surface)] shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
-                  <Image
-                    src="/zeno-agent.jpeg"
-                    alt="Zeno"
-                    fill
-                    sizes="36px"
-                    className="object-cover object-top"
-                  />
-                </div>
-                <div className="w-fit max-w-[min(78%,22rem)] whitespace-pre-wrap rounded-[18px] bg-[var(--zeno-surface)] px-3.5 py-2.5 text-[14px] leading-6 text-[var(--zeno-ink)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
-                  {message.text}
-                </div>
+          {dedupeMessages(messages).map((message, index) => {
+            const isLastZenoMessage =
+              message.role === "zeno" &&
+              index ===
+                messages
+                  .map((m, i) => (m.role === "zeno" ? i : -1))
+                  .filter((i) => i !== -1)
+                  .pop();
+
+            return (
+              <div key={`${message.id}-${index}`} className="space-y-2">
+                {message.role === "zeno" ? (
+                  <div className="flex items-start gap-3">
+                    <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] shadow-[var(--zeno-shadow-sm)]">
+                      <Image
+                        src="/zeno-agent.jpeg"
+                        alt="Zeno"
+                        fill
+                        sizes="32px"
+                        className="object-cover object-top"
+                      />
+                    </div>
+                    <div className="w-fit max-w-[min(88%,28rem)] whitespace-pre-wrap rounded-[18px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[14px] leading-relaxed text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]">
+                      {message.text}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-end">
+                    <div className="w-fit max-w-[min(85%,26rem)] whitespace-pre-wrap rounded-[18px] bg-[var(--zeno-primary)] px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-[0_4px_14px_rgba(76,58,227,0.3)]">
+                      {message.text}
+                    </div>
+                  </div>
+                )}
+
+                {/* Render Interactive Card below the latest Zeno message */}
+                {isLastZenoMessage && !busy ? (
+                  <div className="pl-11 pr-2">
+                    {activeStep === "basics" ? (
+                      <BasicsContactCard
+                        initialEvidence={evidence}
+                        onSubmit={(msg) => void sendAnswer(msg)}
+                        disabled={busy}
+                      />
+                    ) : activeStep === "roles_skills" ? (
+                      <RolesAndSkillsCard
+                        initialEvidence={evidence}
+                        onSubmit={(msg) => {
+                          setCompletedScriptKeys((prev) => [...prev, "skills_done"]);
+                          void sendAnswer(msg);
+                        }}
+                        disabled={busy}
+                      />
+                    ) : activeStep === "experience" ? (
+                      <ExperienceCard
+                        initialEvidence={evidence}
+                        onSubmit={(msg) => void sendAnswer(msg)}
+                        onSkip={() => {
+                          setCompletedScriptKeys((prev) => [...prev, "experience_skipped"]);
+                          void sendAnswer("I don't have work experience to add right now. Move on.");
+                        }}
+                        disabled={busy}
+                      />
+                    ) : activeStep === "projects_education" ? (
+                      <ProjectsEducationCard
+                        initialEvidence={evidence}
+                        onSubmit={(msg) => void sendAnswer(msg)}
+                        onSkip={() => {
+                          setCompletedScriptKeys((prev) => [...prev, "projects_skipped"]);
+                          void sendAnswer("Skip projects and education for now.");
+                        }}
+                        disabled={busy}
+                      />
+                    ) : (
+                      <ReviewVerificationCard
+                        evidence={evidence}
+                        progress={progress}
+                        onVerify={() => void verifyProfile()}
+                        disabled={busy}
+                      />
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <div
-                key={`${message.id}-${index}`}
-                className="flex justify-end"
-              >
-                <div className="w-fit max-w-[min(78%,22rem)] whitespace-pre-wrap rounded-[18px] bg-[var(--zeno-primary)] px-3.5 py-2.5 text-[14px] leading-6 text-white shadow-[0_4px_14px_rgba(76,58,227,0.28)]">
-                  {message.text}
-                </div>
-              </div>
-            ),
-          )}
+            );
+          })}
+
           {busy ? (
-            <div className="flex items-end gap-2.5">
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-[var(--zeno-surface)] shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
+            <div className="flex items-start gap-3">
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] shadow-[var(--zeno-shadow-sm)]">
                 <Image
                   src="/zeno-agent.jpeg"
                   alt="Zeno"
                   fill
-                  sizes="36px"
+                  sizes="32px"
                   className="object-cover object-top"
                 />
               </div>
-              <div className="w-fit rounded-[18px] bg-[var(--zeno-surface)] px-3.5 py-2.5 text-sm text-[var(--zeno-ink-faint)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
-                Zeno is thinking…
+              <div className="w-fit rounded-[18px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-2.5 text-sm text-[var(--zeno-ink-muted)] shadow-[var(--zeno-shadow-sm)]">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2 animate-bounce rounded-full bg-[var(--zeno-primary)]" />
+                  <span className="size-2 animate-bounce rounded-full bg-[var(--zeno-primary)] [animation-delay:0.2s]" />
+                  <span className="size-2 animate-bounce rounded-full bg-[var(--zeno-primary)] [animation-delay:0.4s]" />
+                  <span className="ml-1 text-xs">Zeno is updating profile…</span>
+                </span>
               </div>
             </div>
           ) : null}
         </div>
+
+        {/* Bottom Freeform Composer Bar */}
         <div className="border-t border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3">
           {error ? (
             <p className="mb-2 text-xs text-[var(--zeno-danger)]" role="alert">
@@ -315,15 +391,15 @@ export function ChatOnboardingWorkspace(props: {
               placeholder={
                 composerContext
                   ? "Tell Zeno what you want to change…"
-                  : "Enter message"
+                  : "Or type any response freely here…"
               }
-              className="min-h-[48px] w-full resize-none rounded-full border-0 bg-[#eef0f4] py-3 pl-4 pr-14 text-sm text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:ring-2 focus:ring-[var(--zeno-primary)]/20"
+              className="min-h-[46px] w-full resize-none rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] py-2.5 pl-4 pr-14 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-primary)]"
             />
             <button
               type="submit"
               disabled={busy || !draft.trim()}
               aria-label="Send message"
-              className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--zeno-primary)] text-white transition hover:bg-[var(--zeno-primary-deep)] disabled:opacity-40"
+              className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--zeno-primary)] text-white transition hover:opacity-90 disabled:opacity-40"
             >
               <SendIcon />
             </button>
@@ -331,42 +407,28 @@ export function ChatOnboardingWorkspace(props: {
         </div>
       </section>
 
-      <aside
-        className={`${
-          mobileProfileOpen ? "fixed inset-0 z-40 flex" : "hidden"
-        } min-h-0 flex-col bg-[var(--zeno-surface)] lg:static lg:flex lg:w-[40%]`}
-      >
+      {/* Desktop Side Live Profile Panel (Visible on lg screens) */}
+      <aside className="hidden min-h-0 flex-col border-[var(--zeno-border)] bg-[var(--zeno-surface)] lg:flex lg:w-[40%]">
         <div className="flex items-center justify-between border-b border-[var(--zeno-border)] px-4 py-3">
-          <h2 className="text-sm font-semibold">Live career profile</h2>
-          <button
-            type="button"
-            className="text-sm text-[var(--zeno-ink-muted)] lg:hidden"
-            onClick={() => setMobileProfileOpen(false)}
-          >
-            Close
-          </button>
+          <h2 className="text-sm font-semibold text-[var(--zeno-ink)]">
+            Live career profile
+          </h2>
+          <span className="rounded-full bg-[var(--zeno-violet-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--zeno-primary-deep)]">
+            {progress}% Complete
+          </span>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
           <LiveProfilePanel
             evidence={evidence}
             focusedEntityId={focusedEntityId}
-            onAskZeno={(context) => {
-              setComposerContext(context);
-              setMobileProfileOpen(false);
-            }}
+            onAskZeno={(context) => setComposerContext(context)}
             onChange={saveManualEvidence}
           />
         </div>
         <div className="sticky bottom-0 border-t border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4">
-          <p className="text-sm font-medium">Profile completeness: {progress}%</p>
-          <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
-            {progress < 40
-              ? "Keep chatting — Zeno will fill this as you go."
-              : "Review the draft, then confirm when it looks right."}
-          </p>
           <button
             type="button"
-            disabled={busy || progress < 40}
+            disabled={busy || progress < 25}
             onClick={() => {
               if (
                 window.confirm(
@@ -376,7 +438,7 @@ export function ChatOnboardingWorkspace(props: {
                 void verifyProfile();
               }
             }}
-            className="mt-3 min-h-[44px] w-full rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="min-h-[44px] w-full rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[var(--zeno-shadow-sm)] transition hover:opacity-90 disabled:opacity-50"
           >
             Verify and finish profile
           </button>
@@ -396,10 +458,10 @@ function LiveProfilePanel(props: {
   return (
     <div className="space-y-4 text-sm">
       <Section title="About you">
-        <p className="font-medium">
+        <p className="font-medium text-[var(--zeno-ink)]">
           {evidence.profile.full_name || "Name still needed"}
         </p>
-        <p className="text-[var(--zeno-ink-muted)]">
+        <p className="text-xs text-[var(--zeno-ink-muted)]">
           {[evidence.profile.email, evidence.profile.location]
             .filter(Boolean)
             .join(" · ") || "Contact details pending"}
@@ -418,19 +480,19 @@ function LiveProfilePanel(props: {
 
       <Section title="Experience">
         {evidence.work_experience.length === 0 ? (
-          <p className="text-[var(--zeno-ink-faint)]">Missing</p>
+          <p className="text-xs text-[var(--zeno-ink-faint)]">No work experience added yet</p>
         ) : (
           evidence.work_experience.map((item) => (
             <article
               key={item.id}
               className={`rounded-[var(--zeno-radius-sm)] border p-3 ${
                 focusedEntityId === item.id
-                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)]"
-                  : "border-[var(--zeno-border)]"
+                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-surface-elevated)]"
+                  : "border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)]"
               }`}
             >
-              <p className="font-semibold">{item.role || "Role needed"}</p>
-              <p className="text-[var(--zeno-ink-muted)]">
+              <p className="font-semibold text-[var(--zeno-ink)]">{item.role || "Role needed"}</p>
+              <p className="text-xs text-[var(--zeno-ink-muted)]">
                 {item.employer || "Employer needed"}
               </p>
               <p className="mt-1 text-xs text-[var(--zeno-ink-faint)]">
@@ -439,7 +501,7 @@ function LiveProfilePanel(props: {
               {item.bullets.map((bullet, bulletIndex) => (
                 <p
                   key={`${item.id}-bullet-${bulletIndex}`}
-                  className="mt-1 text-[var(--zeno-ink-muted)]"
+                  className="mt-1 text-xs text-[var(--zeno-ink-muted)]"
                 >
                   • {bullet}
                 </p>
@@ -449,11 +511,11 @@ function LiveProfilePanel(props: {
                 className="mt-2 text-xs font-semibold text-[var(--zeno-primary)]"
                 onClick={() =>
                   props.onAskZeno(
-                    `Change this experience (${item.role} at ${item.employer}, id ${item.id})`,
+                    `Let's update the experience at ${item.employer || item.role}.`,
                   )
                 }
               >
-                Ask Zeno to change this
+                Ask Zeno to update this role
               </button>
             </article>
           ))
@@ -462,40 +524,49 @@ function LiveProfilePanel(props: {
 
       <Section title="Projects">
         {evidence.projects.length === 0 ? (
-          <p className="text-[var(--zeno-ink-faint)]">Missing</p>
+          <p className="text-xs text-[var(--zeno-ink-faint)]">No projects added yet</p>
         ) : (
-          evidence.projects.map((item) => (
+          evidence.projects.map((project) => (
             <article
-              key={item.id}
-              className={`rounded-[var(--zeno-radius-sm)] border p-3 ${
-                focusedEntityId === item.id
-                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)]"
-                  : "border-[var(--zeno-border)]"
-              }`}
+              key={project.id}
+              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3"
             >
-              <p className="font-semibold">{item.name}</p>
-              <p className="text-[var(--zeno-ink-muted)]">
-                {item.technologies.join(" · ") || "Technologies pending"}
-              </p>
-              {item.bullets.slice(0, 2).map((bullet, bulletIndex) => (
-                <p
-                  key={`${item.id}-project-bullet-${bulletIndex}`}
-                  className="mt-1 text-[var(--zeno-ink-muted)]"
-                >
-                  {bullet}
+              <p className="font-semibold text-[var(--zeno-ink)]">{project.name}</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {project.technologies.map((t) => (
+                  <span
+                    key={t}
+                    className="rounded bg-[var(--zeno-surface)] px-1.5 py-0.5 text-[11px] text-[var(--zeno-primary)]"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+              {project.bullets.map((bullet, i) => (
+                <p key={i} className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
+                  • {bullet}
                 </p>
               ))}
-              <button
-                type="button"
-                className="mt-2 text-xs font-semibold text-[var(--zeno-primary)]"
-                onClick={() =>
-                  props.onAskZeno(
-                    `Change this project (${item.name}, id ${item.id})`,
-                  )
-                }
-              >
-                Ask Zeno to change this
-              </button>
+            </article>
+          ))
+        )}
+      </Section>
+
+      <Section title="Education">
+        {evidence.education.length === 0 ? (
+          <p className="text-xs text-[var(--zeno-ink-faint)]">No education added yet</p>
+        ) : (
+          evidence.education.map((edu) => (
+            <article
+              key={edu.id}
+              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3"
+            >
+              <p className="font-semibold text-[var(--zeno-ink)]">
+                {edu.qualification || edu.field_of_study || "Qualification"}
+              </p>
+              <p className="text-xs text-[var(--zeno-ink-muted)]">
+                {edu.institution} {edu.field_of_study && edu.qualification ? `· ${edu.field_of_study}` : ""}
+              </p>
             </article>
           ))
         )}
@@ -503,30 +574,18 @@ function LiveProfilePanel(props: {
 
       <Section title="Skills">
         {evidence.skills.length === 0 ? (
-          <p className="text-[var(--zeno-ink-faint)]">Missing</p>
+          <p className="text-xs text-[var(--zeno-ink-faint)]">No skills captured yet</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {evidence.skills.map((skill) => (
               <span
-                key={skill.id}
-                className="rounded-full bg-[var(--zeno-violet-wash)] px-2.5 py-1 text-xs font-medium text-[var(--zeno-primary-deep)]"
+                key={skill.name}
+                className="rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-2.5 py-1 text-xs text-[var(--zeno-ink)]"
               >
                 {skill.name}
               </span>
             ))}
           </div>
-        )}
-      </Section>
-
-      <Section title="Education">
-        {evidence.education.length === 0 ? (
-          <p className="text-[var(--zeno-ink-faint)]">Missing</p>
-        ) : (
-          evidence.education.map((item) => (
-            <p key={item.id} className="text-[var(--zeno-ink-muted)]">
-              {item.qualification || "Qualification"} · {item.institution}
-            </p>
-          ))
         )}
       </Section>
     </div>
@@ -535,11 +594,11 @@ function LiveProfilePanel(props: {
 
 function Section(props: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--zeno-ink-muted)]">
+    <section className="space-y-2 rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-[var(--zeno-shadow-sm)]">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
         {props.title}
       </h3>
-      <div className="mt-2 space-y-2">{props.children}</div>
+      {props.children}
     </section>
   );
 }
@@ -549,48 +608,67 @@ function QuickEdit(props: {
   value: string;
   onChange: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(props.value);
   return (
-    <label className="mt-2 block space-y-1">
-      <span className="text-xs text-[var(--zeno-ink-muted)]">{props.label}</span>
-      <input
-        value={props.value}
-        onChange={(event) => props.onChange(event.target.value)}
-        className="w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-2 py-1.5"
-      />
-    </label>
+    <div className="pt-1">
+      <button
+        type="button"
+        className="text-xs font-semibold text-[var(--zeno-primary)] hover:underline"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? "Done" : `Edit ${props.label.toLowerCase()}`}
+      </button>
+      {open ? (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            className="h-8 flex-1 rounded border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-2 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-primary)]"
+          />
+          <button
+            type="button"
+            className="rounded bg-[var(--zeno-primary)] px-3 text-xs font-semibold text-white"
+            onClick={() => {
+              props.onChange(draft.trim());
+              setOpen(false);
+            }}
+          >
+            Save
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
-}
-
-function formatDates(
-  start: string | null,
-  end: string | null,
-  isCurrent: boolean,
-): string {
-  if (!start && !end) return "Dates: Still needed";
-  if (isCurrent || !end) return `${start ?? "Start unknown"} – Present`;
-  return `${start ?? "Start unknown"} – ${end}`;
 }
 
 function dedupeMessages(messages: ConversationMessage[]): ConversationMessage[] {
   const seen = new Set<string>();
-  const result: ConversationMessage[] = [];
+  const out: ConversationMessage[] = [];
   for (const message of messages) {
     if (seen.has(message.id)) continue;
     seen.add(message.id);
-    result.push(message);
+    out.push(message);
   }
-  return result;
+  return out;
+}
+
+function formatDates(
+  start?: string | null,
+  end?: string | null,
+  isCurrent?: boolean,
+) {
+  if (!start && !end) return "Dates pending";
+  const startPart = start || "Unknown start";
+  const endPart = isCurrent ? "Present" : end || "Unknown end";
+  return `${startPart} — ${endPart}`;
 }
 
 function SendIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-4 w-4 -translate-x-px translate-y-px"
-      fill="currentColor"
-    >
-      <path d="M3.4 20.6 21 12 3.4 3.4l-.1 6.8L14 12l-10.7 1.8.1 6.8Z" />
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 19V5M6 11l6-6 6 6" />
     </svg>
   );
 }
