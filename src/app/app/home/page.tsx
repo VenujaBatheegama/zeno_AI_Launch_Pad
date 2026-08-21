@@ -75,49 +75,51 @@ export default async function HomePage() {
     : [];
 
   return (
-    <div className="relative mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center space-y-8">
+    <div className="relative isolate mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center">
       <RibbonBackdrop />
 
-      {migrationGap ? (
-        <section
-          className="rounded-[var(--zeno-radius-md)] border p-5"
-          style={{ borderColor: "var(--zeno-warning)", backgroundColor: "var(--zeno-warning-soft)" }}
-        >
-          <h2 className="text-lg font-semibold" style={{ color: "var(--zeno-warning)" }}>
-            {migrationGap.feature} database migration required
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--zeno-ink-muted)]">
-            {migrationGap.description} Apply{" "}
-            <code className="rounded bg-[var(--zeno-surface-elevated)] px-1 text-[var(--zeno-ink)]">
-              {migrationGap.migrationFile}
-            </code>{" "}
-            in the Supabase SQL editor (or via the Supabase CLI), then reload
-            this page.
-          </p>
-        </section>
-      ) : null}
-
-      {incomplete ? (
-        <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
-          <h2 className="text-[15px] font-semibold text-[var(--zeno-ink)]">
-            Complete your Zeno profile
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-[var(--zeno-ink-muted)]">
-            Zeno needs a verified career profile before campaign recommendations
-            can run.
-          </p>
-          <Link
-            href="/onboarding"
-            className="mt-3 inline-flex text-[13px] font-semibold text-[var(--zeno-primary-deep)] hover:underline"
+      <div className="relative z-10 space-y-8">
+        {migrationGap ? (
+          <section
+            className="rounded-[var(--zeno-radius-md)] border p-5"
+            style={{ borderColor: "var(--zeno-warning)", backgroundColor: "var(--zeno-warning-soft)" }}
           >
-            Continue setup
-          </Link>
-        </section>
-      ) : null}
+            <h2 className="text-lg font-semibold" style={{ color: "var(--zeno-warning)" }}>
+              {migrationGap.feature} database migration required
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--zeno-ink-muted)]">
+              {migrationGap.description} Apply{" "}
+              <code className="rounded bg-[var(--zeno-surface-elevated)] px-1 text-[var(--zeno-ink)]">
+                {migrationGap.migrationFile}
+              </code>{" "}
+              in the Supabase SQL editor (or via the Supabase CLI), then reload
+              this page.
+            </p>
+          </section>
+        ) : null}
 
-      <HomeGreeting name={name} />
-      <ActivityStrip stats={activityStats} />
-      <CareerFriendChat featured disabled={schemaMissing || incomplete} />
+        {incomplete ? (
+          <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+            <h2 className="text-[15px] font-semibold text-[var(--zeno-ink)]">
+              Complete your Zeno profile
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--zeno-ink-muted)]">
+              Zeno needs a verified career profile before campaign recommendations
+              can run.
+            </p>
+            <Link
+              href="/onboarding"
+              className="mt-3 inline-flex text-[13px] font-semibold text-[var(--zeno-primary-deep)] hover:underline"
+            >
+              Continue setup
+            </Link>
+          </section>
+        ) : null}
+
+        <HomeGreeting name={name} />
+        <ActivityStrip stats={activityStats} />
+        <CareerFriendChat featured disabled={schemaMissing || incomplete} />
+      </div>
     </div>
   );
 }

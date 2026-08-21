@@ -1,27 +1,32 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 /**
- * Lively Three.js 3D Cosmic Ribbon & Particle Backdrop.
- * Renders smooth flowing ribbons with amber/sapphire luminosity and floating stardust,
- * seamlessly layered over background.jpeg.
+ * Undulating 3D Particle Wave Backdrop (adapted to modern Three.js WebGL Points).
+ * Contained strictly within the Home content area (does not cover side menu).
  */
 export function RibbonBackdrop() {
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const container = canvasContainerRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
-    let width = window.innerWidth;
-    let height = window.innerHeight;
+    const SEPARATION_X = 115;
+    const SEPARATION_Y = 90;
+    const AMOUNTX = 125;
+    const AMOUNTY = 45;
+    const totalParticles = AMOUNTX * AMOUNTY;
+
+    let width = container.clientWidth || window.innerWidth;
+    let height = container.clientHeight || window.innerHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
-    camera.position.set(0, 0, 14);
+    const camera = new THREE.PerspectiveCamera(65, width / height, 1, 10000);
+    camera.position.set(0, 280, 750);
+    camera.lookAt(0, -50, 0);
 
     let renderer: THREE.WebGLRenderer | null = null;
     try {
@@ -37,125 +42,92 @@ export function RibbonBackdrop() {
       return;
     }
 
-    // 1. Flowing 3D Harmonic Wave Ribbons
-    const ribbonCount = 3;
-    const ribbons: {
-      mesh: THREE.Mesh;
-      basePositions: Float32Array;
-      speed: number;
-      freq: number;
-      amp: number;
-    }[] = [];
+    // Create Circular Point Texture using Canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.beginPath();
+      ctx.arc(16, 16, 14, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+    }
+    const circleTexture = new THREE.CanvasTexture(canvas);
 
-    const ribbonConfigs = [
-      { color: 0x4f46e5, emissive: 0x3730a3, opacity: 0.6, y: -1.5, z: -2 }, // Rich Indigo/Sapphire
-      { color: 0x06b6d4, emissive: 0x0891b2, opacity: 0.45, y: 1.2, z: -4 },  // Luminous Cyan
-      { color: 0xf59e0b, emissive: 0xd97706, opacity: 0.38, y: -3.2, z: -1 }, // Warm Amber Gold
-    ];
+    // Build Particle Grid BufferGeometry
+    const positions = new Float32Array(totalParticles * 3);
+    const colors = new Float32Array(totalParticles * 3);
 
-    for (let r = 0; r < ribbonCount; r++) {
-      const cfg = ribbonConfigs[r]!;
-      const geo = new THREE.PlaneGeometry(36, 6, 50, 16);
-      const pos = geo.attributes.position;
-      const basePositions = new Float32Array(pos.array);
+    const baseColor1 = new THREE.Color(0x6366f1); // Indigo
+    const baseColor2 = new THREE.Color(0x38bdf8); // Cyan
+    const mixedColor = new THREE.Color();
 
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: cfg.color,
-        emissive: cfg.emissive,
-        emissiveIntensity: 1.2,
-        roughness: 0.1,
-        metalness: 0.3,
-        transparent: true,
-        opacity: cfg.opacity,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
+    let i = 0;
+    for (let ix = 0; ix < AMOUNTX; ix++) {
+      for (let iy = 0; iy < AMOUNTY; iy++) {
+        const x = ix * SEPARATION_X - (AMOUNTX * SEPARATION_X) / 2;
+        const z = iy * SEPARATION_Y - (AMOUNTY * SEPARATION_Y) / 2;
 
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(
-        (r - 1) * 3,
-        cfg.y,
-        cfg.z,
-      );
-      mesh.rotation.set(-0.35 + r * 0.12, 0.08, -0.18 + r * 0.1);
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = 0;
+        positions[i * 3 + 2] = z;
 
-      scene.add(mesh);
-      ribbons.push({
-        mesh,
-        basePositions,
-        speed: 0.7 + r * 0.3,
-        freq: 0.18 + r * 0.06,
-        amp: 1.2 + r * 0.35,
-      });
+        const ratio = (ix / AMOUNTX + iy / AMOUNTY) * 0.5;
+        mixedColor.lerpColors(baseColor1, baseColor2, ratio);
+        colors[i * 3] = mixedColor.r;
+        colors[i * 3 + 1] = mixedColor.g;
+        colors[i * 3 + 2] = mixedColor.b;
+
+        i++;
+      }
     }
 
-    // 2. Floating Luminous Stardust Particles
-    const particleCount = 55;
-    const particleGeo = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
-    for (let i = 0; i < particleCount; i++) {
-      particlePositions[i * 3] = (Math.random() - 0.5) * 32;
-      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 16;
-      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 12;
-    }
-
-    particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
-
-    const particleMat = new THREE.PointsMaterial({
-      color: 0x93c5fd,
-      size: 0.35,
+    const material = new THREE.PointsMaterial({
+      size: 5.5,
+      map: circleTexture,
+      vertexColors: true,
       transparent: true,
-      opacity: 0.75,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.55,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
 
-    const particleSystem = new THREE.Points(particleGeo, particleMat);
-    scene.add(particleSystem);
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
 
-    // 3. Ambient & Accent Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
-    scene.add(ambientLight);
-
-    const violetLight = new THREE.PointLight(0x6366f1, 5, 30);
-    violetLight.position.set(-8, 6, 8);
-    scene.add(violetLight);
-
-    const amberLight = new THREE.PointLight(0xf59e0b, 4.5, 25);
-    amberLight.position.set(10, -4, 6);
-    scene.add(amberLight);
-
-    // Mouse Parallax Interaction
-    let mouseX = 0;
-    let mouseY = 0;
-    let targetMouseX = 0;
-    let targetMouseY = 0;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const { innerWidth, innerHeight } = window;
-      targetMouseX = (e.clientX / innerWidth - 0.5) * 2;
-      targetMouseY = (e.clientY / innerHeight - 0.5) * 2;
-    };
-
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
-
-    // Handle Window Resize
+    // Resize Handler
     const handleResize = () => {
-      if (!renderer) return;
-      width = window.innerWidth;
-      height = window.innerHeight;
+      if (!container || !renderer) return;
+      width = container.clientWidth || window.innerWidth;
+      height = container.clientHeight || window.innerHeight;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
 
-    window.addEventListener("resize", handleResize);
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
+
+    // Mouse Parallax
+    let mouseX = 0;
+    let mouseY = 0;
+    let targetMouseX = 0;
+    let targetMouseY = 0;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      targetMouseX = (event.clientX - window.innerWidth / 2) * 0.3;
+      targetMouseY = (event.clientY - window.innerHeight / 2) * 0.3;
+    };
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
 
     // Animation Loop
     let animationFrameId: number;
-    let clock = new THREE.Clock();
+    let count = 0;
     let isVisible = true;
 
     const handleVisibilityChange = () => {
@@ -169,38 +141,26 @@ export function RibbonBackdrop() {
         return;
       }
 
-      const elapsed = clock.getElapsedTime();
+      mouseX += (targetMouseX - mouseX) * 0.05;
+      mouseY += (targetMouseY - mouseY) * 0.05;
 
-      // Smooth mouse parallax interpolation
-      mouseX += (targetMouseX - mouseX) * 0.04;
-      mouseY += (targetMouseY - mouseY) * 0.04;
+      camera.position.x = mouseX * 0.6;
+      camera.position.y = 280 + -mouseY * 0.4;
+      camera.lookAt(0, -30, 0);
 
-      camera.position.x = mouseX * 1.5;
-      camera.position.y = -mouseY * 1.0;
-      camera.lookAt(0, 0, 0);
+      const posArray = geometry.attributes.position.array as Float32Array;
 
-      // Deform wave ribbon vertices
-      ribbons.forEach(({ mesh, basePositions, speed, freq, amp }, rIndex) => {
-        const posAttr = mesh.geometry.attributes.position;
-        const array = posAttr.array as Float32Array;
-
-        for (let i = 0; i < posAttr.count; i++) {
-          const u = basePositions[i * 3]!;
-          const v = basePositions[i * 3 + 1]!;
-
-          const wave1 = Math.sin(u * freq + elapsed * speed + rIndex * 1.2) * amp;
-          const wave2 = Math.cos(v * freq * 1.5 + elapsed * (speed * 0.8)) * (amp * 0.45);
-
-          array[i * 3 + 2] = basePositions[i * 3 + 2]! + wave1 + wave2;
+      let idx = 0;
+      for (let ix = 0; ix < AMOUNTX; ix++) {
+        for (let iy = 0; iy < AMOUNTY; iy++) {
+          posArray[idx * 3 + 1] =
+            Math.sin((ix + count) * 0.3) * 38 + Math.sin((iy + count) * 0.5) * 38;
+          idx++;
         }
+      }
 
-        posAttr.needsUpdate = true;
-        mesh.rotation.z = -0.18 + rIndex * 0.1 + Math.sin(elapsed * 0.25 + rIndex) * 0.05;
-      });
-
-      // Slowly rotate particle field
-      particleSystem.rotation.y = elapsed * 0.04;
-      particleSystem.rotation.x = Math.sin(elapsed * 0.02) * 0.06;
+      geometry.attributes.position.needsUpdate = true;
+      count += 0.02;
 
       renderer?.render(scene, camera);
       animationFrameId = requestAnimationFrame(animate);
@@ -211,8 +171,8 @@ export function RibbonBackdrop() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("resize", handleResize);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      resizeObserver.disconnect();
 
       if (renderer) {
         renderer.dispose();
@@ -221,44 +181,24 @@ export function RibbonBackdrop() {
         }
       }
 
-      ribbons.forEach(({ mesh }) => {
-        mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((m) => m.dispose());
-        } else {
-          mesh.material.dispose();
-        }
-      });
-
-      particleGeo.dispose();
-      particleMat.dispose();
+      geometry.dispose();
+      material.dispose();
+      circleTexture.dispose();
     };
   }, []);
 
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-      {/* 1. Base Atmospheric Image from background.jpeg */}
-      <div className="absolute inset-0 opacity-70">
-        <Image
-          src="/background.jpeg"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          quality={85}
-          className="object-cover object-center"
-        />
-      </div>
-
-      {/* 2. Interactive Lively Three.js 3D Wave Ribbons & Particle Canvas */}
-      <div ref={canvasContainerRef} className="absolute inset-0 h-full w-full opacity-90 mix-blend-screen" />
-
-      {/* 3. Soft vignette overlay to ensure text contrast while letting luminous background shine */}
+    <div
+      className="pointer-events-none absolute inset-0 -top-16 -bottom-16 -left-36 -right-36 z-0 overflow-hidden"
+      aria-hidden
+    >
+      <div ref={containerRef} className="h-full w-full opacity-80" />
+      {/* Soft fade at bottom so it blends seamlessly */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 45%, rgba(11,11,16,0.2) 0%, rgba(11,11,16,0.6) 70%, rgba(11,11,16,0.92) 100%)",
+            "linear-gradient(to bottom, transparent 65%, var(--zeno-bg) 100%)",
         }}
       />
     </div>
