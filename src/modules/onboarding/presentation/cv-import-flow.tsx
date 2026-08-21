@@ -168,7 +168,7 @@ export function CvImportFlow() {
           AI extraction can take 20–60 seconds when the model is busy. Keep this
           tab open — progress updates as work continues.
         </p>
-        <div className="mt-4 flex items-center gap-3 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-4 py-3">
+        <div className="mt-4 flex items-center gap-3 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3">
           <span
             className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--zeno-primary)] border-t-transparent"
             aria-hidden
@@ -196,7 +196,7 @@ export function CvImportFlow() {
                   active
                     ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
                     : done
-                      ? "border-[var(--zeno-border)] bg-white text-[var(--zeno-ink)]"
+                      ? "border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink)]"
                       : "border-[var(--zeno-border)] text-[var(--zeno-ink-faint)]"
                 }`}
               >
@@ -205,7 +205,7 @@ export function CvImportFlow() {
                   {active ? (
                     <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-[var(--zeno-primary)]" />
                   ) : done ? (
-                    <span className="text-xs font-medium text-emerald-700">
+                    <span className="text-xs font-medium text-[var(--zeno-success)]">
                       Done
                     </span>
                   ) : null}
@@ -270,7 +270,7 @@ export function CvImportFlow() {
         className={`mt-8 rounded-[var(--zeno-radius-lg)] border border-dashed p-8 text-center transition ${
           dragOver
             ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)]"
-            : "border-[var(--zeno-border)] bg-white"
+            : "border-[var(--zeno-border)] bg-[var(--zeno-surface)]"
         }`}
         onDragOver={(event) => {
           event.preventDefault();

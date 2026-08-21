@@ -45,6 +45,10 @@ export interface JobDiscoveryRepository {
     state: UserJobState;
     updatedAt: string;
   }): Promise<DiscoveredJob>;
+  countJobs(input: {
+    userId: string;
+    includeDismissed?: boolean;
+  }): Promise<number>;
   clearDiscoveredJobs(input: {
     userId: string;
     includeSaved: boolean;

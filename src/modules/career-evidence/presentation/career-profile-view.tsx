@@ -42,7 +42,7 @@ export function CareerProfileView({ initialEvidenceSet, handoff }: Props) {
     return (
       <div className="space-y-6">
         <ProfileHeader />
-        <div className="rounded-[16px] border border-dashed border-[var(--zeno-border)] bg-white px-6 py-12 text-center">
+        <div className="rounded-[16px] border border-dashed border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-6 py-12 text-center">
           <p className="text-[15px] font-semibold text-[var(--zeno-ink)]">
             No career evidence yet
           </p>
@@ -266,7 +266,7 @@ function ProfileOverview({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-[16px] border border-[var(--zeno-border)] bg-white px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+      <section className="rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             {editingId === "profile" && !locked ? (
@@ -353,7 +353,7 @@ function ProfileOverview({
       </section>
 
       {message ? (
-        <p className="rounded-[10px] bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+        <p className="rounded-[10px] bg-[var(--zeno-success-soft)] px-3 py-2 text-sm text-[var(--zeno-success)]">
           {message}
         </p>
       ) : null}
@@ -586,7 +586,7 @@ function ProfileOverview({
         </ProfileSection>
 
         {handoff ? (
-          <div className="rounded-[12px] border border-dashed border-[var(--zeno-border-hover)] bg-white px-4 py-3">
+          <div className="rounded-[12px] border border-dashed border-[var(--zeno-border-hover)] bg-[var(--zeno-surface)] px-4 py-3">
             <p className="text-[13px] text-[var(--zeno-ink-muted)]">
               Prefill an unverified project from your completed Growth work. You still need to
               review and confirm every claim.
@@ -1417,9 +1417,9 @@ function ProfileOverview({
         </ProfileSection>
       </div>
 
-      <section className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-3">
+      <section className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3">
         {isVerified ? (
-          <span className="text-[12px] font-semibold text-emerald-900">
+          <span className="text-[12px] font-semibold text-[var(--zeno-success)]">
             Profile verified — editing reopens it as a draft
           </span>
         ) : null}
@@ -1475,7 +1475,7 @@ function ProfileSection({
   children: ReactNode;
 }) {
   return (
-    <section className="flex h-full min-h-[12rem] flex-col rounded-[16px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]">
+    <section className="flex h-full min-h-[12rem] flex-col rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 shadow-[var(--zeno-shadow-sm)]">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--zeno-ink-faint)]">
           {title}
@@ -1561,7 +1561,7 @@ function ItemCard({
           <button
             type="button"
             onClick={onRemove}
-            className="inline-flex h-8 items-center rounded-[8px] px-2.5 text-[12px] font-semibold text-red-700 hover:bg-red-50"
+            className="inline-flex h-8 items-center rounded-[8px] px-2.5 text-[12px] font-semibold text-[var(--zeno-danger)] hover:bg-[var(--zeno-danger-soft)]"
           >
             Remove
           </button>
@@ -1575,7 +1575,7 @@ function StatusBadge({ confirmed }: { confirmed: boolean }) {
   return (
     <span
       className={`shrink-0 text-[11px] font-semibold ${
-        confirmed ? "text-emerald-900" : "text-amber-800"
+        confirmed ? "text-[var(--zeno-success)]" : "text-[var(--zeno-warning)]"
       }`}
     >
       {confirmed ? "Verified" : "Unconfirmed"}

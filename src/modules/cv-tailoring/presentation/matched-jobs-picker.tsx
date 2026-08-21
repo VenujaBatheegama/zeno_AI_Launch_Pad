@@ -117,11 +117,11 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search matched roles"
-        className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
+        className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
       />
 
       {error ? (
-        <div className="rounded-[var(--zeno-radius-sm)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <div className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-danger)] bg-[var(--zeno-danger-soft)] px-3 py-2 text-sm text-red-800">
           <p>{error}</p>
           <button
             type="button"
@@ -136,7 +136,7 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
       {loading ? (
         <p className="text-sm text-[var(--zeno-ink-muted)]">Loading your jobs…</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-6">
+        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6">
           <p className="text-sm font-semibold text-[var(--zeno-ink)]">
             No matched jobs yet
           </p>
@@ -156,7 +156,7 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
           {filtered.map((row) => (
             <article
               key={row.listingId}
-              className={`rounded-[var(--zeno-radius-md)] border bg-white px-4 py-3.5 shadow-[var(--zeno-shadow-sm)] transition ${
+              className={`rounded-[var(--zeno-radius-md)] border bg-[var(--zeno-surface)] px-4 py-3.5 shadow-[var(--zeno-shadow-sm)] transition ${
                 selected === row.listingId
                   ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)]"
                   : "border-[var(--zeno-border)] hover:border-[var(--zeno-border-hover)]"
@@ -229,7 +229,7 @@ export function MatchedJobsPicker({ initialListingId }: Props) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white px-4 py-3 shadow-[var(--zeno-shadow-sm)]">
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 shadow-[var(--zeno-shadow-sm)]">
         <p className="text-xs text-[var(--zeno-ink-muted)]">
           {selectedRow
             ? `Selected: ${selectedRow.title}`

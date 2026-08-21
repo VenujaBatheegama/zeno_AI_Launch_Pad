@@ -84,24 +84,24 @@ export function ApplicationPacketView(props: {
       </header>
 
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-[var(--zeno-danger)]" role="alert">
           {error}
         </p>
       ) : null}
 
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Why this job</h2>
         <p className="mt-2 text-sm leading-6">
           {fit?.explanation ?? "Fit explanation unavailable."}
         </p>
         {fit?.primaryGaps?.length ? (
-          <p className="mt-3 text-sm text-amber-800">
+          <p className="mt-3 text-sm text-[var(--zeno-warning)]">
             Missing requirements: {fit.primaryGaps.join("; ")}
           </p>
         ) : null}
       </section>
 
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Tailored CV</h2>
         {props.cvHref ? (
           <Link
@@ -117,14 +117,14 @@ export function ApplicationPacketView(props: {
         )}
       </section>
 
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Cover letter draft</h2>
         <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--zeno-ink)]">
           {props.packet.coverLetterDraft ?? "No draft yet."}
         </pre>
       </section>
 
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Apply externally</h2>
         {props.packet.applicationUrl ? (
           <a

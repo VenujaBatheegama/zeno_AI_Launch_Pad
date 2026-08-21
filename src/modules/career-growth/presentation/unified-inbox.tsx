@@ -54,10 +54,10 @@ export function UnifiedInbox(props: {
             role="tab"
             aria-selected={filter === value}
             onClick={() => setFilter(value)}
-            className={`h-9 rounded-full px-3 text-[13px] font-medium ${
+            className={`h-9 rounded-full px-3 text-[13px] font-medium transition ${
               filter === value
-                ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
-                : "border border-[var(--zeno-border)] bg-white text-[var(--zeno-ink-muted)]"
+                ? "border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
+                : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
             }`}
           >
             {value === "all" ? "All" : value === "jobs" ? "Jobs" : "Growth"}
@@ -65,7 +65,7 @@ export function UnifiedInbox(props: {
         ))}
       </div>
       {error ? (
-        <p className="text-[13px] text-amber-800" role="alert">
+        <p className="text-[13px] text-[var(--zeno-warning)]" role="alert">
           {error}
         </p>
       ) : null}
@@ -99,7 +99,7 @@ function GrowthCard(props: {
   onDismiss: () => void;
 }) {
   return (
-    <li className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+    <li className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--zeno-ink-faint)]">
         Growth recommendation
       </p>

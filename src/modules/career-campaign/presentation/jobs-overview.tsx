@@ -82,13 +82,13 @@ export function JobsOverview({
       </header>
 
       {error ? (
-        <p className="rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900" role="alert">
+        <p className="rounded-[12px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] px-4 py-3 text-[13px] text-[var(--zeno-warning)]" role="alert">
           {error}
         </p>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
           <h2 className="text-[16px] font-semibold text-[var(--zeno-ink)]">Instant Job Search</h2>
           <p className="mt-2 text-[13px] leading-relaxed text-[var(--zeno-ink-muted)]">
             Run a hybrid search now and rank the strongest available jobs against your verified profile.
@@ -131,7 +131,7 @@ export function JobsOverview({
           </div>
         </section>
 
-        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
           <h2 className="text-[16px] font-semibold text-[var(--zeno-ink)]">Job Campaigns</h2>
           <p className="mt-2 text-[13px] leading-relaxed text-[var(--zeno-ink-muted)]">
             Zeno checks for fresh matching jobs in the background and keeps each career target organised separately.
@@ -168,7 +168,7 @@ export function JobsOverview({
       <section>
         <h2 className="text-[16px] font-semibold text-[var(--zeno-ink)]">Your campaigns</h2>
         {campaigns.length === 0 ? (
-          <div className="mt-3 rounded-[14px] border border-dashed border-[var(--zeno-border)] bg-white px-4 py-10 text-center">
+          <div className="mt-3 rounded-[14px] border border-dashed border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-10 text-center">
             <p className="text-[14px] text-[var(--zeno-ink-muted)]">
               No job campaigns yet. Create one and Zeno will keep watching for matching roles.
             </p>
@@ -211,7 +211,7 @@ export function JobsOverview({
       {recentOpportunities.length > 0 ? (
         <section>
           <h2 className="text-[16px] font-semibold text-[var(--zeno-ink)]">Recent opportunities</h2>
-          <ul className="mt-3 divide-y divide-[var(--zeno-border)] rounded-[14px] border border-[var(--zeno-border)] bg-white">
+          <ul className="mt-3 divide-y divide-[var(--zeno-border)] rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)]">
             {recentOpportunities.slice(0, 5).map((item) => (
               <li key={`${item.originLabel}-${item.listingId}`}>
                 <Link href={item.href} className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-[var(--zeno-violet-wash)]">
@@ -246,7 +246,7 @@ function CampaignTile(props: {
 }) {
   const { tile } = props;
   return (
-    <article className="relative rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]">
+    <article className="relative rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 shadow-[var(--zeno-shadow-sm)]">
       <Link href={`/app/jobs/campaigns/${tile.id}`} className="block pr-10">
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-[15px] font-semibold text-[var(--zeno-ink)]">{tile.name}</h3>
@@ -340,7 +340,7 @@ function CampaignMenu(props: {
         <div
           id={menuId}
           role="menu"
-          className="absolute right-0 z-10 mt-1 w-44 rounded-[12px] border border-[var(--zeno-border)] bg-white py-1 shadow-[var(--zeno-shadow-lg)]"
+          className="absolute right-0 z-10 mt-1 w-44 rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] py-1 shadow-[var(--zeno-shadow-lg)]"
         >
           <Link
             role="menuitem"
@@ -375,7 +375,8 @@ function CampaignMenu(props: {
           <button
             type="button"
             role="menuitem"
-            className="block w-full px-3 py-2 text-left text-[13px] text-red-700 hover:bg-red-50"
+            className="block w-full px-3 py-2 text-left text-[13px] hover:bg-[var(--zeno-danger-soft)]"
+            style={{ color: "var(--zeno-danger)" }}
             onClick={() => {
               setOpen(false);
               props.onConfirmDelete();
@@ -389,7 +390,7 @@ function CampaignMenu(props: {
         <div
           role="dialog"
           aria-labelledby={`${menuId}-confirm`}
-          className="absolute right-0 z-20 mt-1 w-64 rounded-[12px] border border-[var(--zeno-border)] bg-white p-3 shadow-[var(--zeno-shadow-lg)]"
+          className="absolute right-0 z-20 mt-1 w-64 rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3 shadow-[var(--zeno-shadow-lg)]"
         >
           <p id={`${menuId}-confirm`} className="text-[13px] text-[var(--zeno-ink)]">
             Monitoring will stop. Job listings, saved jobs, and application history stay in place.
@@ -397,7 +398,7 @@ function CampaignMenu(props: {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              className="inline-flex h-8 items-center rounded-[8px] bg-red-700 px-3 text-[12px] font-semibold text-white"
+              className="inline-flex h-8 items-center rounded-[8px] bg-[var(--zeno-danger)] px-3 text-[12px] font-semibold text-white"
               onClick={() => props.onAction("archive")}
             >
               Delete campaign

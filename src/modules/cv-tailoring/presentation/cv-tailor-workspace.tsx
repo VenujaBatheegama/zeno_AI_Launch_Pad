@@ -384,43 +384,10 @@ export function CvTailorWorkspace({ listingId }: Props) {
         }),
       ]);
 
-      let finalDetailsRes = detailsRes;
-      let finalRecommendRes = recommendRes;
-
-      if (!finalDetailsRes.ok) {
-        setLoadingHint("Extracting job requirements & matching against your profile…");
-        try {
-          const autoAnalyseRes = await fetch(
-            `/api/career-intelligence/matches/${listingId}`,
-            {
-              method: "POST",
-              credentials: "same-origin",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ force: false }),
-            },
-          );
-          if (autoAnalyseRes.ok) {
-            [finalRecommendRes, finalDetailsRes] = await Promise.all([
-              fetch("/api/cv-tailoring/recommend", {
-                method: "POST",
-                credentials: "same-origin",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ listingId }),
-              }),
-              fetch(`/api/career-intelligence/matches/${listingId}`, {
-                credentials: "same-origin",
-              }),
-            ]);
-          }
-        } catch {
-          // Continue to fallback
-        }
-      }
-
       setLoadingHint("Preparing editor…");
 
-      if (finalDetailsRes.ok) {
-        const details = (await finalDetailsRes.json()) as {
+      if (detailsRes.ok) {
+        const details = (await detailsRes.json()) as {
           card: RankedJobMatchCard;
         };
         setMatch(details.card);
@@ -455,7 +422,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         });
       } else {
         setLoadingHint("Looking up discovered job…");
-        const jobsRes = await fetch("/api/jobs?includeDismissed=true", { credentials: "same-origin" });
+        const jobsRes = await fetch("/api/jobs", { credentials: "same-origin" });
         if (!jobsRes.ok) {
           throw new Error("Could not load jobs for this account.");
         }
@@ -470,18 +437,18 @@ export function CvTailorWorkspace({ listingId }: Props) {
       }
 
       let recommendError: string | null = null;
-      if (finalRecommendRes.ok) {
-        const body = (await finalRecommendRes.json()) as {
+      if (recommendRes.ok) {
+        const body = (await recommendRes.json()) as {
           recommendedMode: "one_page" | "two_page";
           reason: string;
         };
         setRecommendation(body);
         setMode(body.recommendedMode);
       } else {
-        const body = (await finalRecommendRes.json()) as { error?: string };
+        const body = (await recommendRes.json()) as { error?: string };
         if (
           body.error &&
-          [400, 404, 409, 422].includes(finalRecommendRes.status)
+          [400, 404, 409, 422].includes(recommendRes.status)
         ) {
           recommendError = body.error;
         }
@@ -859,7 +826,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-6">
+      <div className="flex items-center gap-3 rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-6">
         <span
           className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--zeno-primary)] border-t-transparent"
           aria-hidden
@@ -882,7 +849,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         <Link href="/app/cvs/matched" className="text-xs text-[var(--zeno-ink-muted)]">
           ← Back to matched jobs
         </Link>
-        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-6">
+        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6">
           <p className="text-sm font-semibold text-[var(--zeno-ink)]">
             Almost ready to tailor
           </p>
@@ -918,7 +885,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
       (variant.status === "failed" && Boolean(variant.tailoredContent)));
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--zeno-surface)]">
       {/* Top action bar — Lovable-style with Tab Switcher */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--zeno-border)] px-4 py-2.5">
         <Link
@@ -944,7 +911,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
             onClick={() => setActiveTab("cv")}
             className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
               activeTab === "cv"
-                ? "bg-white font-semibold text-[var(--zeno-ink)] shadow-sm"
+                ? "bg-[var(--zeno-surface)] font-semibold text-[var(--zeno-ink)] shadow-sm"
                 : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
             }`}
           >
@@ -960,13 +927,13 @@ export function CvTailorWorkspace({ listingId }: Props) {
             }}
             className={`flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 transition ${
               activeTab === "cover_letter"
-                ? "bg-white font-semibold text-[var(--zeno-ink)] shadow-sm"
+                ? "bg-[var(--zeno-surface)] font-semibold text-[var(--zeno-ink)] shadow-sm"
                 : "text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
             }`}
           >
             <span>✉️</span> Cover Letter
             {coverDraft ? (
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--zeno-success-soft)]0" />
             ) : null}
           </button>
         </div>
@@ -1119,17 +1086,17 @@ export function CvTailorWorkspace({ listingId }: Props) {
       {(message || error || saveError || coverError) && (
         <div className="shrink-0 space-y-1 border-b border-[var(--zeno-border)] px-4 py-2">
           {message ? (
-            <p className="rounded-[8px] bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <p className="rounded-[8px] bg-[var(--zeno-success-soft)] px-3 py-2 text-xs text-[var(--zeno-success)]">
               {message}
             </p>
           ) : null}
           {error || coverError ? (
-            <p className="rounded-[8px] bg-rose-50 px-3 py-2 text-xs text-rose-900">
+            <p className="rounded-[8px] bg-[var(--zeno-danger-soft)] px-3 py-2 text-xs text-[var(--zeno-danger)]">
               {error ?? coverError}
             </p>
           ) : null}
           {saveError ? (
-            <p className="rounded-[8px] bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="rounded-[8px] bg-[var(--zeno-warning-soft)] px-3 py-2 text-xs text-[var(--zeno-warning)]">
               {saveError}
             </p>
           ) : null}
@@ -1145,13 +1112,13 @@ export function CvTailorWorkspace({ listingId }: Props) {
               sectionOrder={variant?.sectionOrder}
             />
           ) : (
-            <div className="hidden border-r border-[var(--zeno-border)] bg-white lg:block" />
+            <div className="hidden border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] lg:block" />
           )}
 
           <section className="min-h-0 min-w-0 overflow-hidden">
             {!draft ? (
               <div className="cv-dotted-canvas flex h-full items-start justify-center overflow-y-auto p-8 md:p-12">
-                <div className="w-full max-w-lg rounded-[10px] border border-[var(--zeno-border)] bg-white p-6 shadow-[var(--zeno-shadow-sm)]">
+                <div className="w-full max-w-lg rounded-[10px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-[var(--zeno-shadow-sm)]">
                   <p className="text-sm font-semibold">Generate validated content</p>
                   <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
                     {recommendation
@@ -1216,7 +1183,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
               mode={variant?.mode ?? mode}
             />
           ) : (
-            <div className="hidden border-l border-[var(--zeno-border)] bg-white lg:block" />
+            <div className="hidden border-l border-[var(--zeno-border)] bg-[var(--zeno-surface)] lg:block" />
           )}
         </div>
       ) : (
@@ -1224,7 +1191,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
           {/* Left Context Column */}
           <aside className="space-y-4 border-r border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-4 overflow-y-auto">
-            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-muted)]">
                 Target Role
               </p>
@@ -1235,15 +1202,15 @@ export function CvTailorWorkspace({ listingId }: Props) {
                 {job?.organization_name ?? "Company"}
               </p>
               {match ? (
-                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-success)]">
                   <span>🎯</span> {Math.round(match.evidenceFitScore)}% Evidence Match
                 </div>
               ) : null}
             </div>
 
             {match?.topMatched && match.topMatched.length > 0 ? (
-              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-success)]">
                   ✓ Matched Strengths
                 </p>
                 <ul className="mt-2 space-y-1.5 text-xs text-[var(--zeno-ink)]">
@@ -1258,14 +1225,14 @@ export function CvTailorWorkspace({ listingId }: Props) {
             ) : null}
 
             {match?.primaryGaps && match.primaryGaps.length > 0 ? (
-              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+              <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-warning)]">
                   ⚠️ Handled Gaps
                 </p>
                 <p className="mt-1 text-[11px] text-[var(--zeno-ink-muted)]">
                   Addressed truthfully without pretending experience you do not have.
                 </p>
-                <ul className="mt-2 space-y-1 text-xs text-amber-900">
+                <ul className="mt-2 space-y-1 text-xs text-[var(--zeno-warning)]">
                   {match.primaryGaps.slice(0, 3).map((g, idx) => (
                     <li key={idx}>• {g}</li>
                   ))}
@@ -1275,7 +1242,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
           </aside>
 
           {/* Center Canvas / Textarea Column */}
-          <section className="flex flex-col min-h-0 bg-white overflow-hidden">
+          <section className="flex flex-col min-h-0 bg-[var(--zeno-surface)] overflow-hidden">
             {coverBusy ? (
               <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
                 <span
@@ -1305,14 +1272,14 @@ export function CvTailorWorkspace({ listingId }: Props) {
                     <button
                       type="button"
                       onClick={() => void copyCoverLetter()}
-                      className="rounded-[6px] border border-[var(--zeno-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
+                      className="rounded-[6px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
                     >
                       {coverCopied ? "✓ Copied!" : "📋 Copy"}
                     </button>
                     <button
                       type="button"
                       onClick={downloadCoverLetter}
-                      className="rounded-[6px] border border-[var(--zeno-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
+                      className="rounded-[6px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-ink)] hover:bg-[var(--zeno-surface-sunken)] shadow-sm"
                     >
                       ⬇ Download .txt
                     </button>
@@ -1336,7 +1303,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
               </div>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-                <div className="max-w-md rounded-[12px] border border-[var(--zeno-border)] bg-white p-6 shadow-sm">
+                <div className="max-w-md rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-sm">
                   <span className="text-3xl">✉️</span>
                   <h3 className="mt-3 text-base font-bold text-[var(--zeno-ink)]">
                     Create a Grounded Cover Letter
@@ -1358,7 +1325,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
           </section>
 
           {/* Right Guidance Column */}
-          <aside className="border-l border-[var(--zeno-border)] bg-white p-4 overflow-y-auto space-y-4">
+          <aside className="border-l border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 overflow-y-auto space-y-4">
             <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3.5">
               <p className="text-xs font-bold text-[var(--zeno-ink)]">
                 🛡 Grounded in Evidence
@@ -1368,7 +1335,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
               </p>
             </div>
 
-            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-white p-3.5 shadow-sm">
+            <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
               <p className="text-xs font-bold text-[var(--zeno-ink)]">
                 💡 Application Tips
               </p>

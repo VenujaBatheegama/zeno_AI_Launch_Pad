@@ -48,7 +48,7 @@ export default async function OnboardingReviewPage() {
       {evidenceSet ? (
         <CareerEvidenceWorkspace initialEvidenceSet={evidenceSet} />
       ) : (
-        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-6 text-sm text-[var(--zeno-ink-muted)]">
+        <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 text-sm text-[var(--zeno-ink-muted)]">
           No draft found yet.{" "}
           <Link href="/onboarding/import" className="text-[var(--zeno-primary)]">
             Import a CV

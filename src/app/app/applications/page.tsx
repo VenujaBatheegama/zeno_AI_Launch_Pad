@@ -52,7 +52,7 @@ export default async function ApplicationsPage() {
             <Link
               key={packet.id}
               href={`/app/packets/${packet.id}`}
-              className="block rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-4 hover:border-[var(--zeno-border-hover)]"
+              className="block rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 hover:border-[var(--zeno-border-hover)]"
             >
               <p className="font-semibold">
                 {rec.fitSummarySnapshot.title ?? "Application packet"}
@@ -79,7 +79,7 @@ export default async function ApplicationsPage() {
             <Link
               key={application.id}
               href={`/app/applications/${application.id}`}
-              className="block rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-4 hover:border-[var(--zeno-border-hover)]"
+              className="block rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 hover:border-[var(--zeno-border-hover)]"
             >
               <p className="font-semibold capitalize">{application.status}</p>
               <p className="text-sm text-[var(--zeno-ink-muted)]">

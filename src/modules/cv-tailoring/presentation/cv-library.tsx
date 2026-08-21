@@ -143,7 +143,7 @@ export function CvLibrary({ embedded = false }: Props) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search tailored CVs"
-            className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white pl-9 pr-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
+            className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] pl-9 pr-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
           />
         </label>
 
@@ -164,7 +164,7 @@ export function CvLibrary({ embedded = false }: Props) {
                 className={`inline-flex h-9 items-center rounded-full px-3.5 text-[12px] font-medium transition ${
                   active
                     ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
-                    : "border border-[var(--zeno-border)] bg-white text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
+                    : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
                 }`}
               >
                 {label}
@@ -175,7 +175,7 @@ export function CvLibrary({ embedded = false }: Props) {
       </div>
 
       {error ? (
-        <p className="rounded-[12px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-[12px] border border-[var(--zeno-danger)] bg-[var(--zeno-danger-soft)] px-3 py-2 text-sm text-red-800">
           {error}
         </p>
       ) : null}
@@ -183,7 +183,7 @@ export function CvLibrary({ embedded = false }: Props) {
       {loading ? (
         <p className="text-sm text-[var(--zeno-ink-muted)]">Loading your CVs…</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-[16px] border border-[var(--zeno-border)] bg-white p-8 text-center">
+        <div className="rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-8 text-center">
           <p className="text-sm text-[var(--zeno-ink-muted)]">
             {variants.length === 0
               ? "No tailored CVs yet. Choose a matched job to generate a CV — it will appear here as its own tile."
@@ -203,21 +203,21 @@ export function CvLibrary({ embedded = false }: Props) {
           {filtered.map((variant) => (
             <li
               key={variant.id}
-              className={`relative rounded-[16px] border border-[var(--zeno-border)] bg-white shadow-[var(--zeno-shadow-sm)] ${
+              className={`relative rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)] ${
                 menuOpenId === variant.id ? "z-20" : "z-0"
               }`}
             >
               <div className="cv-dotted-canvas relative h-[148px] overflow-hidden rounded-t-[16px] border-b border-[var(--zeno-border)] px-8 py-6">
-                <div className="mx-auto h-full max-w-[132px] rounded-[2px] bg-white px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.08)]">
+                <div className="mx-auto h-full max-w-[132px] rounded-[3px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
                   <div className="mb-2 h-2 w-16 rounded-sm bg-[var(--zeno-ink)]/80" />
-                  <div className="mb-3 h-1.5 w-10 rounded-sm bg-[var(--zeno-primary)]/70" />
+                  <div className="mb-3 h-1.5 w-10 rounded-sm bg-[var(--zeno-primary)]/80" />
                   <div className="space-y-1.5">
-                    <div className="h-1 w-full rounded-sm bg-[var(--zeno-ink)]/25" />
-                    <div className="h-1 w-[92%] rounded-sm bg-[var(--zeno-ink)]/20" />
-                    <div className="h-1 w-[85%] rounded-sm bg-[var(--zeno-ink)]/15" />
-                    <div className="mt-2 h-1 w-full rounded-sm bg-[var(--zeno-ink)]/20" />
-                    <div className="h-1 w-[88%] rounded-sm bg-[var(--zeno-ink)]/15" />
-                    <div className="h-1 w-[70%] rounded-sm bg-[var(--zeno-ink)]/10" />
+                    <div className="h-1 w-full rounded-sm bg-[var(--zeno-ink)]/30" />
+                    <div className="h-1 w-[92%] rounded-sm bg-[var(--zeno-ink)]/25" />
+                    <div className="h-1 w-[85%] rounded-sm bg-[var(--zeno-ink)]/20" />
+                    <div className="mt-2 h-1 w-full rounded-sm bg-[var(--zeno-ink)]/25" />
+                    <div className="h-1 w-[88%] rounded-sm bg-[var(--zeno-ink)]/20" />
+                    <div className="h-1 w-[70%] rounded-sm bg-[var(--zeno-ink)]/15" />
                   </div>
                 </div>
               </div>
@@ -245,7 +245,7 @@ export function CvLibrary({ embedded = false }: Props) {
                 </div>
 
                 {variant.errorMessage ? (
-                  <p className="mt-2 text-xs text-red-700">
+                  <p className="mt-2 text-xs text-[var(--zeno-danger)]">
                     {variant.errorMessage}
                   </p>
                 ) : null}
@@ -272,7 +272,7 @@ export function CvLibrary({ embedded = false }: Props) {
                       <MoreIcon />
                     </button>
                     {menuOpenId === variant.id ? (
-                      <div className="absolute bottom-full right-0 z-30 mb-1 w-44 rounded-[10px] border border-[var(--zeno-border)] bg-white p-1 shadow-[var(--zeno-shadow-md)]">
+                      <div className="absolute bottom-full right-0 z-30 mb-1 w-44 rounded-[10px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-1 shadow-[var(--zeno-shadow-md)]">
                         {variant.canDownload ? (
                           <a
                             href={`/api/cv-tailoring/${variant.id}/download`}

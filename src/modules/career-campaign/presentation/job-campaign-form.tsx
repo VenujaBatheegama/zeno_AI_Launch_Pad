@@ -133,7 +133,7 @@ export function JobCampaignForm({
       </header>
 
       {error ? (
-        <p className="rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900" role="alert">
+        <p className="rounded-[12px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] px-4 py-3 text-[13px] text-[var(--zeno-warning)]" role="alert">
           {error}
         </p>
       ) : null}
@@ -151,7 +151,7 @@ export function JobCampaignForm({
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder={suggestedName}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
           />
         </label>
         <label className="block text-[13px] font-medium text-[var(--zeno-ink)]">
@@ -161,7 +161,7 @@ export function JobCampaignForm({
             minLength={2}
             value={primaryRole}
             onChange={(event) => setPrimaryRole(event.target.value)}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
           />
         </label>
         <label className="block text-[13px] font-medium text-[var(--zeno-ink)]">
@@ -171,7 +171,7 @@ export function JobCampaignForm({
             minLength={2}
             value={location}
             onChange={(event) => setLocation(event.target.value)}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
           />
         </label>
         <label className="block text-[13px] font-medium text-[var(--zeno-ink)]">
@@ -179,7 +179,7 @@ export function JobCampaignForm({
           <select
             value={workMode}
             onChange={(event) => setWorkMode(event.target.value as CampaignWorkMode)}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
           >
             <option value="any">Any</option>
             <option value="remote">Remote</option>
@@ -194,7 +194,7 @@ export function JobCampaignForm({
             onChange={(event) =>
               setEmploymentType(event.target.value as EmploymentType | "")
             }
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
           >
             <option value="">Any</option>
             <option value="full_time">Full time</option>
@@ -210,7 +210,7 @@ export function JobCampaignForm({
             onChange={(event) =>
               setExperienceLevel(event.target.value as ExperienceLevel | "")
             }
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
           >
             <option value="">Any</option>
             <option value="entry">Entry</option>
@@ -228,10 +228,10 @@ export function JobCampaignForm({
             max={100}
             value={minimumScore}
             onChange={(event) => setMinimumScore(Number(event.target.value))}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
           />
         </label>
-        <fieldset className="rounded-[12px] border border-[var(--zeno-border)] bg-white p-4">
+        <fieldset className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4">
           <legend className="px-1 text-[13px] font-semibold text-[var(--zeno-ink)]">
             Career development
           </legend>
@@ -244,7 +244,7 @@ export function JobCampaignForm({
               value={preferredTechnologies}
               onChange={(event) => setPreferredTechnologies(event.target.value)}
               placeholder="Java, Spring Boot, PostgreSQL"
-              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
+              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none focus:border-[var(--zeno-border-hover)]"
             />
           </label>
           <label className="mt-3 block text-[13px] font-medium text-[var(--zeno-ink)]">
@@ -253,7 +253,7 @@ export function JobCampaignForm({
               type="date"
               value={targetReadyDate}
               onChange={(event) => setTargetReadyDate(event.target.value)}
-              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
             />
           </label>
           <label className="mt-3 block text-[13px] font-medium text-[var(--zeno-ink)]">
@@ -261,7 +261,7 @@ export function JobCampaignForm({
             <select
               value={weeklyHoursAvailable}
               onChange={(event) => setWeeklyHoursAvailable(event.target.value)}
-              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px]"
+              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px]"
             >
               <option value="">Not sure yet</option>
               <option value="2">About 2 hours</option>

@@ -132,8 +132,10 @@ export async function getGrowthDashboard(
   input: { userId: string },
   deps: { repository: CareerGrowthRepository; campaigns: { listCampaigns(userId: string): Promise<Array<{ id: string; name: string }>> } },
 ) {
-  const projects = await deps.repository.listProjects({ userId: input.userId });
-  const campaigns = await deps.campaigns.listCampaigns(input.userId);
+  const [projects, campaigns] = await Promise.all([
+    deps.repository.listProjects({ userId: input.userId }),
+    deps.campaigns.listCampaigns(input.userId),
+  ]);
   const names = new Map(campaigns.map((item) => [item.id, item.name]));
   const active = projects.filter(
     (item) => item.status === "planned" || item.status === "in_progress" || item.status === "paused",

@@ -9,7 +9,7 @@ export type GrowthProfileHandoffDraft = {
 
 export function GrowthProfileHandoff(props: { draft: GrowthProfileHandoffDraft }) {
   return (
-    <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5">
+    <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--zeno-ink-faint)]">
         From Growth project
       </p>

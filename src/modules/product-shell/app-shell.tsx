@@ -48,7 +48,7 @@ export function AppShell(props: {
   return (
     <div className="flex min-h-screen bg-[var(--zeno-bg)] text-[var(--zeno-ink)]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-[var(--zeno-border)] bg-white lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)] lg:flex">
         <div className="px-5 py-5">
           <Link href="/app/home" className="inline-flex">
             <ZenoMark className="font-[family-name:var(--zeno-font-display)] text-[1.15rem] tracking-[-0.02em]" />
@@ -66,7 +66,7 @@ export function AppShell(props: {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className={`flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition ${
+                    className={`flex items-center gap-2.5 rounded-[var(--zeno-radius-sm)] px-2.5 py-2 text-[13px] font-semibold transition ${
                       active
                         ? "bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
                         : "text-[var(--zeno-ink-muted)] hover:bg-[var(--zeno-violet-wash)] hover:text-[var(--zeno-ink)]"
@@ -107,7 +107,7 @@ export function AppShell(props: {
             aria-label="Close navigation"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[232px] flex-col bg-white shadow-[var(--zeno-shadow-lg)]">
+          <aside className="absolute inset-y-0 left-0 flex w-[232px] flex-col bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-lg)]">
             <div className="flex items-center justify-between px-4 py-4">
               <ZenoMark className="font-[family-name:var(--zeno-font-display)]" />
               <button
@@ -149,7 +149,7 @@ export function AppShell(props: {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--zeno-border)] bg-[color-mix(in_srgb,var(--zeno-bg)_88%,white)] px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--zeno-border)] bg-[var(--zeno-bg)] px-4 sm:px-6">
           <button
             type="button"
             className="rounded-md border border-[var(--zeno-border)] px-2 py-1 text-sm lg:hidden"
@@ -174,7 +174,7 @@ export function AppShell(props: {
               <input
                 type="search"
                 placeholder="Search jobs, evidence, applications"
-                className="h-9 w-full rounded-full border border-[var(--zeno-border)] bg-white pl-9 pr-3 text-[13px] text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
+                className="h-9 w-full rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] pl-9 pr-3 text-[13px] text-[var(--zeno-ink)] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
               />
             </label>
           </div>
@@ -201,7 +201,7 @@ export function AppShell(props: {
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-44 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white p-1 shadow-[var(--zeno-shadow-md)]"
+                  className="absolute right-0 mt-2 w-44 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-1 shadow-[var(--zeno-shadow-md)]"
                 >
                   <Link
                     href="/app/settings"

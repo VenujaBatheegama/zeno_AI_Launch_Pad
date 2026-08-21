@@ -36,7 +36,7 @@ export function GrowthDashboard(props: {
       </header>
 
       {props.current ? (
-        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
           <h2 className="text-[16px] font-semibold">Current focus</h2>
           <h3 className="mt-2 text-[18px] font-semibold text-[var(--zeno-ink)]">
             {props.current.project.title}
@@ -74,7 +74,7 @@ export function GrowthDashboard(props: {
           </div>
         </section>
       ) : (
-        <section className="rounded-[14px] border border-dashed border-[var(--zeno-border-hover)] bg-white p-6 text-[14px] text-[var(--zeno-ink-muted)]">
+        <section className="rounded-[14px] border border-dashed border-[var(--zeno-border-hover)] bg-[var(--zeno-surface)] p-6 text-[14px] text-[var(--zeno-ink-muted)]">
           Create a Job Campaign and Zeno will identify the most valuable way to strengthen your candidacy.
           <div className="mt-3">
             <Link href="/app/jobs" className="font-semibold text-[var(--zeno-primary-deep)]">
@@ -87,7 +87,7 @@ export function GrowthDashboard(props: {
       {props.otherActive.length > 0 ? (
         <section>
           <h2 className="text-[16px] font-semibold">Other active projects</h2>
-          <ul className="mt-3 divide-y divide-[var(--zeno-border)] rounded-[14px] border border-[var(--zeno-border)] bg-white">
+          <ul className="mt-3 divide-y divide-[var(--zeno-border)] rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)]">
             {props.otherActive.map((project) => (
               <li key={project.id}>
                 <Link
@@ -115,7 +115,7 @@ export function GrowthDashboard(props: {
             {props.completed.map((project) => (
               <li
                 key={project.id}
-                className="rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-3 text-[13px]"
+                className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px]"
               >
                 <p className="font-semibold">{project.title}</p>
                 <p className="mt-1 text-[var(--zeno-ink-muted)]">
@@ -201,13 +201,13 @@ export function GrowthProjectTracker(props: {
         </p>
       </header>
       {error ? (
-        <p className="text-[13px] text-amber-800" role="alert">{error}</p>
+        <p className="text-[13px] text-[var(--zeno-warning)]" role="alert">{error}</p>
       ) : null}
       <section>
         <h2 className="text-[16px] font-semibold">Milestones</h2>
         <ol className="mt-3 space-y-2">
           {props.milestones.map((item) => (
-            <li key={item.id} className="rounded-[12px] border border-[var(--zeno-border)] bg-white p-4">
+            <li key={item.id} className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">{item.title}</p>
@@ -279,7 +279,7 @@ export function GrowthProjectTracker(props: {
         ) : null}
       </div>
       {allRequiredDone && project.status !== "completed" ? (
-        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-5">
+        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
           <p className="text-[14px] font-semibold">This project looks complete.</p>
           <p className="mt-1 text-[13px] text-[var(--zeno-ink-muted)]">
             Mark it complete, then add the work to your profile. Claims stay unverified until you review them.

@@ -448,6 +448,15 @@ class MemoryJobRepository implements JobDiscoveryRepository {
       .slice(input.offset, input.offset + input.limit);
   }
 
+  async countJobs(input: {
+    userId: string;
+    includeDismissed?: boolean;
+  }) {
+    return [...this.jobs.values()]
+      .filter((job) => input.includeDismissed || job.user_state !== "dismissed")
+      .length;
+  }
+
   async setUserJobState(input: {
     userId: string;
     listingId: string;

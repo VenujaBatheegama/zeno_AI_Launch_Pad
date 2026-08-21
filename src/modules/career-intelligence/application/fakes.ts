@@ -417,6 +417,10 @@ export class FakeJobDiscoveryRepository implements JobDiscoveryRepository {
   async listJobs() {
     return this.jobs;
   }
+  async countJobs(input: { userId: string; includeDismissed?: boolean }) {
+    if (input.includeDismissed) return this.jobs.length;
+    return this.jobs.filter((j) => j.user_state !== "dismissed").length;
+  }
   async setUserJobState(input: {
     userId: string;
     listingId: string;
