@@ -63,17 +63,17 @@ export function HomeGreeting(props: { name: string }) {
   const lines = linesForPeriod(period);
 
   return (
-    <section className="mx-auto max-w-3xl text-center">
-      <h1 className="font-[family-name:var(--zeno-font-display)] text-[1.85rem] font-bold leading-[1.15] tracking-tight sm:text-[2.5rem] md:text-[2.85rem]">
+    <section className="mx-auto max-w-3xl text-center select-none transition-all duration-700">
+      <h1 className="font-[family-name:var(--zeno-font-display)] text-[1.85rem] font-bold leading-[1.15] tracking-tight sm:text-[2.5rem] md:text-[2.85rem] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
         <span className="text-[var(--zeno-ink-faint)]">Good </span>
-        <span className="text-[var(--zeno-primary)]">
+        <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-indigo-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(245,158,11,0.3)]">
           {mounted ? helloForPeriod(period) : "morning"}
         </span>
         <span className="text-[var(--zeno-ink-faint)]">, </span>
         <span className="text-[var(--zeno-ink)]">{props.name}</span>
       </h1>
       <p
-        className="mt-4 text-[15px] leading-relaxed text-[var(--zeno-ink-muted)] transition-opacity duration-500"
+        className="mt-4 text-[15px] leading-relaxed text-[var(--zeno-ink-muted)] transition-opacity duration-700"
         aria-live="polite"
         key={`${period}-${index}`}
       >

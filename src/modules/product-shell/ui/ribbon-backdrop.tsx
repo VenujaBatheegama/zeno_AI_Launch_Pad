@@ -5,9 +5,9 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 /**
- * Interactive 3D Lively Backdrop for the Home Screen using Three.js.
- * Renders smooth flowing ribbons, luminous ambient waves, and subtle floating particles
- * inspired by background.jpeg with gentle mouse parallax and idle drift.
+ * Lively Three.js 3D Cosmic Ribbon & Particle Backdrop.
+ * Renders smooth flowing ribbons with amber/sapphire luminosity and floating stardust,
+ * seamlessly layered over background.jpeg.
  */
 export function RibbonBackdrop() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -16,16 +16,20 @@ export function RibbonBackdrop() {
     const container = canvasContainerRef.current;
     if (!container) return;
 
-    let width = container.clientWidth || window.innerWidth;
-    let height = container.clientHeight || 500;
+    let width = window.innerWidth;
+    let height = window.innerHeight;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
-    camera.position.set(0, 0, 15);
+    camera.position.set(0, 0, 14);
 
     let renderer: THREE.WebGLRenderer | null = null;
     try {
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        powerPreference: "low-power",
+      });
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
       container.appendChild(renderer.domElement);
@@ -33,7 +37,7 @@ export function RibbonBackdrop() {
       return;
     }
 
-    // 1. Flowing Wave Ribbons
+    // 1. Flowing 3D Harmonic Wave Ribbons
     const ribbonCount = 3;
     const ribbons: {
       mesh: THREE.Mesh;
@@ -43,25 +47,26 @@ export function RibbonBackdrop() {
       amp: number;
     }[] = [];
 
-    const ribbonColors = [
-      { color: 0x4338ca, emissive: 0x312e81, opacity: 0.35 }, // Indigo/Sapphire
-      { color: 0x6366f1, emissive: 0x4f46e5, opacity: 0.28 }, // Violet
-      { color: 0xd97706, emissive: 0xb45309, opacity: 0.22 }, // Amber/Gold accent
+    const ribbonConfigs = [
+      { color: 0x4f46e5, emissive: 0x3730a3, opacity: 0.6, y: -1.5, z: -2 }, // Rich Indigo/Sapphire
+      { color: 0x06b6d4, emissive: 0x0891b2, opacity: 0.45, y: 1.2, z: -4 },  // Luminous Cyan
+      { color: 0xf59e0b, emissive: 0xd97706, opacity: 0.38, y: -3.2, z: -1 }, // Warm Amber Gold
     ];
 
     for (let r = 0; r < ribbonCount; r++) {
-      const geo = new THREE.PlaneGeometry(28, 4.5, 45, 12);
+      const cfg = ribbonConfigs[r]!;
+      const geo = new THREE.PlaneGeometry(36, 6, 50, 16);
       const pos = geo.attributes.position;
       const basePositions = new Float32Array(pos.array);
 
       const mat = new THREE.MeshPhysicalMaterial({
-        color: ribbonColors[r]!.color,
-        emissive: ribbonColors[r]!.emissive,
-        emissiveIntensity: 0.6,
-        roughness: 0.15,
-        metalness: 0.2,
+        color: cfg.color,
+        emissive: cfg.emissive,
+        emissiveIntensity: 1.2,
+        roughness: 0.1,
+        metalness: 0.3,
         transparent: true,
-        opacity: ribbonColors[r]!.opacity,
+        opacity: cfg.opacity,
         side: THREE.DoubleSide,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
@@ -69,42 +74,40 @@ export function RibbonBackdrop() {
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(
-        (r - 1) * 2,
-        -2.5 + r * 1.6,
-        -2 - r * 1.5,
+        (r - 1) * 3,
+        cfg.y,
+        cfg.z,
       );
-      mesh.rotation.set(-0.35 + r * 0.15, 0.1, -0.15 + r * 0.08);
+      mesh.rotation.set(-0.35 + r * 0.12, 0.08, -0.18 + r * 0.1);
 
       scene.add(mesh);
       ribbons.push({
         mesh,
         basePositions,
-        speed: 0.6 + r * 0.25,
-        freq: 0.22 + r * 0.08,
-        amp: 0.9 + r * 0.3,
+        speed: 0.7 + r * 0.3,
+        freq: 0.18 + r * 0.06,
+        amp: 1.2 + r * 0.35,
       });
     }
 
     // 2. Floating Luminous Stardust Particles
-    const particleCount = 45;
+    const particleCount = 55;
     const particleGeo = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
-    const particleScales = new Float32Array(particleCount);
 
     for (let i = 0; i < particleCount; i++) {
-      particlePositions[i * 3] = (Math.random() - 0.5) * 26;
-      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 12;
-      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 10;
-      particleScales[i] = Math.random() * 0.8 + 0.3;
+      particlePositions[i * 3] = (Math.random() - 0.5) * 32;
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 16;
+      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 12;
     }
 
     particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
 
     const particleMat = new THREE.PointsMaterial({
-      color: 0x818cf8,
-      size: 0.2,
+      color: 0x93c5fd,
+      size: 0.35,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.75,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -112,19 +115,19 @@ export function RibbonBackdrop() {
     const particleSystem = new THREE.Points(particleGeo, particleMat);
     scene.add(particleSystem);
 
-    // 3. Ambient & Accent Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    // 3. Ambient & Accent Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     scene.add(ambientLight);
 
-    const violetLight = new THREE.PointLight(0x6366f1, 4, 25);
-    violetLight.position.set(-6, 4, 6);
+    const violetLight = new THREE.PointLight(0x6366f1, 5, 30);
+    violetLight.position.set(-8, 6, 8);
     scene.add(violetLight);
 
-    const amberLight = new THREE.PointLight(0xf59e0b, 3.5, 20);
-    amberLight.position.set(8, -3, 5);
+    const amberLight = new THREE.PointLight(0xf59e0b, 4.5, 25);
+    amberLight.position.set(10, -4, 6);
     scene.add(amberLight);
 
-    // Mouse Parallax
+    // Mouse Parallax Interaction
     let mouseX = 0;
     let mouseY = 0;
     let targetMouseX = 0;
@@ -138,18 +141,17 @@ export function RibbonBackdrop() {
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
 
-    // Handle Resize
+    // Handle Window Resize
     const handleResize = () => {
-      if (!container || !renderer) return;
-      width = container.clientWidth || window.innerWidth;
-      height = container.clientHeight || 500;
+      if (!renderer) return;
+      width = window.innerWidth;
+      height = window.innerHeight;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
 
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(container);
+    window.addEventListener("resize", handleResize);
 
     // Animation Loop
     let animationFrameId: number;
@@ -169,12 +171,12 @@ export function RibbonBackdrop() {
 
       const elapsed = clock.getElapsedTime();
 
-      // Smooth mouse interpolation
-      mouseX += (targetMouseX - mouseX) * 0.05;
-      mouseY += (targetMouseY - mouseY) * 0.05;
+      // Smooth mouse parallax interpolation
+      mouseX += (targetMouseX - mouseX) * 0.04;
+      mouseY += (targetMouseY - mouseY) * 0.04;
 
-      camera.position.x = mouseX * 1.2;
-      camera.position.y = -mouseY * 0.8;
+      camera.position.x = mouseX * 1.5;
+      camera.position.y = -mouseY * 1.0;
       camera.lookAt(0, 0, 0);
 
       // Deform wave ribbon vertices
@@ -186,20 +188,19 @@ export function RibbonBackdrop() {
           const u = basePositions[i * 3]!;
           const v = basePositions[i * 3 + 1]!;
 
-          // Harmonic wave distortion
-          const wave1 = Math.sin(u * freq + elapsed * speed + rIndex) * amp;
-          const wave2 = Math.cos(v * freq * 1.4 + elapsed * (speed * 0.8)) * (amp * 0.5);
+          const wave1 = Math.sin(u * freq + elapsed * speed + rIndex * 1.2) * amp;
+          const wave2 = Math.cos(v * freq * 1.5 + elapsed * (speed * 0.8)) * (amp * 0.45);
 
           array[i * 3 + 2] = basePositions[i * 3 + 2]! + wave1 + wave2;
         }
 
         posAttr.needsUpdate = true;
-        mesh.rotation.z = -0.15 + rIndex * 0.08 + Math.sin(elapsed * 0.2 + rIndex) * 0.04;
+        mesh.rotation.z = -0.18 + rIndex * 0.1 + Math.sin(elapsed * 0.25 + rIndex) * 0.05;
       });
 
       // Slowly rotate particle field
-      particleSystem.rotation.y = elapsed * 0.03;
-      particleSystem.rotation.x = Math.sin(elapsed * 0.02) * 0.05;
+      particleSystem.rotation.y = elapsed * 0.04;
+      particleSystem.rotation.x = Math.sin(elapsed * 0.02) * 0.06;
 
       renderer?.render(scene, camera);
       animationFrameId = requestAnimationFrame(animate);
@@ -210,8 +211,8 @@ export function RibbonBackdrop() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("resize", handleResize);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      resizeObserver.disconnect();
 
       if (renderer) {
         renderer.dispose();
@@ -235,29 +236,29 @@ export function RibbonBackdrop() {
   }, []);
 
   return (
-    <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-      {/* 1. Base Atmospheric Glow / Image */}
-      <div className="absolute inset-0 opacity-35 mix-blend-lighten">
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+      {/* 1. Base Atmospheric Image from background.jpeg */}
+      <div className="absolute inset-0 opacity-70">
         <Image
           src="/background.jpeg"
           alt=""
           fill
           priority
-          sizes="(max-width: 1200px) 100vw, 1200px"
-          quality={75}
+          sizes="100vw"
+          quality={85}
           className="object-cover object-center"
         />
       </div>
 
-      {/* 2. Interactive Lively Three.js 3D Waves Canvas */}
-      <div ref={canvasContainerRef} className="absolute inset-0 h-full w-full opacity-80" />
+      {/* 2. Interactive Lively Three.js 3D Wave Ribbons & Particle Canvas */}
+      <div ref={canvasContainerRef} className="absolute inset-0 h-full w-full opacity-90 mix-blend-screen" />
 
-      {/* 3. Radial Vignette & Edge Fades to seamlessly blend with dark UI */}
+      {/* 3. Soft vignette overlay to ensure text contrast while letting luminous background shine */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 35%, transparent 20%, var(--zeno-bg) 80%), linear-gradient(to bottom, transparent 40%, var(--zeno-bg) 100%)",
+            "radial-gradient(ellipse at 50% 45%, rgba(11,11,16,0.2) 0%, rgba(11,11,16,0.6) 70%, rgba(11,11,16,0.92) 100%)",
         }}
       />
     </div>
