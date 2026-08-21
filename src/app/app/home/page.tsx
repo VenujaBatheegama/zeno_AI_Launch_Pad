@@ -2,7 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
-import { FluxHomeExperience } from "@/modules/career-friend/presentation/flux-home-experience";
+import { CareerFriendChat } from "@/modules/career-friend/presentation/career-friend-chat";
+import { HomeGreeting } from "@/modules/product-shell/home-greeting";
+import { RibbonBackdrop } from "@/modules/product-shell/ui/ribbon-backdrop";
+import {
+  ActivityStrip,
+  type ActivityStat,
+} from "@/modules/product-shell/ui/activity-strip";
 import { classifyMissingMigration } from "@/lib/migration-guard";
 import { requireUserId } from "@/server/auth";
 import { getCareerCampaignApplication } from "@/server/composition-root";
@@ -11,6 +17,7 @@ import { requireProfile } from "@/server/identity";
 export const dynamic = "force-dynamic";
 
 function wrapCampaignError(error: unknown): unknown {
+  // Surface PERSISTENCE_FAILED errors so classifyMissingMigration can inspect them.
   if (error instanceof CareerCampaignError && error.code === "PERSISTENCE_FAILED") {
     return error;
   }
@@ -31,7 +38,7 @@ export default async function HomePage() {
 
   const campaign = getCareerCampaignApplication(userId);
   const dashboardResult = await campaign.getDashboard().then(
-    () => ({ ok: true as const }),
+    (value) => ({ ok: true as const, value }),
     (error: unknown) => ({ ok: false as const, error }),
   );
 
@@ -47,47 +54,70 @@ export default async function HomePage() {
   const schemaMissing = migrationGap !== null;
   const name = profile.displayName?.trim() || "there";
   const incomplete = profile.onboardingStatus !== "completed";
+  const dashboard = dashboardResult.ok ? dashboardResult.value : null;
+
+  const activityStats: ActivityStat[] = dashboard
+    ? [
+        {
+          label: "in your inbox",
+          value: dashboard.needsAttention.pendingRecommendations,
+          href: "/app/recommendations",
+          glyph: "bell",
+          live: dashboard.needsAttention.pendingRecommendations > 0,
+        },
+        {
+          label: "applications out",
+          value: dashboard.funnel.applied,
+          href: "/app/applications",
+          glyph: "briefcase",
+        },
+      ]
+    : [];
 
   return (
-    <div className="space-y-6">
+    <div className="relative mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center space-y-8">
+      <RibbonBackdrop />
+
       {migrationGap ? (
-        <section className="rounded-[20px] border border-amber-300 bg-amber-50 p-5 text-amber-950 shadow-sm">
-          <h2 className="text-base font-semibold text-amber-900">
+        <section
+          className="rounded-[var(--zeno-radius-md)] border p-5"
+          style={{ borderColor: "var(--zeno-warning)", backgroundColor: "var(--zeno-warning-soft)" }}
+        >
+          <h2 className="text-lg font-semibold" style={{ color: "var(--zeno-warning)" }}>
             {migrationGap.feature} database migration required
           </h2>
-          <p className="mt-1 max-w-2xl text-xs leading-6 text-amber-800">
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--zeno-ink-muted)]">
             {migrationGap.description} Apply{" "}
-            <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-amber-900">
+            <code className="rounded bg-[var(--zeno-surface-elevated)] px-1 text-[var(--zeno-ink)]">
               {migrationGap.migrationFile}
             </code>{" "}
-            in the Supabase SQL editor, then reload this page.
+            in the Supabase SQL editor (or via the Supabase CLI), then reload
+            this page.
           </p>
         </section>
       ) : null}
 
       {incomplete ? (
-        <section className="rounded-[20px] border border-gray-200 bg-white p-5 shadow-sm flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">
-              Complete your Zeno profile
-            </h2>
-            <p className="mt-0.5 text-xs text-gray-500">
-              Zeno needs a verified career profile before automated campaign matches can run.
-            </p>
-          </div>
+        <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+          <h2 className="text-[15px] font-semibold text-[var(--zeno-ink)]">
+            Complete your Zeno profile
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--zeno-ink-muted)]">
+            Zeno needs a verified career profile before campaign recommendations
+            can run.
+          </p>
           <Link
             href="/onboarding"
-            className="shrink-0 rounded-full bg-black px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
+            className="mt-3 inline-flex text-[13px] font-semibold text-[var(--zeno-primary-deep)] hover:underline"
           >
-            Continue setup →
+            Continue setup
           </Link>
         </section>
       ) : null}
 
-      <FluxHomeExperience
-        userName={name}
-        disabled={schemaMissing || incomplete}
-      />
+      <HomeGreeting name={name} />
+      <ActivityStrip stats={activityStats} />
+      <CareerFriendChat featured disabled={schemaMissing || incomplete} />
     </div>
   );
 }

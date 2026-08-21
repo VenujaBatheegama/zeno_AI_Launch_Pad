@@ -118,7 +118,7 @@ export function GrowthRecommendationWorkspace(props: {
           </p>
         </header>
         {error ? (
-          <p className="rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900" role="alert">
+          <p className="rounded-[12px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] px-4 py-3 text-[13px] text-[var(--zeno-warning)]" role="alert">
             {error}
           </p>
         ) : null}
@@ -144,7 +144,7 @@ export function GrowthRecommendationWorkspace(props: {
           <h2 className="text-[14px] font-semibold">Proposed milestones</h2>
           <ol className="mt-2 space-y-2 text-[13px]">
             {proposal.proposedMilestones.map((item) => (
-              <li key={item.title} className="rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 py-2">
+              <li key={item.title} className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2">
                 <p className="font-medium text-[var(--zeno-ink)]">{item.title}</p>
                 <p className="text-[var(--zeno-ink-muted)]">{item.description}</p>
                 <p className="mt-1 text-[12px] text-[var(--zeno-ink-faint)]">{item.estimatedHours} hours</p>
@@ -179,7 +179,7 @@ export function GrowthRecommendationWorkspace(props: {
         </div>
       </section>
 
-      <section className="flex min-h-[28rem] flex-col rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]">
+      <section className="flex min-h-[28rem] flex-col rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 shadow-[var(--zeno-shadow-sm)]">
         <h2 className="text-[14px] font-semibold">Talk with Zeno</h2>
         <p className="mt-1 text-[12px] text-[var(--zeno-ink-muted)]">
           Ask why this helps, make it smaller, switch technology, or improve existing work.
@@ -231,7 +231,7 @@ export function GrowthRecommendationWorkspace(props: {
             role="dialog"
             aria-modal="true"
             aria-labelledby="accept-title"
-            className="w-full max-w-md rounded-[14px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-lg)]"
+            className="w-full max-w-md rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-lg)]"
           >
             <h2 id="accept-title" className="text-[16px] font-semibold">
               Start this project

@@ -15,7 +15,7 @@ export default async function GrowthPage() {
   } catch (error) {
     if (isMissingSchema(error)) {
       return (
-        <section className="rounded-[14px] border border-amber-300 bg-amber-50 p-5 text-[14px] text-amber-950">
+        <section className="rounded-[14px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] p-5 text-[14px] text-[var(--zeno-warning)]">
           Apply <code>supabase/migrations/0015_career_growth.sql</code> to enable Growth
           assessments and tracked projects.
         </section>

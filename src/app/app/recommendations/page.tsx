@@ -28,25 +28,19 @@ export default async function RecommendationsPage() {
   let growthItems: Awaited<ReturnType<ReturnType<typeof getCareerGrowthApplication>["listInbox"]>> = [];
   let campaignNames = new Map<string, string>();
 
-  const growthPromise = getCareerGrowthApplication(userId)
-    .listInbox()
-    .catch(() => []);
-
   try {
-    const [recResult, notifResult, campResult, growthResult] =
-      await Promise.all([
-        app.listRecommendations({
-          statuses: ["pending_review", "saved", "accepted"],
-          limit: 50,
-        }),
-        app.listNotifications(10),
-        app.listCampaigns(),
-        growthPromise,
-      ]);
-
-    recommendations = recResult;
-    notifications = notifResult;
-    campaignNames = new Map(campResult.map((c) => [c.id, c.name]));
+    const [recsResult, notifsResult, campaignsResult, growthResult] = await Promise.all([
+      app.listRecommendations({
+        statuses: ["pending_review", "saved", "accepted"],
+        limit: 50,
+      }),
+      app.listNotifications(10),
+      app.listCampaigns(),
+      getCareerGrowthApplication(userId).listInbox().catch(() => []),
+    ]);
+    recommendations = recsResult;
+    notifications = notifsResult;
+    campaignNames = new Map(campaignsResult.map((c) => [c.id, c.name]));
     growthItems = growthResult;
   } catch (error) {
     const wrapped = wrapCampaignError(error);
@@ -60,11 +54,11 @@ export default async function RecommendationsPage() {
   return (
     <div className="space-y-6">
       {migrationGap ? (
-        <section className="rounded-[var(--zeno-radius-lg)] border border-amber-300 bg-amber-50 p-5">
-          <h2 className="text-lg font-semibold text-amber-950">
+        <section className="rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] p-5">
+          <h2 className="text-lg font-semibold text-[var(--zeno-warning)]">
             {migrationGap.feature} database migration required
           </h2>
-          <p className="mt-1 text-sm leading-6 text-amber-900">
+          <p className="mt-1 text-sm leading-6 text-[var(--zeno-warning)]">
             {migrationGap.description} Apply{" "}
             <code className="rounded bg-amber-100 px-1">
               {migrationGap.migrationFile}

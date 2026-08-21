@@ -119,7 +119,7 @@ export function FreshJobWatchPanel({
             value={primaryRole}
             onChange={(event) => setPrimaryRole(event.target.value)}
             placeholder="e.g. Backend Developer"
-            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] text-[var(--zeno-ink)]"
+            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] text-[var(--zeno-ink)]"
           />
         </label>
         <label className="block text-[12px] text-[var(--zeno-ink-muted)]">
@@ -128,7 +128,7 @@ export function FreshJobWatchPanel({
             value={location}
             onChange={(event) => setLocation(event.target.value)}
             placeholder="e.g. Sri Lanka or Remote"
-            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] text-[var(--zeno-ink)]"
+            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] text-[var(--zeno-ink)]"
           />
         </label>
         <label className="block text-[12px] text-[var(--zeno-ink-muted)]">
@@ -145,7 +145,7 @@ export function FreshJobWatchPanel({
                 setLocation("Remote");
               }
             }}
-            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] text-[var(--zeno-ink)]"
+            className="mt-1 h-10 w-full rounded-[10px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] text-[var(--zeno-ink)]"
           >
             <option value="any">Any</option>
             <option value="remote">Remote</option>
@@ -191,12 +191,12 @@ export function FreshJobWatchPanel({
       ) : null}
 
       {status.providerWarning ? (
-        <p className="mt-3 rounded-[10px] bg-amber-50 px-3 py-2 text-[13px] text-amber-950">
+        <p className="mt-3 rounded-[10px] bg-[var(--zeno-warning-soft)] px-3 py-2 text-[13px] text-[var(--zeno-warning)]">
           {status.providerWarning}
         </p>
       ) : null}
       {error ? (
-        <p className="mt-3 rounded-[10px] bg-rose-50 px-3 py-2 text-[13px] text-rose-900">
+        <p className="mt-3 rounded-[10px] bg-[var(--zeno-danger-soft)] px-3 py-2 text-[13px] text-[var(--zeno-danger)]">
           {error}
         </p>
       ) : null}

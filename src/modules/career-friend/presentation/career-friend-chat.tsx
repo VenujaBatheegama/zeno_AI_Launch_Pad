@@ -21,6 +21,148 @@ const STARTERS = [
   "Tailor my CV for a specific role",
 ];
 
+// ---------------------------------------------------------------------------
+// Lightweight markdown → React renderer
+// Handles: **bold**, *italic*, numbered lists, bullet lists, bare links
+// (<https://…> and https://… patterns), [text](url), and blank-line paragraphs.
+// ---------------------------------------------------------------------------
+
+function InlineContent({ text }: { text: string }) {
+  // Split on link patterns first, then handle bold/italic inline.
+  const URL_RE = /(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|(<(https?:\/\/[^>]+)>)|(https?:\/\/\S+)/g;
+  const segments: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = URL_RE.exec(text)) !== null) {
+    const before = text.slice(lastIndex, match.index);
+    if (before) segments.push(<InlineText key={`t-${lastIndex}`} text={before} />);
+
+    const href = match[3] ?? match[5] ?? match[6]!;
+    const label = match[2] ?? href;
+    segments.push(
+      <a
+        key={`a-${match.index}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 font-medium text-[var(--zeno-primary)] underline-offset-2 hover:underline"
+      >
+        {label}
+        <svg viewBox="0 0 24 24" className="size-3 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push(<InlineText key={`t-end`} text={text.slice(lastIndex)} />);
+  }
+
+  return <>{segments}</>;
+}
+
+function InlineText({ text }: { text: string }) {
+  // Handle **bold** and *italic* inline patterns
+  const INLINE_RE = /(\*\*(.+?)\*\*)|(\*(.+?)\*)/g;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = INLINE_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2]) parts.push(<strong key={m.index} className="font-semibold text-[var(--zeno-ink)]">{m[2]}</strong>);
+    else if (m[4]) parts.push(<em key={m.index}>{m[4]}</em>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
+function renderMarkdown(raw: string): React.ReactNode {
+  // Split into blocks on blank lines
+  const blocks = raw.split(/\n{2,}/);
+  const nodes: React.ReactNode[] = [];
+
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const block = blocks[bi]!.trim();
+    if (!block) continue;
+
+    const lines = block.split("\n");
+
+    // Numbered list block: starts with "1." or "2." etc.
+    const isNumbered = /^\d+\.\s/.test(lines[0]!);
+    // Bullet list block: starts with "- " or "* "
+    const isBullet = /^[-*]\s/.test(lines[0]!);
+
+    if (isNumbered || isBullet) {
+      const items: React.ReactNode[] = [];
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li]!.trim();
+        if (!line) continue;
+        // Strip leading "1. " / "- " / "* "
+        const stripped = line.replace(/^(\d+\.|[-*])\s+/, "");
+        items.push(
+          <li
+            key={li}
+            className="flex gap-3 py-2 border-b border-[var(--zeno-border)] last:border-0"
+          >
+            {isNumbered ? (
+              <span className="shrink-0 flex size-5 items-center justify-center rounded-full bg-[var(--zeno-violet-soft)] text-[10px] font-bold text-[var(--zeno-primary)]">
+                {li + 1}
+              </span>
+            ) : (
+              <span className="shrink-0 mt-[5px] size-1.5 rounded-full bg-[var(--zeno-primary)] opacity-70" />
+            )}
+            <span className="min-w-0 text-[14px] leading-6 text-[var(--zeno-ink)]">
+              <InlineContent text={stripped} />
+            </span>
+          </li>
+        );
+      }
+      nodes.push(
+        <ul key={bi} className={`my-1 space-y-0 ${isNumbered ? "list-none" : "list-none pl-1"}`}>
+          {items}
+        </ul>
+      );
+      continue;
+    }
+
+    // Heading: starts with #
+    if (/^#{1,3}\s/.test(lines[0]!)) {
+      const text = lines[0]!.replace(/^#+\s/, "");
+      nodes.push(
+        <p key={bi} className="mt-2 mb-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--zeno-ink-muted)]">
+          <InlineContent text={text} />
+        </p>
+      );
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(lines[0]!)) {
+      nodes.push(<hr key={bi} className="my-2 border-[var(--zeno-border)]" />);
+      continue;
+    }
+
+    // Normal paragraph — join lines with a space
+    const paragraph = lines.join(" ");
+    nodes.push(
+      <p key={bi} className="text-[14px] leading-7 text-[var(--zeno-ink)]">
+        <InlineContent text={paragraph} />
+      </p>
+    );
+  }
+
+  return <div className="space-y-2">{nodes}</div>;
+}
+
+// ---------------------------------------------------------------------------
+
 export function CareerFriendChat(props: {
   disabled?: boolean;
   featured?: boolean;
@@ -105,7 +247,7 @@ export function CareerFriendChat(props: {
       className={
         featured
           ? `flex flex-col ${emptyFeatured ? "" : "min-h-[min(42vh,440px)]"}`
-          : "flex flex-col rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-white shadow-[var(--zeno-shadow-sm)]"
+          : "flex flex-col rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)]"
       }
     >
       {featured ? null : (
@@ -118,7 +260,7 @@ export function CareerFriendChat(props: {
       )}
       <div
         className={`flex-1 space-y-4 overflow-y-auto ${
-          featured ? "px-1 py-2" : "max-h-[360px] px-5 py-4"
+          featured ? "px-1 py-2" : "max-h-[460px] px-5 py-4"
         }`}
         aria-live="polite"
       >
@@ -133,11 +275,9 @@ export function CareerFriendChat(props: {
           ) : featured ? (
             <article
               key={`assistant-${index}`}
-              className="max-w-[min(100%,40rem)] rounded-[22px] bg-white px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
+              className="max-w-[min(100%,44rem)] rounded-[22px] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
             >
-              <p className="whitespace-pre-wrap text-[14px] leading-7 text-[var(--zeno-ink)]">
-                {item.content}
-              </p>
+              {renderMarkdown(item.content)}
               <button
                 type="button"
                 onClick={() => void copyReply(item.content, index)}
@@ -149,9 +289,9 @@ export function CareerFriendChat(props: {
           ) : (
             <div
               key={`assistant-${index}`}
-              className="max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3 text-[14px] leading-7 text-[var(--zeno-ink)]"
+              className="max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3"
             >
-              {item.content}
+              {renderMarkdown(item.content)}
             </div>
           ),
         )}
@@ -180,7 +320,7 @@ export function CareerFriendChat(props: {
               type="button"
               disabled={props.disabled}
               onClick={() => void send(starter)}
-              className="rounded-full bg-white px-3.5 py-2 text-[12px] font-medium text-[var(--zeno-ink-muted)] shadow-[var(--zeno-shadow-sm)] transition hover:text-[var(--zeno-ink)] disabled:opacity-50"
+              className="rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3.5 py-2 text-[12px] font-medium text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
             >
               {starter}
             </button>
@@ -194,10 +334,17 @@ export function CareerFriendChat(props: {
         <div
           className={`flex items-center gap-2 ${
             featured
-              ? "rounded-full border border-[var(--zeno-border)] bg-white px-3 py-2 shadow-[var(--zeno-shadow-md)]"
+              ? "rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-4 py-3.5 shadow-[var(--zeno-shadow-md)]"
               : ""
           }`}
         >
+          {featured ? (
+            <span className="shrink-0 text-[var(--zeno-primary)]" aria-hidden>
+              <svg viewBox="0 0 24 24" className="size-4" fill="currentColor">
+                <path d="M12 2 13.8 9.2 21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Z" />
+              </svg>
+            </span>
+          ) : null}
           <input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
@@ -216,9 +363,10 @@ export function CareerFriendChat(props: {
             disabled={props.disabled || pending || !message.trim()}
             className={
               featured
-                ? "inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--zeno-primary)] text-white disabled:cursor-not-allowed disabled:opacity-50"
-                : "rounded-full bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                ? "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-white shadow-[var(--zeno-shadow-sm)] disabled:cursor-not-allowed disabled:opacity-50"
+                : "rounded-full px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             }
+            style={{ background: "var(--zeno-primary-gradient)" }}
             aria-label={featured ? "Send" : undefined}
           >
             {featured ? (
@@ -230,7 +378,11 @@ export function CareerFriendChat(props: {
             )}
           </button>
         </div>
-        {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+        {error ? (
+          <p className="mt-2 text-xs" style={{ color: "var(--zeno-danger)" }}>
+            {error}
+          </p>
+        ) : null}
         {featured ? null : (
           <p className="mt-2 text-xs text-[var(--zeno-ink-faint)]">
             Advice is grounded in your Zeno profile and activity. Review suggestions before acting.

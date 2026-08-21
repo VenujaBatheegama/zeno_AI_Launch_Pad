@@ -70,7 +70,7 @@ export function ApplicationDetail(props: {
       </header>
 
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-[var(--zeno-danger)]" role="alert">
           {error}
         </p>
       ) : null}

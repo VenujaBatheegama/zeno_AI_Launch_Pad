@@ -17,6 +17,8 @@ import {
 } from "@/modules/job-discovery/domain/job";
 import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
 import { JobsBreadcrumb } from "@/modules/career-campaign/presentation/jobs-breadcrumb";
+import { CompanyMark } from "@/modules/product-shell/ui/company-mark";
+import { MatchScoreBadge } from "@/modules/product-shell/ui/match-score-badge";
 
 type Props = {
   initialAssessment: PersistedCareerStageAssessment | null;
@@ -455,12 +457,18 @@ export function CareerIntelligenceWorkspace({
       {(message || error) && (
         <div className="space-y-2">
           {message && (
-            <p className="rounded-[10px] bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <p
+              className="rounded-[var(--zeno-radius-sm)] px-3 py-2 text-sm"
+              style={{ backgroundColor: "var(--zeno-success-soft)", color: "var(--zeno-success)" }}
+            >
               {message}
             </p>
           )}
           {error && (
-            <p className="rounded-[10px] bg-rose-50 px-3 py-2 text-sm text-rose-900">
+            <p
+              className="rounded-[var(--zeno-radius-sm)] px-3 py-2 text-sm"
+              style={{ backgroundColor: "var(--zeno-danger-soft)", color: "var(--zeno-danger)" }}
+            >
               {error}
             </p>
           )}
@@ -478,7 +486,7 @@ export function CareerIntelligenceWorkspace({
                 "Set a few job preferences so Zeno knows what to look for."}
             </p>
             {prefsDirty ? (
-              <p className="mt-1 text-xs font-medium text-amber-800">
+              <p className="mt-1 text-xs font-medium text-[var(--zeno-warning)]">
                 You have unsaved preference changes.
               </p>
             ) : null}
@@ -619,7 +627,7 @@ export function CareerIntelligenceWorkspace({
       </section>
 
       {/* Posted-time filter bar */}
-      <section className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-3 shadow-[var(--zeno-shadow-sm)]">
+      <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 shadow-[var(--zeno-shadow-sm)]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--zeno-ink-faint)]">
             Posted
@@ -660,11 +668,11 @@ export function CareerIntelligenceWorkspace({
               value={resultQuery}
               onChange={(event) => setResultQuery(event.target.value)}
               placeholder="Search role, company or skill"
-              className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
+              className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
             />
           </label>
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-9 items-center rounded-full border border-[var(--zeno-border)] bg-white px-3 text-[12px] font-medium text-[var(--zeno-ink-muted)]">
+            <span className="inline-flex h-9 items-center rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[12px] font-medium text-[var(--zeno-ink-muted)]">
               Best match
             </span>
             <button
@@ -686,7 +694,7 @@ export function CareerIntelligenceWorkspace({
         ) : null}
 
         {filteredMatches.length === 0 ? (
-          <p className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-8 text-center text-sm text-[var(--zeno-ink-muted)]">
+          <p className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-8 text-center text-sm text-[var(--zeno-ink-muted)]">
             {matches.length === 0
               ? "No analysed jobs yet. Save preferences, then find new jobs — Zeno will search and rank the top matches for you."
               : "No jobs match those filters."}
@@ -707,23 +715,24 @@ export function CareerIntelligenceWorkspace({
               return (
                 <li
                   key={match.listingId}
-                  className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]"
+                  className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 shadow-[var(--zeno-shadow-sm)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[15px] font-semibold text-[var(--zeno-ink)]">
-                        {match.title}
-                        {match.organizationName
-                          ? ` | ${match.organizationName}`
-                          : ""}
-                      </p>
-                      <p className="mt-1 text-[12px] text-[var(--zeno-ink-muted)]">
-                        {meta}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <CompanyMark name={match.organizationName ?? match.title} size="md" />
+                      <div className="min-w-0">
+                        <p className="text-[15px] font-semibold text-[var(--zeno-ink)]">
+                          {match.title}
+                          {match.organizationName
+                            ? ` | ${match.organizationName}`
+                            : ""}
+                        </p>
+                        <p className="mt-1 text-[12px] text-[var(--zeno-ink-muted)]">
+                          {meta}
+                        </p>
+                      </div>
                     </div>
-                    <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-800">
-                      {Math.round(match.evidenceFitScore)}% match
-                    </span>
+                    <MatchScoreBadge score={match.evidenceFitScore} />
                   </div>
 
                   <p className="mt-3 text-[13px] leading-relaxed text-[var(--zeno-ink)]">
@@ -740,12 +749,12 @@ export function CareerIntelligenceWorkspace({
                       </span>
                     ))}
                     {!match.eligible ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                      <span className="rounded-full bg-[var(--zeno-warning-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--zeno-warning)]">
                         Constraint warning
                       </span>
                     ) : null}
                     {match.stale ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                      <span className="rounded-full bg-[var(--zeno-warning-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--zeno-warning)]">
                         Stale analysis
                       </span>
                     ) : null}
@@ -875,7 +884,7 @@ function JobsListInput(props: {
 
   return (
     <label className="flex min-w-0 items-center gap-2 text-xs">
-      <span className="w-20 shrink-0 font-medium text-slate-600">
+      <span className="w-20 shrink-0 font-medium text-[var(--zeno-ink-muted)]">
         {props.label}
       </span>
       <input
@@ -902,7 +911,7 @@ function JobsListInput(props: {
             (event.currentTarget as HTMLInputElement).blur();
           }
         }}
-        className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-[var(--zeno-primary)] focus:ring-1 focus:ring-[var(--zeno-primary)]/25"
+        className="min-w-0 flex-1 rounded border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface)] px-2 py-1 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-primary)] focus:ring-1 focus:ring-[var(--zeno-primary)]/25"
       />
     </label>
   );
@@ -928,7 +937,7 @@ function JobsChoiceGroup(props: {
               className={`inline-flex cursor-pointer items-center rounded border px-2 py-0.5 text-[11px] font-semibold ${
                 checked
                   ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary-deep)]"
-                  : "border-slate-300 text-slate-600"
+                  : "border-[var(--zeno-border-hover)] text-[var(--zeno-ink-muted)]"
               }`}
             >
               <input

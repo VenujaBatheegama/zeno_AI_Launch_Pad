@@ -300,37 +300,48 @@ export async function getJobsWorkspaceOverview(
   userId: string,
   deps: { repository: FreshWatchRepository },
 ): Promise<JobCampaignOverview> {
-  const campaigns = await deps.repository.listCampaignsByUserId(userId);
-  const session = await deps.repository.getLatestInstantSearchSession(userId);
-  const health = await deps.repository.getProviderHealth(PROVIDER);
+  const [campaigns, session, health] = await Promise.all([
+    deps.repository.listCampaignsByUserId(userId),
+    deps.repository.getLatestInstantSearchSession(userId),
+    deps.repository.getProviderHealth(PROVIDER),
+  ]);
   const providerWarning = providerWarningFor(
     health?.status ?? "ok",
     health?.cooldownUntil ?? null,
   );
 
-  const tiles: JobCampaignTile[] = [];
-  let newResults = 0;
-  for (const campaign of campaigns) {
-    const newlyDiscovered = await deps.repository.countNewCampaignListings(
-      campaign.id,
-    );
-    const qualifyingMatches =
-      await deps.repository.countQualifyingCampaignListings(campaign.id);
-    newResults += newlyDiscovered;
-    tiles.push({
-      id: campaign.id,
-      name: campaign.name,
-      primaryRole: campaign.primaryRole,
-      location: campaign.location,
-      workMode: campaign.workMode,
-      status: campaignNeedsAttention(campaign) ? "attention" : campaign.status === "paused" ? "paused" : "active",
-      newlyDiscovered,
-      qualifyingMatches,
-      lastLinkedInSearchAt: campaign.lastLinkedInSearchAt,
-      lastBroadSearchAt: campaign.lastBroadSearchAt,
-      providerWarning: campaign.status === "active" ? providerWarning : null,
-    });
-  }
+  const tilesWithCounts = await Promise.all(
+    campaigns.map(async (campaign) => {
+      const [newlyDiscovered, qualifyingMatches] = await Promise.all([
+        deps.repository.countNewCampaignListings(campaign.id),
+        deps.repository.countQualifyingCampaignListings(campaign.id),
+      ]);
+      const tile: JobCampaignTile = {
+        id: campaign.id,
+        name: campaign.name,
+        primaryRole: campaign.primaryRole,
+        location: campaign.location,
+        workMode: campaign.workMode,
+        status: campaignNeedsAttention(campaign)
+          ? "attention"
+          : campaign.status === "paused"
+            ? "paused"
+            : "active",
+        newlyDiscovered,
+        qualifyingMatches,
+        lastLinkedInSearchAt: campaign.lastLinkedInSearchAt,
+        lastBroadSearchAt: campaign.lastBroadSearchAt,
+        providerWarning: campaign.status === "active" ? providerWarning : null,
+      };
+      return { tile, newlyDiscovered };
+    }),
+  );
+
+  const tiles = tilesWithCounts.map((item) => item.tile);
+  const newResults = tilesWithCounts.reduce(
+    (sum, item) => sum + item.newlyDiscovered,
+    0,
+  );
 
   return {
     instantSearch: {

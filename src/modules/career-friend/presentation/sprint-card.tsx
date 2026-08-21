@@ -62,7 +62,7 @@ export function SprintCard({ sprint }: { sprint: CareerSprint }) {
   }
 
   return (
-    <article className="rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)]">
+    <article className="rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -108,12 +108,12 @@ export function SprintCard({ sprint }: { sprint: CareerSprint }) {
       </div>
 
       {sprint.status === "evidence_submitted" ? (
-        <div className="mt-5 rounded-[var(--zeno-radius-sm)] border border-emerald-200 bg-emerald-50 p-4">
+        <div className="mt-5 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-success)] bg-[var(--zeno-success-soft)] p-4">
           <p className="text-sm font-semibold text-emerald-950">Evidence submitted for your review</p>
-          <p className="mt-1 text-sm text-emerald-900">
+          <p className="mt-1 text-sm text-[var(--zeno-success)]">
             Zeno has not added this to your verified profile automatically. Review it, then update your career profile when the claim is accurate.
           </p>
-          <Link href="/app/career-profile" className="mt-3 inline-flex text-sm font-semibold text-emerald-900 underline">
+          <Link href="/app/career-profile" className="mt-3 inline-flex text-sm font-semibold text-[var(--zeno-success)] underline">
             Review career profile
           </Link>
         </div>
@@ -130,7 +130,7 @@ export function SprintCard({ sprint }: { sprint: CareerSprint }) {
               onChange={(event) => setEvidenceUrl(event.target.value)}
               placeholder="https://github.com/…"
               disabled={!canSubmit || submitting}
-              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm disabled:bg-slate-50"
+              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm disabled:bg-[var(--zeno-surface-sunken)]"
             />
             <input
               value={evidenceNote}
@@ -138,7 +138,7 @@ export function SprintCard({ sprint }: { sprint: CareerSprint }) {
               placeholder="What did you build or demonstrate?"
               maxLength={2000}
               disabled={!canSubmit || submitting}
-              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm disabled:bg-slate-50"
+              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm disabled:bg-[var(--zeno-surface-sunken)]"
             />
           </div>
           <button

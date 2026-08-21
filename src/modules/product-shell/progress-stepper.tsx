@@ -49,17 +49,17 @@ function StepIcon({ status }: { status: StepStatus }) {
         className="relative flex size-9 items-center justify-center rounded-[10px] bg-[var(--zeno-primary)] shadow-[var(--zeno-shadow-sm)]"
         aria-hidden
       >
-        <span className="size-3.5 animate-pulse rounded-[4px] bg-white" />
+        <span className="size-3.5 animate-pulse rounded-[4px] bg-[var(--zeno-surface)]" />
       </span>
     );
   }
 
   return (
     <span
-      className="flex size-9 items-center justify-center rounded-[10px] bg-[color-mix(in_srgb,var(--zeno-ink)_12%,white)]"
+      className="flex size-9 items-center justify-center rounded-[10px] bg-[var(--zeno-surface-elevated)]"
       aria-hidden
     >
-      <span className="size-3.5 rounded-[4px] bg-white" />
+      <span className="size-3.5 rounded-[4px] bg-[var(--zeno-ink-faint)]" />
     </span>
   );
 }
@@ -78,7 +78,7 @@ export function ProgressStepper({
 
   return (
     <div
-      className={`rounded-[18px] border border-[var(--zeno-border)] bg-white px-4 py-5 shadow-[var(--zeno-shadow-sm)] sm:px-6 ${className ?? ""}`}
+      className={`rounded-[18px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-5 shadow-[var(--zeno-shadow-sm)] sm:px-6 ${className ?? ""}`}
       role="status"
       aria-live="polite"
       aria-label={`Progress: ${steps[clamped]?.title ?? "Working"}`}

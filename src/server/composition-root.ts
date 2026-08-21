@@ -1820,15 +1820,11 @@ function createCareerCampaignApplication(userId: string) {
       getCampaignDashboard(userId, {
         repository,
         now,
-        countDiscoveredJobs: async (uid) => {
-          const jobs = await jobRepository.listJobs({
+        countDiscoveredJobs: (uid) =>
+          jobRepository.countJobs({
             userId: uid,
             includeDismissed: false,
-            limit: 100,
-            offset: 0,
-          });
-          return jobs.length;
-        },
+          }),
       }),
     aggregateGaps: async () => {
       const recs = await repository.listRecommendations({

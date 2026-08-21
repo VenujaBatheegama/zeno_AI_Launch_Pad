@@ -52,20 +52,22 @@ export async function askCareerFriend(
     };
   }
 
-  await deps.repository.addMessage({
-    id: input.clientMessageId,
-    userId: input.userId,
-    conversationId,
-    role: "user",
-    content: input.message,
-    metadata: {},
-    createdAt: now,
-  });
-  const reply = await deps.advisor.reply({
-    message: input.message,
-    snapshot: input.snapshot,
-    recentMessages,
-  });
+  const [, reply] = await Promise.all([
+    deps.repository.addMessage({
+      id: input.clientMessageId,
+      userId: input.userId,
+      conversationId,
+      role: "user",
+      content: input.message,
+      metadata: {},
+      createdAt: now,
+    }),
+    deps.advisor.reply({
+      message: input.message,
+      snapshot: input.snapshot,
+      recentMessages,
+    }),
+  ]);
   await deps.repository.addMessage({
     id: deps.createId(),
     userId: input.userId,

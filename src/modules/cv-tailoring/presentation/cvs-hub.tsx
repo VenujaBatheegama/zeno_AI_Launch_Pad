@@ -47,8 +47,8 @@ export function CvsHub() {
               href={href}
               className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] font-medium transition ${
                 active
-                  ? "bg-[var(--zeno-ink)] text-white"
-                  : "border border-[var(--zeno-border)] bg-white text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
+                  ? "border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
+                  : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
               }`}
             >
               {label}
@@ -67,7 +67,7 @@ function CreateCvPanel() {
     <div className="grid gap-4 md:grid-cols-2">
       <Link
         href="/app/cvs/paste"
-        className="rounded-[16px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
+        className="rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
       >
         <span className="flex size-10 items-center justify-center rounded-[12px] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
           <ClipboardIcon />
@@ -81,7 +81,7 @@ function CreateCvPanel() {
       </Link>
       <Link
         href="/app/cvs/matched"
-        className="rounded-[16px] border border-[var(--zeno-border)] bg-white p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
+        className="rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
       >
         <span className="flex size-10 items-center justify-center rounded-[12px] bg-[var(--zeno-violet-wash)] text-[var(--zeno-primary)]">
           <ListIcon />

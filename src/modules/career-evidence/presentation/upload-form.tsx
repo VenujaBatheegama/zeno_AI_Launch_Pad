@@ -51,7 +51,7 @@ export function UploadForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-3 shadow-[var(--zeno-shadow-sm)]"
+      className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 shadow-[var(--zeno-shadow-sm)]"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -81,7 +81,7 @@ export function UploadForm({
         </div>
       </div>
       {error ? (
-        <p role="alert" className="mt-2 text-sm font-medium text-red-700">
+        <p role="alert" className="mt-2 text-sm font-medium text-[var(--zeno-danger)]">
           {error}
         </p>
       ) : null}

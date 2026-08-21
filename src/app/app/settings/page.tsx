@@ -220,7 +220,7 @@ export default function SettingsPage() {
           Manage your Zeno account.
         </p>
       </header>
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">WhatsApp</h2>
@@ -230,14 +230,14 @@ export default function SettingsPage() {
             </p>
           </div>
           {whatsapp?.connected ? (
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            <span className="rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-success)]">
               {whatsapp.optedIn ? "Alerts on" : "Alerts paused"}
             </span>
           ) : null}
         </div>
 
         {whatsappError ? (
-          <p className="mt-4 text-sm text-red-700" role="alert">
+          <p className="mt-4 text-sm text-[var(--zeno-danger)]" role="alert">
             {whatsappError}
           </p>
         ) : null}
@@ -245,7 +245,7 @@ export default function SettingsPage() {
         {!whatsapp ? (
           <p className="mt-4 text-sm text-[var(--zeno-ink-muted)]">Loading…</p>
         ) : !whatsapp.enabled ? (
-          <p className="mt-4 rounded-[var(--zeno-radius-sm)] bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="mt-4 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-warning-soft)] p-3 text-sm text-[var(--zeno-warning)]">
             WhatsApp is not configured for this Zeno deployment yet.
           </p>
         ) : whatsapp.connected ? (
@@ -280,7 +280,7 @@ export default function SettingsPage() {
                 </p>
                 {code.sandboxJoinCode ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <code className="rounded-md bg-white px-3 py-2 text-sm font-semibold">
+                    <code className="rounded-md bg-[var(--zeno-surface)] px-3 py-2 text-sm font-semibold">
                       join {code.sandboxJoinCode}
                     </code>
                     {sandboxJoinLink ? (
@@ -288,14 +288,14 @@ export default function SettingsPage() {
                         href={sandboxJoinLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-white px-3 py-2 text-sm font-semibold"
+                        className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2 text-sm font-semibold"
                       >
                         Join sandbox
                       </a>
                     ) : null}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs font-medium text-amber-800">
+                  <p className="mt-2 text-xs font-medium text-[var(--zeno-warning)]">
                     Join the Twilio sandbox using the code shown in the Twilio
                     Console, then continue below.
                   </p>
@@ -346,7 +346,7 @@ export default function SettingsPage() {
           </button>
         )}
       </section>
-      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Telegram</h2>
@@ -356,14 +356,14 @@ export default function SettingsPage() {
             </p>
           </div>
           {telegram?.connected ? (
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            <span className="rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-success)]">
               {telegram.optedIn ? "Alerts on" : "Alerts paused"}
             </span>
           ) : null}
         </div>
 
         {telegramError ? (
-          <p className="mt-4 text-sm text-red-700" role="alert">
+          <p className="mt-4 text-sm text-[var(--zeno-danger)]" role="alert">
             {telegramError}
           </p>
         ) : null}
@@ -371,7 +371,7 @@ export default function SettingsPage() {
         {!telegram ? (
           <p className="mt-4 text-sm text-[var(--zeno-ink-muted)]">Loading…</p>
         ) : !telegram.enabled ? (
-          <p className="mt-4 rounded-[var(--zeno-radius-sm)] bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="mt-4 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-warning-soft)] p-3 text-sm text-[var(--zeno-warning)]">
             Telegram is not configured for this Zeno deployment yet.
           </p>
         ) : telegram.connected ? (
@@ -436,7 +436,7 @@ export default function SettingsPage() {
           </button>
         )}
       </section>
-      <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5">
+      <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Sign out</h2>
         <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
           You can sign back in anytime with the same email.

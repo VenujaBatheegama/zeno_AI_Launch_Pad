@@ -29,7 +29,7 @@ export function CvPropertiesPanel({
   const [tab, setTab] = useState<Tab>("job");
 
   return (
-    <aside className="hidden min-h-0 flex-col overflow-hidden border-l border-[var(--zeno-border)] bg-white lg:flex">
+    <aside className="hidden min-h-0 flex-col overflow-hidden border-l border-[var(--zeno-border)] bg-[var(--zeno-surface)] lg:flex">
       <div className="flex shrink-0 border-b border-[var(--zeno-border)]">
         {(
           [
@@ -106,7 +106,7 @@ export function CvPropertiesPanel({
                       },
                     });
                   }}
-                  className="mt-1 h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-white px-2.5 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-border-hover)]"
+                  className="mt-1 h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-border-hover)]"
                 />
               </label>
             ))}
@@ -119,7 +119,7 @@ export function CvPropertiesPanel({
                 onChange={(event) =>
                   onChange({ ...draft, targetTitle: event.target.value })
                 }
-                className="mt-1 h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-white px-2.5 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-border-hover)]"
+                className="mt-1 h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-2.5 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-border-hover)]"
               />
             </label>
             <p className="text-[11px] text-[var(--zeno-ink-muted)]">

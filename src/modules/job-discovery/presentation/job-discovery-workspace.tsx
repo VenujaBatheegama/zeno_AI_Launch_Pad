@@ -192,18 +192,18 @@ export function JobDiscoveryWorkspace({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Search preferences
             </p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">
+            <h2 className="mt-1 text-xl font-semibold text-[var(--zeno-ink)]">
               What kind of work are you looking for?
             </h2>
           </div>
           {profile && (
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[var(--zeno-success)]">
               Saved
             </span>
           )}
@@ -317,7 +317,7 @@ export function JobDiscoveryWorkspace({
             type="button"
             onClick={savePreferences}
             disabled={isSaving}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+            className="rounded-lg border border-[var(--zeno-border-hover)] px-4 py-2 text-sm font-semibold text-[var(--zeno-ink)] disabled:opacity-50"
           >
             {isSaving ? "Saving…" : "Save preferences"}
           </button>
@@ -325,7 +325,7 @@ export function JobDiscoveryWorkspace({
             type="button"
             onClick={findJobs}
             disabled={isSearching || !profile || profile.preferences.roles.length === 0}
-            className="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-[var(--zeno-primary)] px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSearching ? "Finding jobs…" : "Find jobs"}
           </button>
@@ -353,7 +353,7 @@ export function JobDiscoveryWorkspace({
           </p>
         )}
         {message && (
-          <p role="status" className="mt-3 text-sm font-medium text-slate-700">
+          <p role="status" className="mt-3 text-sm font-medium text-[var(--zeno-ink-muted)]">
             {message}
           </p>
         )}
@@ -365,7 +365,7 @@ export function JobDiscoveryWorkspace({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Discovered jobs
             </p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">
+            <h2 className="mt-1 text-xl font-semibold text-[var(--zeno-ink)]">
               {jobs.length} active result{jobs.length === 1 ? "" : "s"}
             </h2>
           </div>
@@ -376,13 +376,13 @@ export function JobDiscoveryWorkspace({
               isClearing ||
               !jobs.some((job) => job.user_state === "discovered")
             }
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+            className="rounded-lg border border-[var(--zeno-border-hover)] px-4 py-2 text-sm font-semibold text-[var(--zeno-ink)] disabled:opacity-50"
           >
             {isClearing ? "Clearing…" : "Clear searched jobs"}
           </button>
         </div>
         {jobs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-10 text-center text-sm text-slate-600">
+          <div className="rounded-2xl border border-dashed border-[var(--zeno-border-hover)] bg-[color-mix(in_srgb,var(--zeno-surface)_60%,transparent)] p-10 text-center text-sm text-[var(--zeno-ink-muted)]">
             Save your preferences and find jobs to see real vacancies here.
           </div>
         ) : (
@@ -401,7 +401,7 @@ export function JobDiscoveryWorkspace({
                 type="button"
                 onClick={loadMore}
                 disabled={isSearching}
-                className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+                className="mt-4 rounded-lg border border-[var(--zeno-border-hover)] px-4 py-2 text-sm font-semibold text-[var(--zeno-ink)] disabled:opacity-50"
               >
                 {isSearching ? "Loading…" : "Load more"}
               </button>
@@ -420,7 +420,7 @@ function ListInput(props: {
   onChange: (value: string[]) => void;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-800">
+    <label className="block text-sm font-medium text-[var(--zeno-ink)]">
       {props.label}
       <input
         value={props.value.join(", ")}
@@ -433,7 +433,7 @@ function ListInput(props: {
               .filter(Boolean),
           )
         }
-        className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        className="mt-1.5 w-full rounded-lg border border-[var(--zeno-border-hover)] px-3 py-2 text-sm"
       />
       <span className="mt-1 block text-xs font-normal text-slate-500">
         Separate multiple values with commas.
@@ -450,12 +450,12 @@ function ChoiceGroup(props: {
 }) {
   return (
     <fieldset>
-      <legend className="text-sm font-medium text-slate-800">{props.label}</legend>
+      <legend className="text-sm font-medium text-[var(--zeno-ink)]">{props.label}</legend>
       <div className="mt-2 flex flex-wrap gap-2">
         {props.options.map(([value, label]) => (
           <label
             key={value}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700"
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--zeno-border)] px-2.5 py-1.5 text-xs text-[var(--zeno-ink-muted)]"
           >
             <input
               type="checkbox"
@@ -493,14 +493,14 @@ function JobCard(props: {
   const descriptionPreview = formatJobDescriptionPreview(job.description);
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-sm">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-semibold break-words text-slate-950">
+          <h3 className="text-lg font-semibold break-words text-[var(--zeno-ink)]">
             {job.title}
           </h3>
           {job.organization_name && (
-            <p className="mt-0.5 text-sm font-medium break-words text-slate-700">
+            <p className="mt-0.5 text-sm font-medium break-words text-[var(--zeno-ink-muted)]">
               {job.organization_name}
             </p>
           )}
@@ -511,13 +511,13 @@ function JobCard(props: {
           )}
         </div>
         {job.user_state === "saved" && (
-          <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+          <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[var(--zeno-success)]">
             Saved
           </span>
         )}
       </div>
       {descriptionPreview && (
-        <p className="mt-3 line-clamp-3 overflow-hidden text-sm leading-6 break-words text-slate-600 [overflow-wrap:anywhere]">
+        <p className="mt-3 line-clamp-3 overflow-hidden text-sm leading-6 break-words text-[var(--zeno-ink-muted)] [overflow-wrap:anywhere]">
           {descriptionPreview}
         </p>
       )}
@@ -530,14 +530,14 @@ function JobCard(props: {
               job.user_state === "saved" ? "discovered" : "saved",
             )
           }
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-800"
+          className="rounded-lg border border-[var(--zeno-border-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--zeno-ink)]"
         >
           {job.user_state === "saved" ? "Unsave" : "Save"}
         </button>
         <button
           type="button"
           onClick={() => props.onStateChange(job.listing_id, "dismissed")}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600"
+          className="rounded-lg border border-[var(--zeno-border-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--zeno-ink-muted)]"
         >
           Dismiss
         </button>
@@ -577,27 +577,27 @@ function SavedPreferencesPreview(props: {
   ];
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="mt-4 rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">
+        <p className="text-sm font-semibold text-[var(--zeno-ink)]">
           Saved preferences preview
         </p>
         {props.dirty && (
-          <span className="text-xs font-medium text-amber-800">
+          <span className="text-xs font-medium text-[var(--zeno-warning)]">
             Form has unsaved changes
           </span>
         )}
       </div>
-      <dl className="mt-2 grid gap-1.5 text-xs text-slate-700 sm:grid-cols-2">
+      <dl className="mt-2 grid gap-1.5 text-xs text-[var(--zeno-ink-muted)] sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label} className="min-w-0">
             <dt className="inline font-medium text-slate-500">{label}: </dt>
-            <dd className="inline break-words text-slate-800">{value}</dd>
+            <dd className="inline break-words text-[var(--zeno-ink)]">{value}</dd>
           </div>
         ))}
       </dl>
-      <div className="mt-3 border-t border-slate-200 pt-3">
-        <p className="text-sm font-semibold text-slate-900">
+      <div className="mt-3 border-t border-[var(--zeno-border)] pt-3">
+        <p className="text-sm font-semibold text-[var(--zeno-ink)]">
           Exact JSearch request (Postman)
         </p>
         <p className="mt-1 text-xs text-slate-500">
@@ -605,7 +605,7 @@ function SavedPreferencesPreview(props: {
           (replace the key placeholder with your RAPIDAPI_KEY from .env.local).
         </p>
         {props.searchPreview.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-600">
+          <p className="mt-2 text-xs text-[var(--zeno-ink-muted)]">
             Add at least one desired role, then save preferences.
           </p>
         ) : (
@@ -613,20 +613,20 @@ function SavedPreferencesPreview(props: {
             {props.searchPreview.map((preview) => (
               <li
                 key={preview.url}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800"
+                className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2 text-xs text-[var(--zeno-ink)]"
               >
                 <p className="font-semibold text-slate-500">URL</p>
                 <p className="mt-1 break-all font-mono text-[11px] leading-5">
                   {preview.url}
                 </p>
                 <p className="mt-2 font-semibold text-slate-500">Headers</p>
-                <pre className="mt-1 overflow-x-auto font-mono text-[11px] leading-5 text-slate-700">
+                <pre className="mt-1 overflow-x-auto font-mono text-[11px] leading-5 text-[var(--zeno-ink-muted)]">
                   {Object.entries(preview.headers)
                     .map(([key, value]) => `${key}: ${value}`)
                     .join("\n")}
                 </pre>
                 <p className="mt-2 font-semibold text-slate-500">Params</p>
-                <p className="mt-1 font-mono text-[11px] leading-5 text-slate-700">
+                <p className="mt-1 font-mono text-[11px] leading-5 text-[var(--zeno-ink-muted)]">
                   query={preview.params.query}
                   <br />
                   country={preview.params.country} · language=

@@ -249,7 +249,7 @@ export function ChatOnboardingWorkspace(props: {
                 key={`${message.id}-${index}`}
                 className="flex items-end gap-2.5"
               >
-                <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
+                <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-[var(--zeno-surface)] shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
                   <Image
                     src="/zeno-agent.jpeg"
                     alt="Zeno"
@@ -258,7 +258,7 @@ export function ChatOnboardingWorkspace(props: {
                     className="object-cover object-top"
                   />
                 </div>
-                <div className="w-fit max-w-[min(78%,22rem)] whitespace-pre-wrap rounded-[18px] bg-white px-3.5 py-2.5 text-[14px] leading-6 text-[var(--zeno-ink)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
+                <div className="w-fit max-w-[min(78%,22rem)] whitespace-pre-wrap rounded-[18px] bg-[var(--zeno-surface)] px-3.5 py-2.5 text-[14px] leading-6 text-[var(--zeno-ink)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
                   {message.text}
                 </div>
               </div>
@@ -275,7 +275,7 @@ export function ChatOnboardingWorkspace(props: {
           )}
           {busy ? (
             <div className="flex items-end gap-2.5">
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-[var(--zeno-surface)] shadow-[0_2px_8px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
                 <Image
                   src="/zeno-agent.jpeg"
                   alt="Zeno"
@@ -284,13 +284,13 @@ export function ChatOnboardingWorkspace(props: {
                   className="object-cover object-top"
                 />
               </div>
-              <div className="w-fit rounded-[18px] bg-white px-3.5 py-2.5 text-sm text-[var(--zeno-ink-faint)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
+              <div className="w-fit rounded-[18px] bg-[var(--zeno-surface)] px-3.5 py-2.5 text-sm text-[var(--zeno-ink-faint)] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
                 Zeno is thinking…
               </div>
             </div>
           ) : null}
         </div>
-        <div className="border-t border-[var(--zeno-border)] bg-white p-3">
+        <div className="border-t border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3">
           {error ? (
             <p className="mb-2 text-xs text-[var(--zeno-danger)]" role="alert">
               {error}
@@ -334,7 +334,7 @@ export function ChatOnboardingWorkspace(props: {
       <aside
         className={`${
           mobileProfileOpen ? "fixed inset-0 z-40 flex" : "hidden"
-        } min-h-0 flex-col bg-white lg:static lg:flex lg:w-[40%]`}
+        } min-h-0 flex-col bg-[var(--zeno-surface)] lg:static lg:flex lg:w-[40%]`}
       >
         <div className="flex items-center justify-between border-b border-[var(--zeno-border)] px-4 py-3">
           <h2 className="text-sm font-semibold">Live career profile</h2>
@@ -357,7 +357,7 @@ export function ChatOnboardingWorkspace(props: {
             onChange={saveManualEvidence}
           />
         </div>
-        <div className="sticky bottom-0 border-t border-[var(--zeno-border)] bg-white p-4">
+        <div className="sticky bottom-0 border-t border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4">
           <p className="text-sm font-medium">Profile completeness: {progress}%</p>
           <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
             {progress < 40

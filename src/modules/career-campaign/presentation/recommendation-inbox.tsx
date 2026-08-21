@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CompanyMark } from "@/modules/product-shell/ui/company-mark";
+import { MatchScoreBadge } from "@/modules/product-shell/ui/match-score-badge";
+
 import type { DecisionReason, JobRecommendation } from "../domain/schemas";
 
 const REJECTION_REASONS: Array<{ value: DecisionReason; label: string }> = [
@@ -68,17 +71,27 @@ export function RecommendationInbox(props: {
 
   if (props.recommendations.length === 0) {
     return (
-      <p className="text-sm text-[var(--zeno-ink-muted)]">
-        No job recommendations yet — your active campaigns will surface matches
-        here as they run.
-      </p>
+      <div className="rounded-[var(--zeno-radius-md)] border border-dashed border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-6 py-10 text-center">
+        <span
+          className="zeno-live-dot mx-auto inline-block size-2.5 rounded-full"
+          style={{ backgroundColor: "var(--zeno-primary)" }}
+          aria-hidden
+        />
+        <p className="mt-3 text-sm font-medium text-[var(--zeno-ink)]">
+          No job recommendations yet
+        </p>
+        <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-[var(--zeno-ink-muted)]">
+          Your active campaigns are checking for matches in the background —
+          strong ones will land here automatically.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm" role="alert" style={{ color: "var(--zeno-danger)" }}>
           {error}
         </p>
       ) : null}
@@ -88,33 +101,33 @@ export function RecommendationInbox(props: {
         return (
           <article
             key={rec.id}
-            className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-white p-5"
+            className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-[var(--zeno-ink)]">
-                  {fit.title ?? "Job recommendation"}
-                </h3>
-                <p className="text-sm text-[var(--zeno-ink-muted)]">
-                  {[fit.organizationName, fit.location, fit.workMode]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                {(() => {
-                  const campaignName = rec.jobSearchCampaignId
-                    ? props.campaignNames.get(rec.jobSearchCampaignId)
-                    : undefined;
-                  return campaignName ? (
-                    <span className="mt-1 inline-block rounded-full border border-[var(--zeno-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--zeno-ink-faint)]">
-                      via {campaignName}
-                    </span>
-                  ) : null;
-                })()}
+              <div className="flex min-w-0 items-start gap-3">
+                <CompanyMark name={fit.organizationName ?? fit.title ?? "?"} size="md" />
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-[var(--zeno-ink)]">
+                    {fit.title ?? "Job recommendation"}
+                  </h3>
+                  <p className="text-sm text-[var(--zeno-ink-muted)]">
+                    {[fit.organizationName, fit.location, fit.workMode]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  {(() => {
+                    const campaignName = rec.jobSearchCampaignId
+                      ? props.campaignNames.get(rec.jobSearchCampaignId)
+                      : undefined;
+                    return campaignName ? (
+                      <span className="mt-1 inline-block rounded-full border border-[var(--zeno-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--zeno-ink-faint)]">
+                        via {campaignName}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
               </div>
-              <p className="text-sm font-medium text-[var(--zeno-primary-deep)]">
-                Evidence fit {score.evidenceFitScore}%
-                {score.careerLevel ? ` · ${score.careerLevel}` : ""}
-              </p>
+              <MatchScoreBadge score={score.evidenceFitScore} detail={score.careerLevel ?? undefined} />
             </div>
 
             <p className="mt-3 text-sm leading-6 text-[var(--zeno-ink)]">
@@ -126,9 +139,15 @@ export function RecommendationInbox(props: {
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--zeno-ink-faint)]">
                   Supported strengths
                 </p>
-                <ul className="mt-1 list-disc pl-5 text-sm text-[var(--zeno-ink-muted)]">
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
                   {[...new Set(fit.topMatched)].map((item, index) => (
-                    <li key={`${rec.id}-matched-${index}`}>{item}</li>
+                    <li
+                      key={`${rec.id}-matched-${index}`}
+                      className="rounded-full px-2.5 py-1 text-[12px] font-medium"
+                      style={{ backgroundColor: "var(--zeno-success-soft)", color: "var(--zeno-success)" }}
+                    >
+                      {item}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -139,9 +158,15 @@ export function RecommendationInbox(props: {
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--zeno-ink-faint)]">
                   Missing / unsupported
                 </p>
-                <ul className="mt-1 list-disc pl-5 text-sm text-[var(--zeno-ink-muted)]">
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
                   {[...new Set(fit.primaryGaps)].map((item, index) => (
-                    <li key={`${rec.id}-gap-${index}`}>{item}</li>
+                    <li
+                      key={`${rec.id}-gap-${index}`}
+                      className="rounded-full px-2.5 py-1 text-[12px] font-medium"
+                      style={{ backgroundColor: "var(--zeno-danger-soft)", color: "var(--zeno-danger)" }}
+                    >
+                      {item}
+                    </li>
                   ))}
                 </ul>
               </div>

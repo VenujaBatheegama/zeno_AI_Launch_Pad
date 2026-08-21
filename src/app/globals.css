@@ -1,40 +1,64 @@
 @import "tailwindcss";
 
 :root {
-  /* Surfaces */
-  --zeno-bg: #faf9f6;
-  --zeno-surface: #ffffff;
-  --zeno-surface-sunken: #f3f1fb;
+  /* Surfaces — near-black, matching the reference's flat dark panels */
+  --zeno-bg: #0b0b10;
+  --zeno-surface: #16161d;
+  --zeno-surface-sunken: #1d1e26;
+  --zeno-surface-elevated: #21222b;
 
-  /* Ink */
-  --zeno-ink: #1e1b2e;
-  --zeno-ink-muted: #6b667e;
-  --zeno-ink-faint: #9c97ad;
+  /* Ink — warm off-white, not stark pure white */
+  --zeno-ink: #f5f5f2;
+  --zeno-ink-muted: #9a9aa3;
+  --zeno-ink-faint: #6c6c76;
 
-  /* Brand */
-  --zeno-primary: #4c3ae3;
-  --zeno-primary-deep: #34209b;
-  --zeno-violet: #8b5cf6;
-  --zeno-violet-soft: #eeeafc;
-  --zeno-violet-wash: #f6f4fe;
+  /* Brand — orange, sampled from the reference (button + send-icon gradient) */
+  --zeno-primary: #f2793c;
+  --zeno-primary-deep: #ffb27a;
+  --zeno-primary-gradient: linear-gradient(135deg, #f5934a 0%, #e1552a 100%);
+  --zeno-violet: #f2793c;
+  --zeno-violet-soft: #2b1f16;
+  --zeno-violet-wash: #201811;
 
   /* Borders & states */
-  --zeno-border: #e7e4f0;
-  --zeno-border-hover: #cbc2f0;
-  --zeno-focus-ring: #7c5cfc;
-  --zeno-success: #1e9e6b;
-  --zeno-warning: #b4750e;
-  --zeno-danger: #c4453a;
+  --zeno-border: #2a2b34;
+  --zeno-border-hover: #3d3e4a;
+  --zeno-focus-ring: #f2793c;
 
-  /* Elevation */
-  --zeno-shadow-sm: 0 1px 2px rgba(30, 27, 46, 0.06);
-  --zeno-shadow-md: 0 8px 24px rgba(30, 27, 46, 0.08);
-  --zeno-shadow-lg: 0 16px 40px rgba(30, 27, 46, 0.12);
+  /* Semantic states — deliberately NOT orange, even though orange is the
+     brand accent: a "needs attention" warning badge must never look
+     like the brand color, or users can't tell "this is Zeno" from
+     "this needs your attention." Warning shifts to gold-yellow, danger
+     stays a clean red, both clear of the primary hue. */
+  --zeno-success: #3ecf8e;
+  --zeno-success-soft: #12301f;
+  --zeno-warning: #e8b93f;
+  --zeno-warning-soft: #332c12;
+  --zeno-danger: #e5484d;
+  --zeno-danger-soft: #341012;
+
+  /* Tag palette — restrained, fixed hues for company marks / category
+     chips, distinct from brand orange and from the semantic colors. */
+  --zeno-tag-teal: #2dd4bf;
+  --zeno-tag-teal-soft: #123632;
+  --zeno-tag-blue: #60a5fa;
+  --zeno-tag-blue-soft: #14283f;
+  --zeno-tag-berry: #f472b6;
+  --zeno-tag-berry-soft: #3a1a2c;
+  --zeno-tag-slate: #9a9aa3;
+  --zeno-tag-slate-soft: #202127;
+
+  /* Elevation — dark shadows, black-based (not tinted) to match the
+     reference's flat, non-glassy panel style */
+  --zeno-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --zeno-shadow-md: 0 12px 30px rgba(0, 0, 0, 0.45);
+  --zeno-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
 
   /* Radius */
-  --zeno-radius-sm: 10px;
-  --zeno-radius-md: 16px;
-  --zeno-radius-lg: 24px;
+  --zeno-radius-sm: 12px;
+  --zeno-radius-md: 20px;
+  --zeno-radius-lg: 28px;
+  --zeno-radius-xl: 34px;
 
   /* Motion */
   --zeno-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -42,8 +66,12 @@
   --zeno-dur-base: 220ms;
   --zeno-dur-slow: 420ms;
 
-  /* Display (page titles / brand) */
-  --zeno-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  /* Display (headline / brand) — bold monospace, matching the
+     reference's blocky "Welcome,Jony" treatment. Reserved for headline
+     moments (Home greeting, brand mark, page titles) — body copy and
+     dense data (job cards, forms) stay on the regular sans below, since
+     an all-monospace app hurts scanability of paragraphs and lists. */
+  --zeno-font-display: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", "Roboto Mono", "Courier New", monospace;
 
   --background: var(--zeno-bg);
   --foreground: var(--zeno-ink);
@@ -55,6 +83,7 @@
   --color-zeno-bg: var(--zeno-bg);
   --color-zeno-surface: var(--zeno-surface);
   --color-zeno-sunken: var(--zeno-surface-sunken);
+  --color-zeno-elevated: var(--zeno-surface-elevated);
   --color-zeno-ink: var(--zeno-ink);
   --color-zeno-muted: var(--zeno-ink-muted);
   --color-zeno-faint: var(--zeno-ink-faint);
@@ -65,8 +94,11 @@
   --color-zeno-violet-wash: var(--zeno-violet-wash);
   --color-zeno-border: var(--zeno-border);
   --color-zeno-success: var(--zeno-success);
+  --color-zeno-success-soft: var(--zeno-success-soft);
   --color-zeno-warning: var(--zeno-warning);
+  --color-zeno-warning-soft: var(--zeno-warning-soft);
   --color-zeno-danger: var(--zeno-danger);
+  --color-zeno-danger-soft: var(--zeno-danger-soft);
   --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
@@ -86,14 +118,73 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Lovable-style dotted canvas behind the A4 CV preview */
+/* Dotted canvas behind the A4 CV preview and thumbnails — sleek dark slate surface */
 .cv-dotted-canvas {
-  background-color: #f3f1f7;
-  background-image: radial-gradient(#ddd8ec 1.1px, transparent 1.1px);
+  background-color: #1c1d27;
+  background-image: radial-gradient(#333547 1.1px, transparent 1.1px);
   background-size: 18px 18px;
 }
 
 :focus-visible {
   outline: 3px solid var(--zeno-focus-ring);
   outline-offset: 3px;
+}
+
+/* Glass surface — kept as a utility but NOT used in this pass: the
+   reference uses flat, solid dark panels rather than blurred/frosted
+   ones, so header/chat/hero surfaces below use solid surface colors
+   instead of this class. Left available in case a future screen wants it. */
+.zeno-glass {
+  background: color-mix(in srgb, var(--zeno-surface) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in srgb, white 8%, var(--zeno-border));
+}
+
+/* Subtle "alive" pulse for agentic/live indicators */
+@keyframes zeno-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.zeno-live-dot {
+  animation: zeno-pulse 2.2s var(--zeno-ease) infinite;
+}
+
+@keyframes zeno-breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+.zeno-breathe {
+  animation: zeno-breathe 4.5s var(--zeno-ease) infinite;
+}
+
+/* Slow-drifting ribbon backdrop for the Home hero — a CSS/SVG
+   recreation of the reference's dark abstract background (no source
+   image file was actually received, only the reference screenshot). */
+@keyframes zeno-drift {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(-2%, 1.5%) rotate(1.5deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+.zeno-ribbon-drift {
+  animation: zeno-drift 22s var(--zeno-ease) infinite;
 }

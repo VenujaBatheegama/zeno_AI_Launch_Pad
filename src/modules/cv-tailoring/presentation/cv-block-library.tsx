@@ -56,7 +56,7 @@ export function CvBlockLibrary({ draft, sectionOrder }: Props) {
   });
 
   return (
-    <aside className="hidden min-h-0 flex-col overflow-hidden border-r border-[var(--zeno-border)] bg-white lg:flex">
+    <aside className="hidden min-h-0 flex-col overflow-hidden border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] lg:flex">
       <div className="shrink-0 px-3 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--zeno-ink-muted)]">
           Block library
@@ -69,7 +69,7 @@ export function CvBlockLibrary({ draft, sectionOrder }: Props) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search evidence"
-            className="h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-white pl-8 pr-2 text-xs outline-none transition focus:border-[var(--zeno-primary)]/40"
+            className="h-9 w-full rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] pl-8 pr-2 text-xs outline-none transition focus:border-[var(--zeno-primary)]/40"
           />
         </label>
         <div className="mt-2 flex flex-wrap gap-1">
@@ -101,7 +101,7 @@ export function CvBlockLibrary({ draft, sectionOrder }: Props) {
               <button
                 type="button"
                 onClick={() => scrollToBlock(block.anchor)}
-                className="w-full rounded-[8px] border border-[var(--zeno-border)] bg-white p-2.5 text-left transition hover:border-[var(--zeno-primary)]/40 hover:bg-[var(--zeno-violet-wash)]"
+                className="w-full rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-2.5 text-left transition hover:border-[var(--zeno-primary)]/40 hover:bg-[var(--zeno-violet-wash)]"
               >
                 <p className="truncate text-xs font-medium text-[var(--zeno-ink)]">
                   {block.title}

@@ -108,18 +108,18 @@ export function JobCampaignDetail({
       </header>
 
       {error ? (
-        <p className="rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900" role="alert">
+        <p className="rounded-[12px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] px-4 py-3 text-[13px] text-[var(--zeno-warning)]" role="alert">
           {error}
         </p>
       ) : null}
       {providerWarning ? (
-        <p className="rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+        <p className="rounded-[12px] border border-[var(--zeno-warning)] bg-[var(--zeno-warning-soft)] px-4 py-3 text-[13px] text-[var(--zeno-warning)]">
           {providerWarning}
         </p>
       ) : null}
       <GrowthBanner state={growthState ?? { kind: "none" }} />
 
-      <section className="grid gap-3 rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 text-[13px] sm:grid-cols-2">
+      <section className="grid gap-3 rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 text-[13px] sm:grid-cols-2">
         <p>
           <span className="text-[var(--zeno-ink-faint)]">Last LinkedIn check</span>
           <br />
@@ -157,7 +157,7 @@ export function JobCampaignDetail({
           <h2 className="text-[15px] font-semibold text-[var(--zeno-ink)]">Recent runs</h2>
           <ul className="mt-2 space-y-2 text-[13px] text-[var(--zeno-ink-muted)]">
             {runs.slice(0, 5).map((run) => (
-              <li key={run.id} className="rounded-[12px] border border-[var(--zeno-border)] bg-white px-3 py-2">
+              <li key={run.id} className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 py-2">
                 {run.origin.replaceAll("_", " ")} · {run.status} · {run.discovered} discovered ·{" "}
                 {run.analysed} analysed · {run.qualifying} qualifying
               </li>
@@ -169,7 +169,7 @@ export function JobCampaignDetail({
       <section>
         <h2 className="text-[15px] font-semibold text-[var(--zeno-ink)]">Campaign results</h2>
         {matches.length === 0 ? (
-          <p className="mt-3 rounded-[14px] border border-[var(--zeno-border)] bg-white px-4 py-8 text-center text-sm text-[var(--zeno-ink-muted)]">
+          <p className="mt-3 rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-8 text-center text-sm text-[var(--zeno-ink-muted)]">
             No analysed campaign results yet. Run now or wait for the next scheduled check.
           </p>
         ) : (
@@ -180,7 +180,7 @@ export function JobCampaignDetail({
               return (
                 <li
                   key={match.listingId}
-                  className="rounded-[14px] border border-[var(--zeno-border)] bg-white p-4 shadow-[var(--zeno-shadow-sm)]"
+                  className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 shadow-[var(--zeno-shadow-sm)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -192,7 +192,7 @@ export function JobCampaignDetail({
                         {[job?.location, job?.work_mode, job?.published_at].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-800">
+                    <span className="rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--zeno-success)]">
                       {Math.round(match.evidenceFitScore)}% match
                     </span>
                   </div>
@@ -209,13 +209,13 @@ export function JobCampaignDetail({
                     {match.primaryGaps.slice(0, 2).map((item) => (
                       <span
                         key={item}
-                        className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800"
+                        className="rounded-full bg-[var(--zeno-warning-soft)] px-2.5 py-1 text-[11px] text-[var(--zeno-warning)]"
                       >
                         Gap: {item}
                       </span>
                     ))}
                     {!match.eligible ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800">
+                      <span className="rounded-full bg-[var(--zeno-warning-soft)] px-2.5 py-1 text-[11px] text-[var(--zeno-warning)]">
                         Constraint warning
                       </span>
                     ) : null}
@@ -282,7 +282,7 @@ function GrowthBanner(props: { state: CampaignGrowthState }) {
   const { state } = props;
   if (state.kind === "assessing") {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-3 text-[13px]">
+      <div className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px]">
         <p className="text-[var(--zeno-ink-muted)]">Zeno is reviewing your profile…</p>
         <GrowthAssessmentPoller requestId={state.requestId} compact />
       </div>
@@ -290,7 +290,7 @@ function GrowthBanner(props: { state: CampaignGrowthState }) {
   }
   if (state.kind === "none") {
     return (
-      <p className="rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-3 text-[13px] text-[var(--zeno-ink-faint)]">
+      <p className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px] text-[var(--zeno-ink-faint)]">
         No current Growth action
       </p>
     );
@@ -304,7 +304,7 @@ function GrowthBanner(props: { state: CampaignGrowthState }) {
   return (
     <Link
       href={state.href}
-      className="block rounded-[12px] border border-[var(--zeno-border)] bg-white px-4 py-3 text-[13px] font-semibold text-[var(--zeno-primary-deep)] hover:underline"
+      className="block rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px] font-semibold text-[var(--zeno-primary-deep)] hover:underline"
     >
       {label}
     </Link>

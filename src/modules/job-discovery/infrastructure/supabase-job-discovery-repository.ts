@@ -210,6 +210,22 @@ export class SupabaseJobDiscoveryRepository
     return (data as unknown as UserJobViewRow[]).map(mapUserJob);
   }
 
+  async countJobs(input: {
+    userId: string;
+    includeDismissed?: boolean;
+  }): Promise<number> {
+    let query = this.client
+      .from("user_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", input.userId);
+    if (!input.includeDismissed) {
+      query = query.neq("state", "dismissed");
+    }
+    const { count, error } = await query;
+    if (error) return 0;
+    return count ?? 0;
+  }
+
   async setUserJobState(
     input: Parameters<JobDiscoveryRepository["setUserJobState"]>[0],
   ): Promise<DiscoveredJob> {
