@@ -64,7 +64,7 @@ export function HomeGreeting(props: { name: string }) {
 
   return (
     <section className="mx-auto max-w-3xl text-center">
-      <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] font-bold leading-[1.1] tracking-[-0.01em] sm:text-[2.9rem)]">
+      <h1 className="font-[family-name:var(--zeno-font-display)] text-[1.85rem] font-bold leading-[1.15] tracking-tight sm:text-[2.5rem] md:text-[2.85rem]">
         <span className="text-[var(--zeno-ink-faint)]">Good </span>
         <span className="text-[var(--zeno-primary)]">
           {mounted ? helloForPeriod(period) : "morning"}

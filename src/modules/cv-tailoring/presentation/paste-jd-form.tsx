@@ -107,7 +107,7 @@ export function PasteJdForm() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Senior Backend Engineer"
               disabled={loading}
-              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
+              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
             />
           </label>
 
@@ -121,7 +121,7 @@ export function PasteJdForm() {
               onChange={(e) => setOrganizationName(e.target.value)}
               placeholder="e.g. Stripe, OpenAI, Acme Corp"
               disabled={loading}
-              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
+              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
             />
           </label>
         </div>
@@ -137,7 +137,7 @@ export function PasteJdForm() {
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. San Francisco, CA / London / Colombo"
               disabled={loading}
-              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
+              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
             />
           </label>
 
@@ -153,7 +153,7 @@ export function PasteJdForm() {
                 )
               }
               disabled={loading}
-              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
+              className="h-10 w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 text-[16px] sm:text-[13px] text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
             >
               <option value="">Any / unspecified</option>
               <option value="remote">Remote</option>
@@ -179,7 +179,7 @@ export function PasteJdForm() {
             disabled={loading}
             placeholder="Paste the full job posting here, including responsibilities, qualifications, tech stack, and about the company…"
             required
-            className="w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3 font-mono text-[13px] leading-relaxed text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
+            className="w-full rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3 font-mono text-[16px] sm:text-[13px] leading-relaxed text-[var(--zeno-ink)] outline-none transition focus:border-[var(--zeno-primary)] disabled:opacity-60"
           />
         </label>
 

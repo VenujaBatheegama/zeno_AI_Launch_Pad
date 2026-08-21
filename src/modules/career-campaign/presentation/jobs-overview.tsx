@@ -73,10 +73,10 @@ export function JobsOverview({
   return (
     <div className="space-y-8">
       <header className="max-w-2xl">
-        <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
+        <h1 className="font-[family-name:var(--zeno-font-display)] text-[1.85rem] sm:text-[2.35rem] leading-tight tracking-[-0.02em] text-[var(--zeno-ink)]">
           Jobs
         </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
+        <p className="mt-2 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
           Find jobs now or let Zeno keep watch for the roles you care about.
         </p>
       </header>

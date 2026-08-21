@@ -313,14 +313,14 @@ export function CareerFriendChat(props: {
         </div>
       ) : null}
       {emptyFeatured ? (
-        <div className="mb-3 flex flex-wrap justify-center gap-2 px-1">
+        <div className="mb-3 flex flex-wrap sm:flex-nowrap sm:overflow-x-auto gap-1.5 justify-center px-1 pb-1 scrollbar-none">
           {STARTERS.map((starter) => (
             <button
               key={starter}
               type="button"
               disabled={props.disabled}
               onClick={() => void send(starter)}
-              className="rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3.5 py-2 text-[12px] font-medium text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
+              className="shrink-0 rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3 py-1.5 text-[11px] sm:text-[12px] font-medium text-[var(--zeno-ink-muted)] transition hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] disabled:opacity-50"
             >
               {starter}
             </button>
@@ -329,12 +329,12 @@ export function CareerFriendChat(props: {
       ) : null}
       <form
         onSubmit={sendMessage}
-        className={featured ? "sticky bottom-0 pt-2" : "border-t border-[var(--zeno-border)] p-4"}
+        className={featured ? "sticky bottom-0 pt-2 pb-1" : "border-t border-[var(--zeno-border)] p-3 sm:p-4"}
       >
         <div
           className={`flex items-center gap-2 ${
             featured
-              ? "rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-4 py-3.5 shadow-[var(--zeno-shadow-md)]"
+              ? "rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] px-3 py-2.5 sm:px-4 sm:py-3.5 shadow-[var(--zeno-shadow-md)]"
               : ""
           }`}
         >
@@ -354,8 +354,8 @@ export function CareerFriendChat(props: {
             aria-label="Message Zeno"
             className={
               featured
-                ? "min-w-0 flex-1 bg-transparent px-3 py-2 text-[14px] outline-none placeholder:text-[var(--zeno-ink-faint)]"
-                : "min-w-0 flex-1 rounded-full border border-[var(--zeno-border)] px-4 py-2.5 text-sm outline-none focus:border-[var(--zeno-border-hover)]"
+                ? "min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[16px] sm:text-[14px] outline-none placeholder:text-[var(--zeno-ink-faint)]"
+                : "min-w-0 flex-1 rounded-full border border-[var(--zeno-border)] px-4 py-2 text-[16px] sm:text-sm outline-none focus:border-[var(--zeno-border-hover)]"
             }
           />
           <button
@@ -363,8 +363,8 @@ export function CareerFriendChat(props: {
             disabled={props.disabled || pending || !message.trim()}
             className={
               featured
-                ? "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-white shadow-[var(--zeno-shadow-sm)] disabled:cursor-not-allowed disabled:opacity-50"
-                : "rounded-full px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                ? "inline-flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-full text-white shadow-[var(--zeno-shadow-sm)] disabled:cursor-not-allowed disabled:opacity-50"
+                : "rounded-full px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             }
             style={{ background: "var(--zeno-primary-gradient)" }}
             aria-label={featured ? "Send" : undefined}
