@@ -1,19 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TelegramConnectModal } from "@/modules/career-campaign/presentation/telegram-connect-modal";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-const ACTION_LINKS = {
+const ACTION_LINKS: Record<string, { href: string; label: string }> = {
   view_jobs: { href: "/app/jobs", label: "View jobs & campaigns" },
+  job_search: { href: "/app/jobs", label: "Search jobs" },
   review_recommendations: { href: "/app/recommendations", label: "Review recommendations" },
   start_sprint: { href: "/app/growth", label: "Open growth plan" },
+  growth_sprint: { href: "/app/growth", label: "Open growth plan" },
   update_profile: { href: "/app/career-profile", label: "Update profile" },
   tailor_cv: { href: "/app/cvs", label: "Open CV & Cover Letter Hub" },
-} as const;
+  cover_letter: { href: "/app/cvs?tab=cover-letters", label: "Cover Letters" },
+};
 
 const STARTERS = [
   "Find junior remote DevOps jobs",
@@ -163,6 +166,14 @@ function renderMarkdown(raw: string): React.ReactNode {
   return <div className="space-y-2">{nodes}</div>;
 }
 
+function safeRenderMarkdown(raw: string): React.ReactNode {
+  try {
+    return renderMarkdown(raw);
+  } catch {
+    return <p className="text-[14px] leading-7 text-[var(--zeno-ink)] whitespace-pre-wrap">{raw}</p>;
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 export function CareerFriendChat(props: {
@@ -181,15 +192,21 @@ export function CareerFriendChat(props: {
           },
         ],
   );
-  const [suggestedActions, setSuggestedActions] = useState<Array<keyof typeof ACTION_LINKS>>([]);
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const [copiedIndex, setCopiedIndex] = useState<number>();
   const [telegramModalOpen, setTelegramModalOpen] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const featured = Boolean(props.featured);
   const emptyFeatured = featured && messages.length === 0 && !pending;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, pending]);
 
   async function send(content: string) {
     if (!content || pending || props.disabled) return;
@@ -211,7 +228,7 @@ export function CareerFriendChat(props: {
       const body = (await response.json()) as {
         conversationId?: string;
         answer?: string;
-        suggestedActions?: Array<keyof typeof ACTION_LINKS>;
+        suggestedActions?: string[];
         usedModel?: boolean;
         error?: string;
       };
@@ -225,6 +242,7 @@ export function CareerFriendChat(props: {
       setError(caught instanceof Error ? caught.message : "Zeno could not reply.");
     } finally {
       setPending(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }
 
@@ -297,7 +315,7 @@ export function CareerFriendChat(props: {
               key={`assistant-${index}`}
               className="max-w-[min(100%,44rem)] rounded-[22px] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
             >
-              {renderMarkdown(item.content)}
+              {safeRenderMarkdown(item.content)}
               <button
                 type="button"
                 onClick={() => void copyReply(item.content, index)}
@@ -311,25 +329,39 @@ export function CareerFriendChat(props: {
               key={`assistant-${index}`}
               className="max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3"
             >
-              {renderMarkdown(item.content)}
+              {safeRenderMarkdown(item.content)}
             </div>
           ),
         )}
         {pending ? (
-          <p className="text-sm text-[var(--zeno-ink-muted)]">Zeno is thinking…</p>
+          <div className="flex items-center gap-3 rounded-[20px] bg-[var(--zeno-surface)] px-4 py-3 shadow-[var(--zeno-shadow-sm)] border border-[var(--zeno-border)]/60 max-w-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-[var(--zeno-primary)] animate-bounce [animation-delay:-0.3s]" />
+              <span className="size-2 rounded-full bg-[var(--zeno-primary)] animate-bounce [animation-delay:-0.15s]" />
+              <span className="size-2 rounded-full bg-[var(--zeno-primary)] animate-bounce" />
+            </span>
+            <span className="text-[13px] font-medium text-[var(--zeno-ink-muted)]">
+              Zeno is searching…
+            </span>
+          </div>
         ) : null}
+        <div ref={messagesEndRef} />
       </div>
       {suggestedActions.length > 0 ? (
         <div className={`flex flex-wrap gap-2 ${featured ? "px-1 pb-3" : "px-5 pb-3"}`}>
-          {suggestedActions.map((action) => (
-            <Link
-              key={action}
-              href={ACTION_LINKS[action].href}
-              className="rounded-full border border-[var(--zeno-border-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--zeno-primary-deep)]"
-            >
-              {ACTION_LINKS[action].label}
-            </Link>
-          ))}
+          {suggestedActions.map((action) => {
+            const link = ACTION_LINKS[action];
+            if (!link) return null;
+            return (
+              <Link
+                key={action}
+                href={link.href}
+                className="rounded-full border border-[var(--zeno-border-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--zeno-primary-deep)] hover:bg-[var(--zeno-violet-wash)] transition-colors"
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
       ) : null}
       {emptyFeatured ? (
@@ -366,6 +398,7 @@ export function CareerFriendChat(props: {
             </span>
           ) : null}
           <input
+            ref={inputRef}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             disabled={props.disabled || pending}
