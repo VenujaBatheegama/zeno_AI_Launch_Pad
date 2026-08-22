@@ -267,31 +267,48 @@ export async function POST(request: Request) {
     }
 
     // 6. Connect project to campaign
-    await supabase.from("growth_project_campaigns").insert({
+    const { error: gpcErr } = await supabase.from("growth_project_campaigns").insert({
       project_id: projectId,
       campaign_id: campaignId,
       user_id: userId,
     });
+    if (gpcErr) console.warn("[instant-growth] project_campaigns insert warning:", gpcErr);
 
     // 7. Insert milestones
     for (let i = 0; i < sprintTemplate.milestones.length; i++) {
       const milestoneTitle = sprintTemplate.milestones[i]!;
-      await supabase.from("growth_milestones").insert({
+      const { error: msErr } = await supabase.from("growth_milestones").insert({
         id: crypto.randomUUID(),
         project_id: projectId,
         user_id: userId,
         position: i,
         title: milestoneTitle,
         description: `Complete and verify: ${milestoneTitle}`,
+        estimated_hours: input.weeklyHours,
         status: i === 0 ? "in_progress" : "todo",
-        is_required: i < sprintTemplate.milestones.length - 1,
         target_date: new Date(now.getTime() + (i + 1) * 7 * 24 * 60 * 60 * 1000)
           .toISOString()
           .slice(0, 10),
         created_at: nowIso,
         updated_at: nowIso,
       });
+      if (msErr) {
+        console.error("[instant-growth] milestone insert error:", msErr);
+      }
     }
+
+    // 8. Create growth conversation for AI Chat
+    const conversationId = crypto.randomUUID();
+    const { error: convErr } = await supabase.from("growth_conversations").insert({
+      id: conversationId,
+      user_id: userId,
+      recommendation_id: recommendationId,
+      project_id: projectId,
+      objective_snapshot: sprintTemplate.objective,
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
+    if (convErr) console.warn("[instant-growth] conversation insert warning:", convErr);
 
     return NextResponse.json({
       success: true,

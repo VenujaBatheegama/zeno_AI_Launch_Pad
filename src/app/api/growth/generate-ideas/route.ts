@@ -11,7 +11,8 @@ import { SupabaseEvidenceRepository } from "@/modules/career-evidence/infrastruc
 export const dynamic = "force-dynamic";
 
 const generateIdeasInputSchema = z.object({
-  targetRole: z.string().trim().min(1).default("Software Engineer"),
+  targetRole: z.string().trim().min(1, "Target role is required"),
+  weeklyHours: z.number().min(1).max(40).default(5),
 });
 
 export const projectIdeaSchema = z.object({
@@ -53,7 +54,14 @@ export async function POST(request: Request) {
   }
 
   const parsed = generateIdeasInputSchema.safeParse(body);
-  const targetRole = parsed.success ? parsed.data.targetRole : "Software Engineer";
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Please provide a target role" },
+      { status: 400 },
+    );
+  }
+
+  const { targetRole, weeklyHours } = parsed.data;
 
   const config = getServerConfig();
   const supabase = createSupabaseClient(config);
@@ -72,10 +80,11 @@ export async function POST(request: Request) {
 - Verified Skills: ${profileSkills.length > 0 ? profileSkills.join(", ") : "General programming fundamentals"}
 - Recent Experience: ${profileExperiences.length > 0 ? profileExperiences.join("; ") : "Software engineering background"}
 - Desired Target Role: "${targetRole}"
+- Planned Time Commitment: ${weeklyHours} hours/week (4-week total sprint: ~${weeklyHours * 4} hours)
 
 Task:
 Analyze the current industry hiring market for "${targetRole}". Identify 3 distinct, modern, production-grade project ideas that will bridge the candidate's skill gaps and make their CV immediately stand out to hiring managers.
-Each idea must be realistic to complete in 4 weeks (2-10 hrs/week) and culminate in verifiable proof (GitHub repo, live deployment, architecture documentation).
+Each idea must be realistic to complete in 4 weeks given ${weeklyHours} hrs/week and culminate in verifiable proof (GitHub repo, live deployment, architecture documentation).
 
 Provide exactly 3 distinct project ideas with 4 chronological milestones each.`;
 
