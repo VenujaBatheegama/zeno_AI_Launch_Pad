@@ -147,6 +147,24 @@ function FocusProjectCard(props: {
     }
   }
 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  async function handleDelete() {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/growth/projects/${props.current.project.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-[var(--zeno-shadow-sm)] space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -162,15 +180,55 @@ function FocusProjectCard(props: {
           </p>
         </div>
 
-        <div className="text-right sm:shrink-0">
-          <span className="text-2xl font-bold text-[var(--zeno-ink)]">
-            {progressPercent}%
-          </span>
-          <p className="text-[11px] text-[var(--zeno-ink-muted)]">
-            {completedCount} of {totalCount} tasks done
-          </p>
+        <div className="flex items-center gap-3 sm:shrink-0">
+          <div className="text-right">
+            <span className="text-2xl font-bold text-[var(--zeno-ink)]">
+              {progressPercent}%
+            </span>
+            <p className="text-[11px] text-[var(--zeno-ink-muted)]">
+              {completedCount} of {totalCount} tasks done
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            title="Delete this project sprint"
+            className="p-2 rounded-lg text-[var(--zeno-ink-faint)] hover:text-red-400 hover:bg-red-500/10 transition border border-transparent hover:border-red-500/20"
+          >
+            🗑️
+          </button>
         </div>
       </div>
+
+      {showDeleteConfirm ? (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
+          <p className="text-xs font-bold text-red-400">
+            Are you sure you want to delete this project sprint?
+          </p>
+          <p className="text-[11px] text-[var(--zeno-ink-muted)]">
+            This will remove all tracked tasks and allow you to generate new project ideas for your target role.
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleDelete()}
+              className="rounded-lg bg-red-500 hover:bg-red-600 text-white px-3 py-1 text-xs font-bold transition shadow-sm"
+            >
+              {isDeleting ? "Deleting..." : "Yes, Delete Sprint"}
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => setShowDeleteConfirm(false)}
+              className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface)] hover:bg-[var(--zeno-surface-elevated)] px-3 py-1 text-xs font-semibold text-[var(--zeno-ink-muted)] transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <p className="text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
         {props.current.project.objective}
