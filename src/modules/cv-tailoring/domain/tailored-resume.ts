@@ -352,7 +352,7 @@ export const groqResumeDraftSchema = z
   .strict();
 export type GroqResumeDraft = z.infer<typeof groqResumeDraftSchema>;
 
-export const resumeDensitySchema = z.enum(["comfortable", "compact"]);
+export const resumeDensitySchema = z.enum(["comfortable", "compact", "tight"]);
 export type ResumeDensity = z.infer<typeof resumeDensitySchema>;
 
 export function isTailoredResume(value: unknown): value is TailoredResume {

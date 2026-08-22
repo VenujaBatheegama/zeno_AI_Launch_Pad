@@ -322,7 +322,7 @@ export function buildContentPlan(input: {
           "projects",
           "certifications",
           "achievements",
-          "references",
+          ...(input.mode === "two_page" ? ["references"] : []),
         ]
       : input.mode === "one_page"
         ? [
@@ -334,7 +334,6 @@ export function buildContentPlan(input: {
             "projects",
             "certifications",
             "achievements",
-            "references",
           ]
         : [
             "contact",
@@ -393,7 +392,10 @@ export function buildContentPlan(input: {
       input.mode === "one_page"
         ? ONE_PAGE_SUMMARY_MAX_CHARS
         : TWO_PAGE_SUMMARY_MAX_CHARS,
-    experienceItemIds: workItems.map((item) => item.id),
+    experienceItemIds: (input.mode === "one_page"
+      ? workItems.slice(0, projectSelection.selectedIds.length > 0 ? 2 : 3)
+      : workItems
+    ).map((item) => item.id),
     projectItemIds: projectSelection.selectedIds,
     educationItemIds: educationItems.map((item) => item.id),
     skillItemIds: prioritizeSkills({
@@ -416,10 +418,13 @@ export function buildContentPlan(input: {
       certMax,
     ),
     achievementItemIds: achievementItems.map((item) => item.id),
-    referenceItemIds: input.snapshot.items
-      .filter((item) => item.type === "reference")
-      .map((item) => item.id)
-      .slice(0, 3),
+    referenceItemIds:
+      input.mode === "one_page"
+        ? []
+        : input.snapshot.items
+            .filter((item) => item.type === "reference")
+            .map((item) => item.id)
+            .slice(0, 3),
     bulletsPerExperience:
       input.mode === "one_page"
         ? ONE_PAGE_BULLETS_PER_EXPERIENCE

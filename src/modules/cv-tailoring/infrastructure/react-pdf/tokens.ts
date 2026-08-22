@@ -1,8 +1,8 @@
-export type ResumeDensity = "comfortable" | "compact";
+export type ResumeDensity = "comfortable" | "compact" | "tight";
 
 /**
  * ATS-safe typography tokens.
- * Body letterSpacing must stay 0. Compact mode never drops below ~9.8pt body.
+ * Body letterSpacing must stay 0.
  */
 const BASE = {
   colors: {
@@ -24,27 +24,57 @@ const BASE = {
 } as const;
 
 export function getResumeTokens(density: ResumeDensity) {
+  if (density === "tight") {
+    return {
+      ...BASE,
+      page: {
+        size: "A4" as const,
+        marginHorizontal: 38,
+        marginVertical: 32,
+      },
+      type: {
+        ...BASE.type,
+        name: 18,
+        targetTitle: 10.5,
+        section: 10,
+        body: 9.2,
+        meta: 8.5,
+        lineHeight: 1.22,
+      },
+      space: {
+        afterHeader: 8,
+        sectionGap: 8,
+        entryGap: 5,
+        bulletGap: 1.5,
+        bulletIndent: 9,
+      },
+      divider: {
+        thickness: 0.5,
+      },
+    };
+  }
+
   if (density === "compact") {
     return {
       ...BASE,
       page: {
         size: "A4" as const,
-        marginHorizontal: 46,
-        marginVertical: 42,
+        marginHorizontal: 44,
+        marginVertical: 38,
       },
       type: {
         ...BASE.type,
         name: 20,
         targetTitle: 11,
         section: 10.5,
-        body: 9.8,
-        meta: 9,
-        lineHeight: 1.3,
+        body: 9.6,
+        meta: 8.8,
+        lineHeight: 1.26,
       },
       space: {
         afterHeader: 10,
-        sectionGap: 11,
-        entryGap: 7,
+        sectionGap: 10,
+        entryGap: 6,
         bulletGap: 2,
         bulletIndent: 10,
       },

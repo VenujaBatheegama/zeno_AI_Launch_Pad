@@ -14,7 +14,7 @@ import {
 import { defaultResumeSectionOrder } from "../domain/resume-section-order";
 import type { TailoredResume } from "../domain/tailored-resume";
 import { formatDateRange } from "../infrastructure/react-pdf/dates";
-import { getResumeTokens } from "../infrastructure/react-pdf/tokens";
+import { getResumeTokens, type ResumeDensity } from "../infrastructure/react-pdf/tokens";
 
 /** A4 — matches React-PDF `size: "A4"`. */
 const A4_WIDTH_MM = 210;
@@ -44,7 +44,15 @@ export function EditableCvA4Preview({
   status,
   onChange,
 }: Props) {
-  const tokens = useMemo(() => getResumeTokens("comfortable"), []);
+  const [density, setDensity] = useState<ResumeDensity>(
+    mode === "one_page" ? "compact" : "comfortable",
+  );
+
+  useEffect(() => {
+    setDensity(mode === "one_page" ? "compact" : "comfortable");
+  }, [mode]);
+
+  const tokens = useMemo(() => getResumeTokens(density), [density]);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -55,9 +63,14 @@ export function EditableCvA4Preview({
 
   const resolvedOrder = useMemo(
     () =>
-      sectionOrder && sectionOrder.length > 0
+      (sectionOrder && sectionOrder.length > 0
         ? sectionOrder.filter((section) => section !== "contact")
-        : defaultResumeSectionOrder(mode),
+        : defaultResumeSectionOrder(mode)
+      ).filter((section) => {
+        // One-page CVs never include references.
+        if (section === "references" && mode === "one_page") return false;
+        return true;
+      }),
     [sectionOrder, mode],
   );
 
@@ -112,7 +125,11 @@ export function EditableCvA4Preview({
     const viewport = viewportRef.current;
     if (!viewport) return;
     const update = () => {
-      const available = Math.max(280, viewport.clientWidth - 120);
+      const vw = viewport.clientWidth;
+      // On narrow viewports (mobile), use minimal padding so the A4 sheet
+      // fills the screen and atom text wrapping matches the real PDF layout.
+      const padding = vw < 640 ? 32 : 120;
+      const available = Math.max(280, vw - padding);
       setPageWidthPx(Math.min(mmToPx(A4_WIDTH_MM), available));
     };
     update();
@@ -131,13 +148,23 @@ export function EditableCvA4Preview({
       height: el.getBoundingClientRect().height,
     }));
 
+    const valid = measured.filter((item) => item.id);
+    const totalHeight = valid.reduce((sum, item) => sum + item.height, 0);
+
+    // Auto-step down density for one-page mode if content is tight
+    if (mode === "one_page" && density !== "tight" && totalHeight > pageInnerHeightPx) {
+      setDensity("tight");
+      return;
+    }
+
     const packed = packAtomsIntoPages(
-      measured.filter((item) => item.id),
+      valid,
       pageInnerHeightPx,
+      mode,
     );
     // eslint-disable-next-line react-hooks/set-state-in-effect -- paginate from measured atom heights
     setPageAtomIds(packed);
-  }, [measureAtoms, pageInnerHeightPx, contentWidthPx, status]);
+  }, [measureAtoms, pageInnerHeightPx, contentWidthPx, status, mode, density]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -145,7 +172,7 @@ export function EditableCvA4Preview({
         ref={viewportRef}
         className="cv-dotted-canvas min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
       >
-        <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col items-center px-6 py-10 md:px-10 md:py-14">
+        <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col items-center px-2 py-6 sm:px-6 sm:py-10 md:px-10 md:py-14">
           <div
             className="mb-5 flex w-full flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--zeno-ink-muted)]"
             style={{ maxWidth: pageWidthPx }}
@@ -245,9 +272,19 @@ export function EditableCvA4Preview({
 function packAtomsIntoPages(
   atoms: Array<{ id: string; height: number }>,
   pageInnerHeightPx: number,
+  mode?: "one_page" | "two_page",
 ): string[][] {
   if (atoms.length === 0) return [[]];
   const limit = Math.max(pageInnerHeightPx, 1);
+  const totalHeight = atoms.reduce((sum, a) => sum + Math.max(0, a.height), 0);
+
+  // If one_page mode is requested and total measured height is within 10% tolerance
+  // of a single page (accounting for HTML input/textarea chrome vs PDF raw text metrics),
+  // pack onto exactly 1 page so preview matches the downloaded PDF.
+  if (mode === "one_page" && totalHeight <= limit * 1.10) {
+    return [atoms.map((a) => a.id)];
+  }
+
   const pages: string[][] = [[]];
   let used = 0;
 
@@ -1173,7 +1210,7 @@ function AutoTextarea({
   fillRow?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
@@ -1189,7 +1226,7 @@ function AutoTextarea({
       onChange={(event) => onChange(event.target.value)}
       className="min-w-0 max-w-full rounded-[2px] border border-transparent bg-transparent outline-none focus:border-[var(--zeno-border-hover)]"
       style={{
-        padding: "1px 2px",
+        padding: "0px 1px",
         margin: 0,
         fontFamily: "Helvetica, Arial, sans-serif",
         fontSize: pt(tokens.type.body),
@@ -1216,7 +1253,7 @@ function fieldStyle(
     border: "1px solid transparent",
     borderRadius: 2,
     background: "transparent",
-    padding: "1px 2px",
+    padding: "0px 1px",
     margin: 0,
     fontFamily: "Helvetica, Arial, sans-serif",
     fontSize: pt(tokens.type.body),

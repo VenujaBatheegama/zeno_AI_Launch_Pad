@@ -74,6 +74,32 @@ function searchStepIndex(
   return 0;
 }
 
+function getSearchHint(phase: string | null, elapsed: number): string | null {
+  if (phase === "preparing") {
+    return "Initializing search parameters & preference filters…";
+  }
+  if (phase === "searching") {
+    if (elapsed <= 3) return "Connecting to live job sources (JSearch, LinkedIn, web)…";
+    if (elapsed <= 8) return "Querying target roles and seniority specifications…";
+    if (elapsed <= 14) return "Filtering remote, hybrid, and location criteria…";
+    if (elapsed <= 22) return "Ingesting descriptions and extracting company metadata…";
+    return "Aggregating opportunities for deep evidence matching…";
+  }
+  if (phase === "loading_jobs") {
+    return "Loading and deduplicating discovered roles…";
+  }
+  if (phase === "analysing") {
+    if (elapsed <= 5) return "Evaluating requirements against your verified profile…";
+    if (elapsed <= 12) return "Matching technical stack alignment and transferable skills…";
+    if (elapsed <= 20) return "Synthesizing evidence fit scores and identifying strengths…";
+    return "Finalizing deep career intelligence analysis…";
+  }
+  if (phase === "ranking") {
+    return "Ordering top opportunities by evidence relevance…";
+  }
+  return null;
+}
+
 export function CareerIntelligenceWorkspace({
   initialAssessment,
   initialPlan,
@@ -248,15 +274,17 @@ export function CareerIntelligenceWorkspace({
         setSearchElapsedSec(Math.floor((Date.now() - started) / 1000));
       }, 500);
       try {
+        // 1. Prepare phase (visible for ~800ms so the user sees smooth initiation)
         setSearchPhase("preparing");
         setSearchElapsedSec(0);
-        setMessage("Starting a fresh search…");
-        // Clear prior results immediately so the list does not stack old cards
-        // while the new search runs.
+        setMessage("Preparing your search parameters…");
         setMatches([]);
         setJobs((current) =>
           current.filter((job) => job.user_state === "saved"),
         );
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        // 2. Search phase
         setSearchPhase("searching");
         setMessage("Searching job sources…");
         const result = await request<{
@@ -290,6 +318,8 @@ export function CareerIntelligenceWorkspace({
               }
             : current,
         );
+        
+        // 3. Loading / Collect phase (smooth visible transition for ~700ms)
         setSearchPhase("loading_jobs");
         setMessage(`Found ${result.jobsFound} job(s). Loading your list…`);
         const latestJobs = await request<DiscoveredJob[]>("/api/jobs");
@@ -299,6 +329,7 @@ export function CareerIntelligenceWorkspace({
             ? latestJobs.filter((job) => sessionIds.has(job.listing_id))
             : latestJobs.filter((job) => job.user_state === "saved"),
         );
+        await new Promise((resolve) => setTimeout(resolve, 700));
 
         const sessionJobs =
           sessionIds.size > 0
@@ -322,32 +353,29 @@ export function CareerIntelligenceWorkspace({
 
         if (listingIds.length === 0) {
           setMatches([]);
-          setMessage(
-            result.jobsFound === 0
-              ? `${notice ? `${notice} ` : ""}No matching jobs found. Try adjusting preferences or broadening location / work arrangement.`
-              : `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s), but none were ready to analyse yet.`,
-          );
+          if (result.jobsFound === 0) {
+            setMessage(
+              "No matching jobs found for your current preferences. Try adjusting role titles, location, or work modes."
+            );
+          }
         } else {
+          // 4. Analyse phase
           setSearchPhase("analysing");
-          setMessage(
-            `${notice ? `${notice} ` : ""}Found ${result.jobsFound} job(s). Analysing the top ${listingIds.length} (AI extraction can take a minute)…`,
-          );
           const analysed = await analyseListings(listingIds);
           void fetch("/api/instant-search", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ analysedCount: analysed?.ok ?? listingIds.length }),
           });
+
+          // 5. Ranking phase (smooth brief final step for ~600ms)
           setSearchPhase("ranking");
-          setMessage(
-            analysed && analysed.rankedCount > 0
-              ? `Found ${result.jobsFound} job(s). Showing ${Math.min(analysed.rankedCount, resultLimit)} analysed matches, ordered by relevance.`
-              : `Found ${result.jobsFound} job(s). Analysis finished for ${analysed?.ok ?? 0}/${analysed?.total ?? 0}; ranked results may still be catching up.`,
-          );
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          setMessage(null);
         }
 
         if (result.warnings.length > 0) {
-          setError(result.warnings.slice(0, 4).join(" "));
+          console.warn("Job search internal provider warnings:", result.warnings);
         }
       } finally {
         window.clearInterval(tick);
@@ -444,33 +472,37 @@ export function CareerIntelligenceWorkspace({
           steps={[...JOB_SEARCH_STEPS]}
           activeIndex={searchStepIndex(searchPhase)}
           elapsedSec={searchElapsedSec}
-          hint={
-            searchPhase === "analysing"
-              ? "analysis is the slow step when Groq is rate-limited"
-              : searchPhase === "searching"
-                ? "checking LinkedIn, JSearch, TheirStack and ITPro"
-                : null
-          }
+          hint={getSearchHint(searchPhase, searchElapsedSec)}
         />
       ) : null}
 
       {(message || error) && (
         <div className="space-y-2">
           {message && (
-            <p
-              className="rounded-[var(--zeno-radius-sm)] px-3 py-2 text-sm"
-              style={{ backgroundColor: "var(--zeno-success-soft)", color: "var(--zeno-success)" }}
-            >
-              {message}
-            </p>
+            <div className="flex items-center justify-between rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-2.5 text-xs text-[var(--zeno-ink-muted)]">
+              <span>{message}</span>
+              <button
+                type="button"
+                onClick={() => setMessage(null)}
+                className="text-[var(--zeno-ink-faint)] hover:text-[var(--zeno-ink)] transition ml-2"
+                aria-label="Dismiss notice"
+              >
+                ✕
+              </button>
+            </div>
           )}
           {error && (
-            <p
-              className="rounded-[var(--zeno-radius-sm)] px-3 py-2 text-sm"
-              style={{ backgroundColor: "var(--zeno-danger-soft)", color: "var(--zeno-danger)" }}
-            >
-              {error}
-            </p>
+            <div className="flex items-center justify-between rounded-[12px] border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-xs text-red-400">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="text-red-400/60 hover:text-red-300 transition ml-2"
+                aria-label="Dismiss error"
+              >
+                ✕
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -671,7 +703,12 @@ export function CareerIntelligenceWorkspace({
               className="h-10 w-full rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] outline-none placeholder:text-[var(--zeno-ink-faint)] focus:border-[var(--zeno-border-hover)]"
             />
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {matches.length > 0 ? (
+              <span className="text-[12px] font-medium text-[var(--zeno-ink-muted)]">
+                {jobs.length} roles found · {matches.length} matches analysed
+              </span>
+            ) : null}
             <span className="inline-flex h-9 items-center rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[12px] font-medium text-[var(--zeno-ink-muted)]">
               Best match
             </span>

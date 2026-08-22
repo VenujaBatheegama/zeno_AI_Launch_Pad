@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
+import { TelegramConnectPanel } from "@/modules/career-campaign/presentation/telegram-connect-panel";
 
 type WhatsAppConnection = {
   connected: boolean;
@@ -24,31 +25,12 @@ type WhatsAppCode = {
   sandboxJoinCode: string | null;
 };
 
-type TelegramConnection = {
-  connected: boolean;
-  optedIn: boolean;
-  displayName: string | null;
-  enabled: boolean;
-  botUsername: string | null;
-};
-
-type TelegramCode = {
-  code: string;
-  expiresAt: string;
-  botUsername: string;
-  botUrl: string;
-};
-
 export default function SettingsPage() {
   const router = useRouter();
   const [whatsapp, setWhatsapp] = useState<WhatsAppConnection | null>(null);
   const [code, setCode] = useState<WhatsAppCode | null>(null);
   const [busy, setBusy] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
-  const [telegram, setTelegram] = useState<TelegramConnection | null>(null);
-  const [telegramCode, setTelegramCode] = useState<TelegramCode | null>(null);
-  const [telegramBusy, setTelegramBusy] = useState(false);
-  const [telegramError, setTelegramError] = useState<string | null>(null);
 
   const loadWhatsApp = useCallback(async () => {
     try {
@@ -70,30 +52,9 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const loadTelegram = useCallback(async () => {
-    try {
-      const response = await fetch("/api/telegram/link", { cache: "no-store" });
-      const json = (await response.json()) as TelegramConnection & {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(json.error ?? "Could not load Telegram settings.");
-      }
-      setTelegram(json);
-      setTelegramError(null);
-    } catch (error) {
-      setTelegramError(
-        error instanceof Error
-          ? error.message
-          : "Could not load Telegram settings.",
-      );
-    }
-  }, []);
-
   useEffect(() => {
     void loadWhatsApp();
-    void loadTelegram();
-  }, [loadTelegram, loadWhatsApp]);
+  }, [loadWhatsApp]);
 
   const whatsappLink = useMemo(() => {
     if (!code?.businessPhone) return null;
@@ -155,49 +116,6 @@ export default function SettingsPage() {
       );
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function createTelegramCode() {
-    setTelegramBusy(true);
-    setTelegramError(null);
-    try {
-      const response = await fetch("/api/telegram/link", { method: "POST" });
-      const json = (await response.json()) as TelegramCode & { error?: string };
-      if (!response.ok) {
-        throw new Error(json.error ?? "Could not create a Telegram link.");
-      }
-      setTelegramCode(json);
-    } catch (error) {
-      setTelegramError(
-        error instanceof Error
-          ? error.message
-          : "Could not create a Telegram link.",
-      );
-    } finally {
-      setTelegramBusy(false);
-    }
-  }
-
-  async function disconnectTelegram() {
-    setTelegramBusy(true);
-    setTelegramError(null);
-    try {
-      const response = await fetch("/api/telegram/link", { method: "DELETE" });
-      if (!response.ok) {
-        const json = (await response.json()) as { error?: string };
-        throw new Error(json.error ?? "Could not disconnect Telegram.");
-      }
-      setTelegramCode(null);
-      await loadTelegram();
-    } catch (error) {
-      setTelegramError(
-        error instanceof Error
-          ? error.message
-          : "Could not disconnect Telegram.",
-      );
-    } finally {
-      setTelegramBusy(false);
     }
   }
 
@@ -347,94 +265,13 @@ export default function SettingsPage() {
         )}
       </section>
       <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">Telegram</h2>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--zeno-ink-muted)]">
-              Receive proactive job alerts and open your Zeno workspaces from a
-              private Telegram chat with the Zeno bot.
-            </p>
-          </div>
-          {telegram?.connected ? (
-            <span className="rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-success)]">
-              {telegram.optedIn ? "Alerts on" : "Alerts paused"}
-            </span>
-          ) : null}
+        <div className="mb-4">
+          <h2 className="text-base font-semibold">Telegram</h2>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--zeno-ink-muted)]">
+            Receive proactive job alerts and chat with Zeno Career Friend on your phone or computer.
+          </p>
         </div>
-
-        {telegramError ? (
-          <p className="mt-4 text-sm text-[var(--zeno-danger)]" role="alert">
-            {telegramError}
-          </p>
-        ) : null}
-
-        {!telegram ? (
-          <p className="mt-4 text-sm text-[var(--zeno-ink-muted)]">Loading…</p>
-        ) : !telegram.enabled ? (
-          <p className="mt-4 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-warning-soft)] p-3 text-sm text-[var(--zeno-warning)]">
-            Telegram is not configured for this Zeno deployment yet.
-          </p>
-        ) : telegram.connected ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-bg)] p-4">
-            <div>
-              <p className="text-sm font-semibold">
-                Connected {telegram.displayName}
-              </p>
-              <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
-                Send /help to the Zeno bot to see available commands.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={telegramBusy}
-              onClick={() => void disconnectTelegram()}
-              className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-3 py-2 text-sm font-semibold hover:border-[var(--zeno-border-hover)] disabled:opacity-50"
-            >
-              Disconnect
-            </button>
-          </div>
-        ) : telegramCode ? (
-          <div className="mt-4 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] p-4">
-            <p className="text-sm font-semibold">Finish in Telegram</p>
-            <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-              Open the bot and press Start. The secure link carries your
-              one-time connection code automatically.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <a
-                href={telegramCode.botUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-[var(--zeno-radius-sm)] bg-[#229ED9] hover:bg-[#1e8ec3] px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
-              >
-                Open Telegram
-              </a>
-              <code className="rounded-md bg-[var(--zeno-bg)] px-3 py-2 text-xs font-semibold tracking-[0.08em]">
-                {telegramCode.code}
-              </code>
-            </div>
-            <p className="mt-3 text-xs text-[var(--zeno-ink-muted)]">
-              This link expires at{" "}
-              {new Date(telegramCode.expiresAt).toLocaleTimeString()}.
-            </p>
-            <button
-              type="button"
-              onClick={() => void loadTelegram()}
-              className="mt-3 text-sm font-semibold text-[var(--zeno-primary)]"
-            >
-              Refresh connection status
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            disabled={telegramBusy}
-            onClick={() => void createTelegramCode()}
-            className="mt-4 rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--zeno-primary-deep)] disabled:opacity-50"
-          >
-            {telegramBusy ? "Creating link…" : "Connect Telegram"}
-          </button>
-        )}
+        <TelegramConnectPanel />
       </section>
       <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
         <h2 className="text-base font-semibold">Sign out</h2>
