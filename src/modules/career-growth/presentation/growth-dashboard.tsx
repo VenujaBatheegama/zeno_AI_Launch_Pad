@@ -61,27 +61,20 @@ export function GrowthDashboard(props: {
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href={`/app/growth/projects/${props.current.project.id}`}
-              className="inline-flex h-10 items-center rounded-[10px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white"
+              className="inline-flex h-10 items-center rounded-[10px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white hover:bg-[var(--zeno-primary-deep)] transition"
             >
-              Continue with Zeno
+              Continue with Zeno ↗
             </Link>
             <Link
               href={`/app/growth/projects/${props.current.project.id}`}
-              className="inline-flex h-10 items-center rounded-[10px] border border-[var(--zeno-border)] px-4 text-[13px] font-semibold"
+              className="inline-flex h-10 items-center rounded-[10px] border border-[var(--zeno-border)] px-4 text-[13px] font-semibold hover:bg-[var(--zeno-surface-elevated)] transition"
             >
               Update progress
             </Link>
           </div>
         </section>
       ) : (
-        <section className="rounded-[14px] border border-dashed border-[var(--zeno-border-hover)] bg-[var(--zeno-surface)] p-6 text-[14px] text-[var(--zeno-ink-muted)]">
-          Create a Job Campaign and Zeno will identify the most valuable way to strengthen your candidacy.
-          <div className="mt-3">
-            <Link href="/app/jobs" className="font-semibold text-[var(--zeno-primary-deep)]">
-              Go to Jobs
-            </Link>
-          </div>
-        </section>
+        <InstantSprintLauncher />
       )}
 
       {props.otherActive.length > 0 ? (
@@ -312,3 +305,122 @@ export function GrowthProjectTracker(props: {
     </div>
   );
 }
+
+function InstantSprintLauncher() {
+  const router = useRouter();
+  const [targetRole, setTargetRole] = useState("DevOps Engineer");
+  const [weeklyHours, setWeeklyHours] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const POPULAR_SPRINTS = [
+    { label: "🚀 DevOps & Cloud IaC", role: "DevOps Engineer" },
+    { label: "🤖 AI Agents & LLM Systems", role: "AI Engineer" },
+    { label: "⚡ High-Scale Full Stack", role: "Full Stack Engineer" },
+  ];
+
+  async function handleLaunch(selectedRole?: string) {
+    const roleToLaunch = selectedRole ?? targetRole;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/growth/instant-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetRole: roleToLaunch,
+          weeklyHours,
+        }),
+      });
+      const data = (await response.json()) as { error?: string; projectId?: string };
+      if (!response.ok || data.error) {
+        setError(data.error ?? "Failed to launch sprint");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Network issue. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-[var(--zeno-shadow-sm)] space-y-4">
+      <div>
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-violet-soft)] px-3 py-1 text-xs font-bold text-[var(--zeno-primary)] mb-2">
+          <span>⚡ Instant Growth Sprint</span>
+        </div>
+        <h2 className="text-lg font-semibold text-[var(--zeno-ink)]">
+          Start Closing High-Value Market Gaps Today
+        </h2>
+        <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
+          Launch a structured 2–4 week project sprint tailored to your target role with concrete milestones.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3.5 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
+          Pick a Target Career Focus
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {POPULAR_SPRINTS.map((item) => (
+            <button
+              key={item.role}
+              type="button"
+              onClick={() => {
+                setTargetRole(item.role);
+                void handleLaunch(item.role);
+              }}
+              disabled={busy}
+              className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition disabled:opacity-60 ${
+                targetRole === item.role
+                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)]"
+                  : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] hover:border-[var(--zeno-border-hover)]"
+              }`}
+            >
+              <span className="font-semibold text-xs text-[var(--zeno-ink)]">{item.label}</span>
+              <span className="text-[11px] text-[var(--zeno-ink-muted)] mt-1">4-week sprint · 4 milestones</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[var(--zeno-border)]">
+        <div className="flex items-center gap-2 text-xs text-[var(--zeno-ink-muted)]">
+          <span>Planned time:</span>
+          {[2, 5, 8, 10].map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => setWeeklyHours(h)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold ${
+                weeklyHours === h
+                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-primary)] text-white"
+                  : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink-muted)]"
+              }`}
+            >
+              {h}h/wk
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void handleLaunch()}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60"
+        >
+          {busy ? "Generating Sprint…" : `Launch ${targetRole} Sprint →`}
+        </button>
+      </div>
+    </section>
+  );
+}
+
