@@ -4,7 +4,6 @@ import { CareerEvidenceWorkspace } from "@/modules/career-evidence/presentation/
 import { requireUserId } from "@/server/auth";
 import { getCareerEvidenceApplication } from "@/server/composition-root";
 import { requireProfile, updateProfileOnboarding } from "@/server/identity";
-import { VerifyOnboardingButton } from "@/modules/onboarding/presentation/verify-onboarding-button";
 
 export const dynamic = "force-dynamic";
 
@@ -30,23 +29,20 @@ export default async function OnboardingReviewPage() {
             until you verify.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <Link
             href="/app/home"
-            className="text-sm text-[var(--zeno-ink-muted)] hover:underline"
+            className="rounded-full border border-[var(--zeno-border)] px-3.5 py-1.5 text-xs font-semibold text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] transition"
           >
             Finish later
           </Link>
-          {evidenceSet ? (
-            <VerifyOnboardingButton
-              evidenceSetId={evidenceSet.id}
-              expectedUpdatedAt={evidenceSet.updatedAt}
-            />
-          ) : null}
         </div>
       </div>
       {evidenceSet ? (
-        <CareerEvidenceWorkspace initialEvidenceSet={evidenceSet} />
+        <CareerEvidenceWorkspace
+          initialEvidenceSet={evidenceSet}
+          onboardingMode={true}
+        />
       ) : (
         <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 text-sm text-[var(--zeno-ink-muted)]">
           No draft found yet.{" "}

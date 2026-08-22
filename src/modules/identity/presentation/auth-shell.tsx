@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { RibbonBackdrop } from "@/modules/product-shell/ui/ribbon-backdrop";
 import { ZenoMark } from "./zeno-mark";
 
 export function AuthShell(props: {
@@ -9,12 +10,9 @@ export function AuthShell(props: {
   footer?: ReactNode;
 }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[var(--zeno-bg)] px-4 py-10 sm:px-6">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[linear-gradient(135deg,var(--zeno-violet-wash),transparent_60%)]"
-      />
-      <div className="relative mx-auto flex w-full max-w-md flex-col gap-8">
+    <main className="relative isolate min-h-screen overflow-hidden bg-[var(--zeno-bg)] px-4 py-10 sm:px-6">
+      <RibbonBackdrop className="pointer-events-none fixed inset-0 z-0 overflow-hidden" />
+      <div className="relative z-10 mx-auto flex w-full max-w-md flex-col gap-8">
         <div className="text-center">
           <ZenoMark className="justify-center text-lg" />
           <h1 className="mt-8 text-[1.75rem] font-semibold tracking-[-0.01em] text-[var(--zeno-ink)] sm:text-[2rem]">

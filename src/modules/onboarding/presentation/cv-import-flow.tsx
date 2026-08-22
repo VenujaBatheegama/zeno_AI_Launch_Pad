@@ -230,11 +230,16 @@ export function CvImportFlow() {
           <li>{summary.certifications} certifications</li>
         </ul>
         {summary.warnings.length > 0 ? (
-          <div className="mt-6 rounded-[var(--zeno-radius-md)] border border-[color-mix(in_srgb,var(--zeno-warning)_30%,white)] bg-[color-mix(in_srgb,var(--zeno-warning)_8%,white)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--zeno-warning)]">
-              Needs your review
-            </h2>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--zeno-ink-muted)]">
+          <div className="mt-6 rounded-[var(--zeno-radius-md)] border border-[var(--zeno-warning)]/25 bg-[var(--zeno-warning-soft)]/50 p-4 sm:p-5 shadow-[var(--zeno-shadow-sm)]">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 20 20" className="size-4 shrink-0 text-[var(--zeno-warning)]" fill="currentColor">
+                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              <h2 className="text-sm font-semibold text-[var(--zeno-warning)]">
+                Needs your review
+              </h2>
+            </div>
+            <ul className="mt-2.5 list-disc space-y-1.5 pl-5 text-xs sm:text-[13px] leading-relaxed text-[var(--zeno-ink)]/80 marker:text-[var(--zeno-warning)]/70">
               {summary.warnings.slice(0, 6).map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}

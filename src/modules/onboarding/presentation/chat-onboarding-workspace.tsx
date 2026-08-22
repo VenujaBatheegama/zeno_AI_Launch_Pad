@@ -429,18 +429,10 @@ export function ChatOnboardingWorkspace(props: {
           <button
             type="button"
             disabled={busy || progress < 25}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Confirm your career profile?\n\nZeno will use this information to match jobs and create tailored CVs. You can edit it later.",
-                )
-              ) {
-                void verifyProfile();
-              }
-            }}
+            onClick={() => void verifyProfile()}
             className="min-h-[44px] w-full rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[var(--zeno-shadow-sm)] transition hover:opacity-90 disabled:opacity-50"
           >
-            Verify and finish profile
+            {busy ? "Verifying profile…" : "Verify and finish profile"}
           </button>
         </div>
       </aside>

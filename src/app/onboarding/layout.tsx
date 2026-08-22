@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { ZenoMark } from "@/modules/identity/presentation/zeno-mark";
+import { RibbonBackdrop } from "@/modules/product-shell/ui/ribbon-backdrop";
 
 export default function OnboardingLayout({
   children,
@@ -8,8 +6,9 @@ export default function OnboardingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--zeno-bg)]">
-      {children}
+    <div className="relative isolate min-h-screen overflow-hidden bg-[var(--zeno-bg)]">
+      <RibbonBackdrop className="pointer-events-none fixed inset-0 z-0 overflow-hidden" />
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }

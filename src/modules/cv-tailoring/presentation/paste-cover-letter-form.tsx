@@ -112,7 +112,7 @@ export function PasteCoverLetterForm() {
       {error ? (
         <div
           role="alert"
-          className="rounded-[var(--zeno-radius-md)] border border-[color-mix(in_srgb,var(--zeno-danger)_25%,white)] bg-[color-mix(in_srgb,var(--zeno-danger)_8%,white)] p-4 text-sm text-[var(--zeno-danger)]"
+          className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-danger)]/25 bg-[var(--zeno-danger-soft)]/50 p-4 text-sm text-[var(--zeno-danger)]"
         >
           {error}
         </div>

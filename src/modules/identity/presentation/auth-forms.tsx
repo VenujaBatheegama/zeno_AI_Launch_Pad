@@ -56,7 +56,7 @@ function ErrorBanner({ message }: { message: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-[var(--zeno-radius-sm)] border border-[color-mix(in_srgb,var(--zeno-danger)_25%,white)] bg-[color-mix(in_srgb,var(--zeno-danger)_8%,white)] px-3 py-2 text-sm text-[var(--zeno-danger)]"
+      className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-danger)]/25 bg-[var(--zeno-danger-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-danger)]"
     >
       {message}
     </p>
@@ -201,7 +201,7 @@ export function SignUpForm() {
     <form className="space-y-4" onSubmit={onSubmit}>
       <ErrorBanner message={error} />
       {info ? (
-        <p className="rounded-[var(--zeno-radius-sm)] border border-[color-mix(in_srgb,var(--zeno-success)_25%,white)] bg-[color-mix(in_srgb,var(--zeno-success)_8%,white)] px-3 py-2 text-sm text-[var(--zeno-success)]">
+        <p className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-success)]/25 bg-[var(--zeno-success-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-success)]">
           {info}
         </p>
       ) : null}
@@ -273,7 +273,7 @@ export function ForgotPasswordForm() {
     <form className="space-y-4" onSubmit={onSubmit}>
       <ErrorBanner message={error} />
       {info ? (
-        <p className="rounded-[var(--zeno-radius-sm)] border border-[color-mix(in_srgb,var(--zeno-success)_25%,white)] bg-[color-mix(in_srgb,var(--zeno-success)_8%,white)] px-3 py-2 text-sm text-[var(--zeno-success)]">
+        <p className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-success)]/25 bg-[var(--zeno-success-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-success)]">
           {info}
         </p>
       ) : null}

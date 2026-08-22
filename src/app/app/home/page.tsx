@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { CareerCampaignError } from "@/modules/career-campaign/domain/errors";
 import { CareerFriendChat } from "@/modules/career-friend/presentation/career-friend-chat";
 import { HomeGreeting } from "@/modules/product-shell/home-greeting";
-import { RibbonBackdrop } from "@/modules/product-shell/ui/ribbon-backdrop";
 import {
   ActivityStrip,
   type ActivityStat,
@@ -120,10 +119,8 @@ export default async function HomePage() {
     : [];
 
   return (
-    <div className="relative isolate mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center">
-      <RibbonBackdrop />
-
-      <div className="relative z-10 space-y-8">
+    <div className="relative mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center">
+      <div className="space-y-8">
         {migrationGap ? (
           <section
             className="rounded-[var(--zeno-radius-md)] border p-5"
