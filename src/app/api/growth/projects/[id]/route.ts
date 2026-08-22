@@ -95,3 +95,30 @@ export async function PATCH(
     return authErrorResponse(error) ?? errorResponse(error);
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const userId = await requireUserId();
+    const { id } = await context.params;
+    const config = getServerConfig();
+    const supabase = createSupabaseClient(config);
+
+    const { error } = await supabase
+      .from("growth_projects")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("[growth-project] delete error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return authErrorResponse(error) ?? errorResponse(error);
+  }
+}
