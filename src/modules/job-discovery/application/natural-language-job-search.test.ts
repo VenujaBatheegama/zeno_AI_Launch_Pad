@@ -42,6 +42,16 @@ describe("Natural Language Job Search", () => {
       expect(intent.experienceLevels).toContain("entry");
     });
 
+    it("extracts devops role from natural language query", () => {
+      const intent = extractSearchHeuristics(
+        "find junior remote devops jobs",
+      );
+      expect(intent.isJobSearch).toBe(true);
+      expect(intent.roles).toContain("devops");
+      expect(intent.workModes).toContain("remote");
+      expect(intent.experienceLevels).toContain("entry");
+    });
+
     it("handles /jobs command with role query", () => {
       const intent = extractSearchHeuristics("/jobs devops engineer remote");
       expect(intent.isJobSearch).toBe(true);
@@ -149,7 +159,7 @@ describe("Natural Language Job Search", () => {
       });
 
       expect(formatted).toContain("Found 2 opportunities for Remote React Developer:");
-      expect(formatted).toContain("1. Frontend Engineer (React) — TechCorp");
+      expect(formatted).toContain("Frontend Engineer (React) — TechCorp");
       expect(formatted).toContain("📍 Remote, Germany • Remote • Mid");
       expect(formatted).toContain("Matches: React, TypeScript");
       expect(formatted).toContain("https://example.com/apply/1");
@@ -168,9 +178,38 @@ describe("Natural Language Job Search", () => {
   });
 
   describe("executeNaturalLanguageJobSearch", () => {
-    it("executes multi-source search and returns formatted opportunities", async () => {
-      const mockJob: NormalizedExternalJob = {
+    it("executes multi-source search and returns formatted opportunities sorted by recency", async () => {
+      const olderJob: NormalizedExternalJob = {
         external_id: "ext-1",
+        title: "Junior Software Engineer",
+        organization: {
+          name: "Old Corp",
+          logo_url: null,
+          website_url: null,
+        },
+        description: "Hands-on software development with Java.",
+        location: "Colombo, Sri Lanka",
+        city: "Colombo",
+        region: null,
+        country: "Sri Lanka",
+        work_mode: "hybrid",
+        employment_type: "full_time",
+        experience_level: "entry",
+        salary_min: null,
+        salary_max: null,
+        salary_currency: null,
+        salary_period: null,
+        published_at: "2026-08-01T10:00:00.000Z",
+        closing_at: null,
+        publisher: null,
+        source_url: "https://zeno.example/jobs/1",
+        application_url: "https://zeno.example/jobs/1",
+        application_is_direct: true,
+        raw_payload: {},
+      };
+
+      const newerJob: NormalizedExternalJob = {
+        external_id: "ext-2",
         title: "Software Engineer",
         organization: {
           name: "Zeno Labs",
@@ -189,11 +228,11 @@ describe("Natural Language Job Search", () => {
         salary_max: null,
         salary_currency: null,
         salary_period: null,
-        published_at: new Date().toISOString(),
+        published_at: "2026-08-20T10:00:00.000Z",
         closing_at: null,
         publisher: null,
-        source_url: "https://zeno.example/jobs/1",
-        application_url: "https://zeno.example/jobs/1",
+        source_url: "https://zeno.example/jobs/2",
+        application_url: "https://zeno.example/jobs/2",
         application_is_direct: true,
         raw_payload: {},
       };
@@ -201,7 +240,7 @@ describe("Natural Language Job Search", () => {
       const mockSource: JobSource = {
         identity: { key: "mock", name: "Mock Source" },
         search: vi.fn().mockResolvedValue({
-          jobs: [mockJob],
+          jobs: [olderJob, newerJob],
           nextCursor: null,
           partialFailure: false,
         }),
@@ -240,9 +279,11 @@ describe("Natural Language Job Search", () => {
         },
       );
 
-      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs).toHaveLength(2);
+      // Newest job first
+      expect(result.jobs[0]?.external_id).toBe("ext-2");
+      expect(result.jobs[1]?.external_id).toBe("ext-1");
       expect(result.formattedText).toContain("Zeno Labs");
-      expect(result.formattedText).toContain("Software Engineer");
       expect(mockRepo.upsertDiscoveredJobs).toHaveBeenCalled();
     });
   });

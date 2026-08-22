@@ -44,17 +44,20 @@ function InlineContent({ text }: { text: string }) {
     if (before) segments.push(<InlineText key={`t-${lastIndex}`} text={before} />);
 
     const href = match[3] ?? match[5] ?? match[6]!;
-    const label = match[2] ?? href;
+    let label = match[2] ?? href;
+    if (label.startsWith("http://") || label.startsWith("https://")) {
+      label = "View Listing / Apply";
+    }
     segments.push(
       <a
         key={`a-${match.index}`}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 font-medium text-[var(--zeno-primary)] underline-offset-2 hover:underline"
+        className="inline-flex items-center gap-1.5 font-medium text-[var(--zeno-primary)] underline-offset-2 hover:underline bg-[var(--zeno-violet-soft)] px-2.5 py-1 rounded-md text-[12px] transition hover:bg-[var(--zeno-violet-wash)] border border-[var(--zeno-border)]/50"
       >
-        {label}
-        <svg viewBox="0 0 24 24" className="size-3 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2">
+        <span>{label}</span>
+        <svg viewBox="0 0 24 24" className="size-3 shrink-0 opacity-70" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
           <polyline points="15 3 21 3 21 9" />
           <line x1="10" y1="14" x2="21" y2="3" />
@@ -99,40 +102,57 @@ function renderMarkdown(raw: string): React.ReactNode {
 
     const lines = block.split("\n");
 
-    // Numbered list block: starts with "1." or "2." etc.
-    const isNumbered = /^\d+\.\s/.test(lines[0]!);
-    // Bullet list block: starts with "- " or "* "
-    const isBullet = /^[-*]\s/.test(lines[0]!);
-
-    if (isNumbered || isBullet) {
-      const items: React.ReactNode[] = [];
-      for (let li = 0; li < lines.length; li++) {
-        const line = lines[li]!.trim();
-        if (!line) continue;
-        // Strip leading "1. " / "- " / "* "
-        const stripped = line.replace(/^(\d+\.|[-*])\s+/, "");
-        items.push(
-          <li
-            key={li}
-            className="flex gap-3 py-2 border-b border-[var(--zeno-border)] last:border-0"
-          >
-            {isNumbered ? (
-              <span className="shrink-0 flex size-5 items-center justify-center rounded-full bg-[var(--zeno-violet-soft)] text-[10px] font-bold text-[var(--zeno-primary)]">
-                {li + 1}
-              </span>
-            ) : (
-              <span className="shrink-0 mt-[5px] size-1.5 rounded-full bg-[var(--zeno-primary)] opacity-70" />
-            )}
-            <span className="min-w-0 text-[14px] leading-6 text-[var(--zeno-ink)]">
-              <InlineContent text={stripped} />
-            </span>
-          </li>
-        );
-      }
+    // Pure bullet list: each line starts with - or *
+    const isPureBullet = lines.length > 1 && lines.every((l) => /^[-*]\s/.test(l.trim()));
+    if (isPureBullet) {
       nodes.push(
-        <ul key={bi} className={`my-1 space-y-0 ${isNumbered ? "list-none" : "list-none pl-1"}`}>
-          {items}
+        <ul key={bi} className="my-2 space-y-1.5 pl-1">
+          {lines.map((line, li) => {
+            const stripped = line.trim().replace(/^[-*]\s+/, "");
+            return (
+              <li key={li} className="flex items-start gap-2 text-[14px] leading-6 text-[var(--zeno-ink)]">
+                <span className="shrink-0 mt-2.5 size-1.5 rounded-full bg-[var(--zeno-primary)] opacity-80" />
+                <span className="min-w-0">
+                  <InlineContent text={stripped} />
+                </span>
+              </li>
+            );
+          })}
         </ul>
+      );
+      continue;
+    }
+
+    // Multi-line Card / Job block (starts with 1. or has location/link sublines)
+    const isJobOrCard =
+      /^\d+\.\s/.test(lines[0]!) ||
+      lines.some((l) => l.includes("📍") || l.includes("🔗") || l.includes("Matches:"));
+
+    if (isJobOrCard) {
+      nodes.push(
+        <div
+          key={bi}
+          className="my-2 rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)]/60 px-4 py-3 shadow-[var(--zeno-shadow-sm)] transition hover:border-[var(--zeno-border-hover)]"
+        >
+          <div className="space-y-1.5">
+            {lines.map((line, li) => {
+              const cleanLine = line.trim().replace(/^(\d+\.|[-*])\s+/, "");
+              if (!cleanLine) return null;
+              if (li === 0) {
+                return (
+                  <div key={li} className="text-[14px] font-semibold text-[var(--zeno-ink)]">
+                    <InlineContent text={cleanLine} />
+                  </div>
+                );
+              }
+              return (
+                <div key={li} className="text-[13px] leading-relaxed text-[var(--zeno-ink-muted)]">
+                  <InlineContent text={cleanLine} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
       );
       continue;
     }
@@ -141,7 +161,7 @@ function renderMarkdown(raw: string): React.ReactNode {
     if (/^#{1,3}\s/.test(lines[0]!)) {
       const text = lines[0]!.replace(/^#+\s/, "");
       nodes.push(
-        <p key={bi} className="mt-2 mb-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--zeno-ink-muted)]">
+        <p key={bi} className="mt-3 mb-1 text-[13px] font-semibold uppercase tracking-wider text-[var(--zeno-primary-deep)]">
           <InlineContent text={text} />
         </p>
       );
@@ -150,7 +170,7 @@ function renderMarkdown(raw: string): React.ReactNode {
 
     // Horizontal rule
     if (/^---+$/.test(lines[0]!)) {
-      nodes.push(<hr key={bi} className="my-2 border-[var(--zeno-border)]" />);
+      nodes.push(<hr key={bi} className="my-3 border-[var(--zeno-border)]" />);
       continue;
     }
 
@@ -163,7 +183,7 @@ function renderMarkdown(raw: string): React.ReactNode {
     );
   }
 
-  return <div className="space-y-2">{nodes}</div>;
+  return <div className="space-y-2.5">{nodes}</div>;
 }
 
 function safeRenderMarkdown(raw: string): React.ReactNode {

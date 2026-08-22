@@ -93,24 +93,37 @@ export function extractSearchHeuristics(message: string): NaturalSearchIntent {
   // Extract common tech roles / keywords
   const commonRoles = [
     "software engineer",
+    "software developer",
     "frontend developer",
     "frontend engineer",
     "backend developer",
     "backend engineer",
     "full stack developer",
     "full stack engineer",
+    "fullstack developer",
+    "fullstack engineer",
     "mobile developer",
+    "mobile engineer",
     "ios developer",
     "android developer",
     "flutter developer",
     "devops engineer",
+    "devops",
+    "sre",
+    "site reliability engineer",
+    "platform engineer",
     "cloud engineer",
+    "cloud architect",
     "data engineer",
     "data scientist",
+    "data analyst",
     "machine learning engineer",
+    "ml engineer",
     "ai engineer",
     "qa engineer",
     "qa tester",
+    "security engineer",
+    "cybersecurity",
     "ui/ux designer",
     "product designer",
     "product manager",
@@ -122,12 +135,31 @@ export function extractSearchHeuristics(message: string): NaturalSearchIntent {
     "node developer",
     "dotnet developer",
     ".net developer",
+    "golang developer",
+    "go developer",
+    "rust developer",
+    "c++ developer",
+    "embedded engineer",
   ];
 
   const roles: string[] = [];
   for (const role of commonRoles) {
     if (lower.includes(role)) {
       roles.push(role);
+    }
+  }
+
+  // Fallback dynamic role extraction from query text if commonRoles didn't catch it
+  if (roles.length === 0 && isJobSearch) {
+    // Strip intent words, seniority, work modes, locations, and noun suffixes
+    let cleaned = lower
+      .replace(/^(?:find|search|look\s+for|show|get|list|any|give\s+me|who\s+is\s+hiring(?:\s+for)?)\s+/iu, "")
+      .replace(/\b(?:junior|senior|sr\.?|entry|mid|lead|principal|fresh|internship|intern|remote|hybrid|onsite|full\s*time|part\s*time|contract)\b/gi, "")
+      .replace(/\b(?:in|around|at|for)\s+[a-z\s]+/gi, "")
+      .replace(/\b(?:jobs?|roles?|positions?|openings?|vacancies|opportunities)\b/gi, "")
+      .trim();
+    if (cleaned.length >= 2) {
+      roles.push(cleaned);
     }
   }
 
@@ -210,7 +242,7 @@ export async function parseNaturalJobSearchIntent(
           system: `You are a job search intent parser. Extract search parameters from the user's natural language message.
 If the message is not asking to find or search for jobs, set isJobSearch to false.
 Extract:
-- roles: Target job titles (e.g. ["React Developer", "Backend Engineer"])
+- roles: Target job titles (e.g. ["React Developer", "DevOps Engineer"]).
 - locations: Target cities/countries (e.g. ["Germany", "Colombo"]). Do NOT put "remote" in locations.
 - workModes: ["remote", "hybrid", "onsite"]
 - employmentTypes: ["full_time", "part_time", "contract", "internship", "other"]
@@ -246,12 +278,9 @@ Extract:
 export function buildCriteriaFromIntent(
   intent: NaturalSearchIntent,
   fallbackPreferences?: Partial<JobSearchPreferences>,
-  userSkills?: string[],
+  _userSkills?: string[],
 ): JobSearchCriteria {
   let roles = intent.roles.length > 0 ? intent.roles : fallbackPreferences?.roles ?? [];
-  if (roles.length === 0 && userSkills && userSkills.length > 0) {
-    roles = [`${userSkills[0]} Developer`];
-  }
   if (roles.length === 0) {
     roles = ["Software Engineer"];
   }
@@ -305,8 +334,7 @@ export function formatOpportunitiesForChat(input: {
   }
 
   const topJobs = input.jobs.slice(0, 4);
-  const formattedItems = topJobs.map((job, index) => {
-    const num = index + 1;
+  const formattedItems = topJobs.map((job) => {
     const company = job.organization?.name ? ` — ${job.organization.name}` : "";
     const loc =
       job.location ??
@@ -318,7 +346,7 @@ export function formatOpportunitiesForChat(input: {
       ? ` • ${job.experience_level.charAt(0).toUpperCase() + job.experience_level.slice(1)}`
       : "";
 
-    // Find matching skills
+    // Find candidate's matching and transferable strengths
     const snippetLower = `${job.title} ${job.description ?? ""}`.toLowerCase();
     const matchedSkills = (input.userSkills ?? []).filter((skill) =>
       snippetLower.includes(skill.toLowerCase()),
@@ -331,7 +359,7 @@ export function formatOpportunitiesForChat(input: {
     const linkUrl = job.application_url ?? job.source_url;
     const link = linkUrl ? `\n   🔗 ${linkUrl}` : "";
 
-    return `${num}. ${job.title}${company}\n   📍 ${loc}${mode}${exp}${skillHint}${link}`;
+    return `${job.title}${company}\n   📍 ${loc}${mode}${exp}${skillHint}${link}`;
   });
 
   return [
@@ -387,7 +415,13 @@ export async function executeNaturalLanguageJobSearch(
     .join(" ");
 
   const outcome = await searchHybridSources(criteria, dependencies.sources);
-  const jobs = outcome.jobs;
+
+  // Recency-first ordering: newest postings first
+  const jobs = [...outcome.jobs].sort((a, b) => {
+    const timeA = a.published_at ? new Date(a.published_at).getTime() : 0;
+    const timeB = b.published_at ? new Date(b.published_at).getTime() : 0;
+    return timeB - timeA;
+  });
 
   // Save discovered jobs to user's discovery repository
   if (jobs.length > 0) {
