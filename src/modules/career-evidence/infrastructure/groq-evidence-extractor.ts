@@ -23,6 +23,7 @@ import {
   parseRecoveredToolArguments,
   readFailedGeneration,
   salvageEvidencePayload,
+  sanitizeEvidenceInput,
 } from "../domain/recover-failed-tool-generation";
 
 /** Keep prompt + tool schema under free-tier TPM when max output is reserved. */
@@ -222,7 +223,8 @@ export class GroqEvidenceExtractor implements EvidenceExtractor {
       throw new MissingEvidenceToolCallError();
     }
 
-    return extractedCareerEvidenceSchema.parse(call.input);
+    const sanitized = sanitizeEvidenceInput(call.input);
+    return extractedCareerEvidenceSchema.parse(sanitized);
   }
 }
 
@@ -244,11 +246,8 @@ function tryRecoverFromFailedGeneration(
 
   let candidate = salvageEvidencePayload(args);
   for (let drop = 0; drop < 4; drop += 1) {
-    const toolParsed = careerEvidenceToolInputSchema.safeParse(candidate);
-    if (toolParsed.success) {
-      const strict = extractedCareerEvidenceSchema.safeParse(toolParsed.data);
-      if (strict.success) return strict.data;
-    }
+    const strict = extractedCareerEvidenceSchema.safeParse(candidate);
+    if (strict.success) return strict.data;
     candidate = dropTrailingCollectionItem(candidate);
   }
   return null;
