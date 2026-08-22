@@ -1276,16 +1276,49 @@ function createCareerFriendApplication(userId: string) {
 
       const lowerMsg = message.toLowerCase();
 
+      const recentMessages = await repository
+        .listMessages({ userId, conversationId, limit: 6 })
+        .catch(() => []);
+      const lastAssistantMsg = [...recentMessages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      const lastTurnWasCvPrompt = Boolean(
+        lastAssistantMsg?.metadata?.isCv ||
+          lastAssistantMsg?.metadata?.askedDocumentType === "cv" ||
+          (lastAssistantMsg?.content &&
+            /tailor your cv|general cv based on your|give me a cv|send me my cv/iu.test(
+              lastAssistantMsg.content,
+            )),
+      );
+      const lastTurnWasCoverLetterPrompt = Boolean(
+        lastAssistantMsg?.metadata?.isCoverLetter ||
+          lastAssistantMsg?.metadata?.askedDocumentType === "cover_letter" ||
+          (lastAssistantMsg?.content &&
+            /cover letter template|tailor.*cover letter/iu.test(
+              lastAssistantMsg.content,
+            )),
+      );
+
+      const isAffirmativeOrGeneral =
+        /\b(?:general|generic|base|standard|default|profile\s+cv|profile\s+cover\s*letter)\b/iu.test(
+          lowerMsg,
+        ) ||
+        /^(?:yes|sure|ok|okay|yep|yeah|yes\s+please|yes\s+general|general\s+is\s+fine|fine|go\s+ahead|do\s+it|please|send\s+it|where|where\s*\?)\b/iu.test(
+          lowerMsg.trim(),
+        );
+
       const isCoverLetter =
         /(?:write|generate|give|send|create|make|tailor|draft|get\s+a|need\s+a|want\s+a).*(?:cover\s*letter|coverletter)|\b(?:cover\s*letter|coverletter)\b/iu.test(
           lowerMsg,
-        );
+        ) ||
+        (lastTurnWasCoverLetterPrompt && isAffirmativeOrGeneral);
 
       const isCvRequest =
         !isCoverLetter &&
-        /(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv).*(?:cv|resume)|\b(?:my\s+cv|my\s+resume|send\s+cv|download\s+cv)\b/iu.test(
+        (/(?:send|give|download|export|tailor|my\s+cv|my\s+resume|customized\s+cv|customised\s+cv|get\s+a\s+cv|need\s+a\s+cv|want\s+a\s+cv).*(?:cv|resume)|\b(?:my\s+cv|my\s+resume|send\s+cv|download\s+cv|cv|resume)\b/iu.test(
           lowerMsg,
-        );
+        ) ||
+          (lastTurnWasCvPrompt && isAffirmativeOrGeneral));
 
       const isJobSearch =
         isJobSearchMessage(message) && !isCoverLetter && !isCvRequest;
@@ -1346,11 +1379,9 @@ function createCareerFriendApplication(userId: string) {
 
       // Helper to classify request context
       const isGeneralDoc =
+        isAffirmativeOrGeneral ||
         /\b(?:general|generic|base|standard|default|profile\s+cv|profile\s+cover\s*letter)\b/iu.test(
           lowerMsg,
-        ) ||
-        /^(?:yes|sure|ok|okay|yep|yeah|yes\s+please|yes\s+general)\b/iu.test(
-          lowerMsg.trim(),
         );
 
       const hasUrl = /https?:\/\/[^\s]+/iu.test(message);
@@ -1392,17 +1423,15 @@ function createCareerFriendApplication(userId: string) {
         if (hasMultipleRoles) {
           answerText =
             "Cover letters need to be addressed to a specific company and role. Which company and role should this be for? Or would you prefer a general cover letter template?";
-        } else if (!isGeneralDoc && !hasUrl && !isLongDescription && !hasSpecificCompany) {
-          answerText =
-            "Cover letters need to address a specific company and role. Please share the company name, role, or job link you're applying to — or let me know if you'd like a general cover letter template.";
         } else {
           try {
             const coverResult = await campaign.generateCustomCoverLetter({
               jobTitle: extractedInfo.jobTitle || "Software Engineer",
               organizationName: extractedInfo.organizationName ?? undefined,
-              jobDescription: isGeneralDoc
-                ? "General cover letter template highlighting proven track record, core competencies, and career impact."
-                : message,
+              jobDescription:
+                isGeneralDoc || (!hasUrl && !isLongDescription && !hasSpecificCompany)
+                  ? "General cover letter template highlighting proven track record, core competencies, and career impact."
+                  : message,
             });
 
             const coverDraftText = coverResult.draft;
@@ -1477,9 +1506,9 @@ function createCareerFriendApplication(userId: string) {
                 filename: letterFilename,
               };
 
-              if (isGeneralDoc) {
+              if (isGeneralDoc || !coverOrg) {
                 answerText =
-                  "Here is your general cover letter template based on your verified profile, attached below as a PDF. Whenever you have a specific role or company, let me know and I'll tailor it!";
+                  "Here is your general cover letter template based on your profile, attached below as a PDF. Whenever you have a specific role or company, let me know and I'll tailor it!";
               } else {
                 const companySnippet = coverOrg ? ` for ${coverOrg}` : "";
                 answerText = `Here is your tailored cover letter for ${coverJobTitle}${companySnippet}, attached below as a PDF. Let me know if you'd like any tweaks!`;
@@ -1507,7 +1536,7 @@ function createCareerFriendApplication(userId: string) {
           conversationId,
           role: "assistant",
           content: answerText,
-          metadata: { isCoverLetter: true },
+          metadata: { isCoverLetter: true, askedDocumentType: "cover_letter" },
           createdAt: new Date().toISOString(),
         });
 
@@ -1527,14 +1556,10 @@ function createCareerFriendApplication(userId: string) {
         if (hasMultipleRoles) {
           answerText =
             "Which specific role and company would you like this CV tailored for? Please share the job description or link — or let me know if you would prefer a general CV instead.";
-        } else if (!isGeneralDoc && !hasUrl && !isLongDescription && !hasSpecificCompany) {
-          answerText =
-            "No job description or link was provided to tailor your CV. Would you like a general CV based on your verified profile, or would you like to share the job link or description you're applying for?";
         } else {
-          const cvApp = createCvTailoringApplication(userId);
           try {
             const evidenceSet = await evidenceRepository.getCurrent(userId);
-            if (evidenceSet && evidenceSet.status === "verified") {
+            if (evidenceSet && evidenceSet.evidence) {
               const sourceText = await evidenceRepository
                 .getDocumentExtractedText({
                   documentId: evidenceSet.sourceDocumentId,
@@ -1551,6 +1576,7 @@ function createCareerFriendApplication(userId: string) {
               );
               const jobTitle = sanitizeJobTitleForCv(
                 extractedInfo.jobTitle ||
+                  snapshot.profile.headline ||
                   evidenceSet.evidence.work_experience[0]?.role ||
                   "Software Engineer",
               );
@@ -1589,15 +1615,17 @@ function createCareerFriendApplication(userId: string) {
                 filename: cvFilename,
               };
 
-              if (isGeneralDoc) {
-                answerText =
-                  "Here is your general CV based on your verified profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I’ll tailor a targeted version for you!";
+              const isDraft = evidenceSet.status !== "verified";
+              if (isGeneralDoc || (!hasUrl && !isLongDescription && !hasSpecificCompany)) {
+                answerText = isDraft
+                  ? "Here is your CV based on your current profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I'll tailor a targeted version for you!"
+                  : "Here is your general CV based on your verified profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I’ll tailor a targeted version for you!";
               } else {
                 answerText = `Here is your tailored CV for ${jobTitle}, attached below as a PDF. Let me know if you'd like any adjustments!`;
               }
             } else {
               answerText =
-                "To generate your CV, please complete your profile verification first at /onboarding or review your career profile in the app.";
+                "I'd love to generate your CV, but you haven't added your experience yet! Please upload your resume or complete your profile at /onboarding (or /app/career-profile) and I'll generate your CV anytime.";
             }
           } catch {
             answerText =
@@ -1621,7 +1649,7 @@ function createCareerFriendApplication(userId: string) {
           conversationId,
           role: "assistant",
           content: answerText,
-          metadata: { isCv: true },
+          metadata: { isCv: true, askedDocumentType: "cv" },
           createdAt: new Date().toISOString(),
         });
 
