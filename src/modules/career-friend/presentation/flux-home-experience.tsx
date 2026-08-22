@@ -6,13 +6,16 @@ import { Glowing3dOrb } from "./glowing-3d-orb";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-const ACTION_LINKS = {
+const ACTION_LINKS: Record<string, { href: string; label: string }> = {
   view_jobs: { href: "/app/jobs", label: "View jobs & campaigns" },
+  job_search: { href: "/app/jobs", label: "Search jobs" },
   review_recommendations: { href: "/app/recommendations", label: "Review recommendations" },
   start_sprint: { href: "/app/growth", label: "Open growth plan" },
+  growth_sprint: { href: "/app/growth", label: "Open growth plan" },
   update_profile: { href: "/app/career-profile", label: "Update profile" },
   tailor_cv: { href: "/app/cvs", label: "Open CV Hub" },
-} as const;
+  cover_letter: { href: "/app/cvs?tab=cover-letters", label: "Cover Letters" },
+};
 
 const PROMPT_STARTERS = [
   "Find remote senior software engineer opportunities matching my profile",
