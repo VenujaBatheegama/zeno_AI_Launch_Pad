@@ -54,12 +54,54 @@ function SubmitButton(props: { loading: boolean; label: string }) {
 function ErrorBanner({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p
+    <div
       role="alert"
-      className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-danger)]/25 bg-[var(--zeno-danger-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-danger)]"
+      className="flex items-start gap-2.5 rounded-[var(--zeno-radius-sm)] border px-3.5 py-2.5 text-xs sm:text-sm font-medium"
+      style={{
+        backgroundColor: "var(--zeno-danger-soft)",
+        borderColor: "var(--zeno-danger)",
+        color: "var(--zeno-danger)",
+      }}
     >
-      {message}
-    </p>
+      <svg
+        viewBox="0 0 24 24"
+        className="size-4 shrink-0 mt-0.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <p className="flex-1 leading-snug">{message}</p>
+    </div>
+  );
+}
+
+function SuccessBanner({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2.5 rounded-[var(--zeno-radius-sm)] border px-3.5 py-2.5 text-xs sm:text-sm font-medium"
+      style={{
+        backgroundColor: "var(--zeno-success-soft)",
+        borderColor: "var(--zeno-success)",
+        color: "#4ade80",
+      }}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="size-4 shrink-0 mt-0.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+      <p className="flex-1 leading-snug">{message}</p>
+    </div>
   );
 }
 
@@ -200,11 +242,7 @@ export function SignUpForm() {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <ErrorBanner message={error} />
-      {info ? (
-        <p className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-success)]/25 bg-[var(--zeno-success-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-success)]">
-          {info}
-        </p>
-      ) : null}
+      <SuccessBanner message={info} />
       <Field
         id="displayName"
         label="Display name"
@@ -272,11 +310,7 @@ export function ForgotPasswordForm() {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <ErrorBanner message={error} />
-      {info ? (
-        <p className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-success)]/25 bg-[var(--zeno-success-soft)]/50 px-3 py-2 text-sm text-[var(--zeno-success)]">
-          {info}
-        </p>
-      ) : null}
+      <SuccessBanner message={info} />
       <Field
         id="email"
         label="Email"
