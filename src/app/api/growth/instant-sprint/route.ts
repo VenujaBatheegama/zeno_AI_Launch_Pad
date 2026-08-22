@@ -10,6 +10,22 @@ export const dynamic = "force-dynamic";
 const instantSprintSchema = z.object({
   targetRole: z.string().trim().optional(),
   weeklyHours: z.number().min(2).max(20).default(5),
+  selectedIdea: z
+    .object({
+      title: z.string(),
+      tagline: z.string(),
+      marketAdvantage: z.string().optional(),
+      technologies: z.array(z.string()).optional(),
+      milestones: z.array(
+        z.object({
+          title: z.string(),
+          description: z.string().optional(),
+          week: z.number().optional(),
+        }),
+      ),
+      expectedEvidence: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 const PRESET_SPRINTS: Record<
@@ -82,14 +98,24 @@ export async function POST(request: Request) {
   }
 
   const parsed = instantSprintSchema.safeParse(body);
-  const input = parsed.success ? parsed.data : { targetRole: "Full Stack Engineer", weeklyHours: 5 };
+  const input = parsed.success ? parsed.data : { targetRole: "Software Engineer", weeklyHours: 5 };
 
-  const roleLower = (input.targetRole ?? "software engineer").toLowerCase();
-  let sprintTemplate = PRESET_SPRINTS.fullstack!;
-  if (roleLower.includes("devops") || roleLower.includes("cloud") || roleLower.includes("sre") || roleLower.includes("infra")) {
-    sprintTemplate = PRESET_SPRINTS.devops!;
-  } else if (roleLower.includes("ai") || roleLower.includes("machine learning") || roleLower.includes("ml") || roleLower.includes("data")) {
-    sprintTemplate = PRESET_SPRINTS.ai!;
+  let sprintTemplate = {
+    title: input.selectedIdea?.title ?? "Full-Stack Project Sprint",
+    objective: input.selectedIdea?.tagline ?? "Production-ready engineering project for portfolio.",
+    milestones: input.selectedIdea?.milestones.map((m) => m.title) ?? [],
+    expectedEvidence: input.selectedIdea?.expectedEvidence ?? ["Public GitHub repository with documentation"],
+  };
+
+  if (!input.selectedIdea || sprintTemplate.milestones.length === 0) {
+    const roleLower = (input.targetRole ?? "software engineer").toLowerCase();
+    let fallback = PRESET_SPRINTS.fullstack!;
+    if (roleLower.includes("devops") || roleLower.includes("cloud") || roleLower.includes("sre") || roleLower.includes("infra")) {
+      fallback = PRESET_SPRINTS.devops!;
+    } else if (roleLower.includes("ai") || roleLower.includes("machine learning") || roleLower.includes("ml") || roleLower.includes("data")) {
+      fallback = PRESET_SPRINTS.ai!;
+    }
+    sprintTemplate = fallback;
   }
 
   const config = getServerConfig();
@@ -116,13 +142,33 @@ export async function POST(request: Request) {
       campaignId = existingCampaign.id;
     } else {
       campaignId = crypto.randomUUID();
+      const canonicalSearchId = crypto.randomUUID();
+
+      await supabase.from("canonical_job_searches").insert({
+        id: canonicalSearchId,
+        normalized_role: input.targetRole || "Software Engineer",
+        normalized_location: "Remote",
+        work_mode: "remote",
+        employment_types: ["full_time"],
+        experience_levels: ["mid"],
+        fingerprint: `instant-${canonicalSearchId}`,
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+
       await supabase.from("job_search_campaigns").insert({
         id: campaignId,
         user_id: userId,
         name: input.targetRole || "Career Growth Campaign",
         status: "active",
-        strategy: "focused",
-        daily_target: 3,
+        primary_role: input.targetRole || "Software Engineer",
+        location: "Remote",
+        work_mode: "remote",
+        employment_types: ["full_time"],
+        experience_levels: ["mid"],
+        minimum_score: 55,
+        criteria_version: 1,
+        canonical_search_id: canonicalSearchId,
         created_at: nowIso,
         updated_at: nowIso,
       });
