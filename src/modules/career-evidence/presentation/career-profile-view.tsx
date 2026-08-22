@@ -240,11 +240,15 @@ function ProfileOverview({
       const updated = body as CareerEvidenceSet;
       dirtyRef.current = false;
       evidenceRef.current = updated.evidence;
-      setEvidence(updated.evidence);
+      // Do not overwrite local evidence state with server snapshot while the user is actively typing in an open card
+      if (!editingId) {
+        setEvidence(updated.evidence);
+      }
       if (action === "verify" || updated.status === "verified") {
         setConfirmations(
           buildInitialConfirmations(updated.evidence, true),
         );
+        setEditingId(null);
       } else {
         setConfirmations((current) =>
           mergeConfirmations(current, updated.evidence),
@@ -258,7 +262,6 @@ function ProfileOverview({
             : "Draft saved.",
         );
       }
-      setEditingId(null);
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -279,7 +282,7 @@ function ProfileOverview({
     if (!dirtyRef.current) return;
     const timer = window.setTimeout(() => {
       autosaveDraft();
-    }, 700);
+    }, 1500);
     return () => window.clearTimeout(timer);
   }, [evidence]);
 
@@ -1457,17 +1460,37 @@ function ProfileOverview({
               type="button"
               disabled={isSaving}
               onClick={() => void persist("verify")}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--zeno-primary)] px-6 text-[14px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--zeno-primary)] px-6 text-[14px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-60"
             >
-              {isSaving ? "Verifying profile…" : "Verify and finish profile"}
+              {isSaving ? (
+                <>
+                  <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>Verifying profile…</span>
+                </>
+              ) : (
+                "Verify and finish profile"
+              )}
             </button>
             <button
               type="button"
               disabled={isSaving}
               onClick={() => void persist("save")}
-              className="inline-flex h-10 items-center rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 text-[13px] font-semibold text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] transition disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 text-[13px] font-semibold text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] transition disabled:opacity-60"
             >
-              {isSaving ? "Saving…" : "Save draft"}
+              {isSaving ? (
+                <>
+                  <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>Saving…</span>
+                </>
+              ) : (
+                "Save draft"
+              )}
             </button>
           </>
         ) : (
@@ -1477,23 +1500,50 @@ function ProfileOverview({
                 type="button"
                 disabled={isSaving}
                 onClick={() => void persist("verify")}
-                className="inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-[8px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-60"
               >
-                {isSaving ? "Verifying…" : "Verify profile"}
+                {isSaving ? (
+                  <>
+                    <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    <span>Verifying…</span>
+                  </>
+                ) : (
+                  "Verify profile"
+                )}
               </button>
             ) : null}
             <button
               type="button"
               disabled={isSaving}
               onClick={() => void persist("save")}
-              className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] font-semibold text-[var(--zeno-ink)] hover:border-[var(--zeno-border-hover)] disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] font-semibold text-[var(--zeno-ink)] hover:border-[var(--zeno-border-hover)] disabled:opacity-60 transition"
             >
-              {isSaving ? "Saving…" : isVerified ? "Save changes" : "Save draft"}
+              {isSaving ? (
+                <>
+                  <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>Saving…</span>
+                </>
+              ) : isVerified ? (
+                "Save changes"
+              ) : (
+                "Save draft"
+              )}
             </button>
           </>
         )}
 
-        {message ? (
+        {isSaving ? (
+          <span className="flex items-center gap-1.5 text-xs text-[var(--zeno-ink-muted)]">
+            <span className="size-1.5 animate-ping rounded-full bg-[var(--zeno-primary)]" />
+            Syncing…
+          </span>
+        ) : message ? (
           <span className="text-xs text-[var(--zeno-ink-muted)]">{message}</span>
         ) : null}
 
