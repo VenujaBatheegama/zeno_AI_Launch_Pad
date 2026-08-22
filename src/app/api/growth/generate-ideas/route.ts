@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   const supabase = createSupabaseClient(config);
   const evidenceRepo = new SupabaseEvidenceRepository(supabase);
 
-  // Fetch verified profile evidence
+  // Fetch verified profile evidence & previous growth projects
   const evidenceRecord = await evidenceRepo.getCurrent(userId).catch(() => null);
   const profileSkills = evidenceRecord?.evidence?.skills?.map((s) => s.name) ?? [];
   const profileExperiences =
@@ -75,12 +75,29 @@ export async function POST(request: Request) {
       (w) => `${w.role} at ${w.employer}`,
     ) ?? [];
 
+  const { data: userGrowthProjects } = await supabase
+    .from("growth_projects")
+    .select("title, objective, status")
+    .eq("user_id", userId);
+
+  const completedOrExistingTitles = [
+    ...(evidenceRecord?.evidence?.projects?.map((p) => p.name) ?? []),
+    ...(userGrowthProjects ?? []).map((p) => p.title),
+  ];
+  const excludedList = Array.from(
+    new Set(completedOrExistingTitles.map((t) => t.trim()).filter(Boolean)),
+  );
+
   const keyPool = getGroqKeyPool();
   const prompt = `Candidate Background:
 - Verified Skills: ${profileSkills.length > 0 ? profileSkills.join(", ") : "General programming fundamentals"}
 - Recent Experience: ${profileExperiences.length > 0 ? profileExperiences.join("; ") : "Software engineering background"}
 - Desired Target Role: "${targetRole}"
-- Planned Time Commitment: ${weeklyHours} hours/week (4-week total sprint: ~${weeklyHours * 4} hours)
+- Planned Time Commitment: ${weeklyHours} hours/week (4-week total sprint: ~${weeklyHours * 4} hours)${
+    excludedList.length > 0
+      ? `\n\nALREADY COMPLETED / PREVIOUS PROJECTS (DO NOT RE-RECOMMEND OR DUPLICATE):\n${excludedList.map((t) => `* "${t}"`).join("\n")}\n\nSTRICT CONSTRAINT: The candidate has ALREADY completed/initiated the projects listed above. Do NOT suggest identical or closely overlapping projects. Propose 3 fresh, distinct, and complementary engineering projects for "${targetRole}".`
+      : ""
+  }
 
 Task:
 Analyze the current industry hiring market for "${targetRole}". Identify 3 distinct, modern, production-grade project ideas that will bridge the candidate's skill gaps and make their CV immediately stand out to hiring managers.
@@ -97,7 +114,7 @@ Provide exactly 3 distinct project ideas with 4 chronological milestones each.`;
           maxOutputTokens: 1200,
           output: Output.object({ schema: ideasResponseSchema }),
           system: `You are an elite principal engineer and technical hiring manager. You design high-impact portfolio projects that prove real engineering depth on a candidate's CV.
-Focus on modern toolchains (e.g., Docker, Kubernetes, Terraform, Prometheus, Vector DBs, Kafka, TypeScript, Next.js, Go) that hiring managers actively look for.`,
+Focus on modern toolchains (e.g., Docker, Kubernetes, Terraform, Prometheus, Vector DBs, Kafka, TypeScript, Next.js, Go) that hiring managers actively look for. Never repeat previously completed candidate projects.`,
           prompt,
         });
         return output;
@@ -113,117 +130,128 @@ Focus on modern toolchains (e.g., Docker, Kubernetes, Terraform, Prometheus, Vec
   }
 
   // Curated fallback blueprints if LLM is temporarily unavailable
-  const fallbackIdeas = getCuratedFallbackIdeas(targetRole);
+  const fallbackIdeas = getCuratedFallbackIdeas(targetRole, excludedList);
   return NextResponse.json({ ideas: fallbackIdeas });
 }
 
-function getCuratedFallbackIdeas(targetRole: string): GeneratedProjectIdea[] {
+function getCuratedFallbackIdeas(
+  targetRole: string,
+  excludedTitles: string[] = [],
+): GeneratedProjectIdea[] {
   const lower = targetRole.toLowerCase();
+  const lowerExcluded = new Set(excludedTitles.map((t) => t.toLowerCase().trim()));
 
-  if (lower.includes("devops") || lower.includes("cloud") || lower.includes("sre") || lower.includes("infra")) {
-    return [
-      {
-        id: "idea_1",
-        title: "Multi-Region Cloud Infrastructure & CI/CD Pipeline",
-        category: "Cloud & Infrastructure as Code",
-        tagline: "Automated container orchestration with Terraform, GitHub Actions, and multi-stage Docker builds.",
-        marketAdvantage: "Demonstrates production cloud provisioning and immutable deployment pipelines.",
-        technologies: ["Terraform", "Docker", "AWS/GCP", "GitHub Actions", "Nginx"],
-        milestones: [
-          { week: 1, title: "Containerization & Multi-Stage Docker", description: "Package services with optimized, secure alpine container images." },
-          { week: 2, title: "Terraform Infrastructure as Code", description: "Write modular Terraform scripts provisioning VPC, subnets, and cloud clusters." },
-          { week: 3, title: "Automated CI/CD Pipeline", description: "Build GitHub Actions workflow for linting, security scans, and auto-deployments." },
-          { week: 4, title: "TLS & Reverse Proxy Configuration", description: "Configure automated SSL certificates and reverse proxy routing." },
-        ],
-        expectedEvidence: ["GitHub repository with Terraform modules and active CI/CD badges", "Live deployed cloud endpoint"],
-      },
-      {
-        id: "idea_2",
-        title: "Observability & Incident Telemetry Cluster",
-        category: "Site Reliability & Monitoring",
-        tagline: "Centralized Prometheus, Grafana, and OpenTelemetry logging pipeline with automated alerts.",
-        marketAdvantage: "Proves you know how to operate, debug, and monitor production systems at scale.",
-        technologies: ["Prometheus", "Grafana", "OpenTelemetry", "Loki", "Alertmanager"],
-        milestones: [
-          { week: 1, title: "OpenTelemetry Instrumentation", description: "Instrument services to emit traces, RED metrics, and structured logs." },
-          { week: 2, title: "Prometheus Metric Collection", description: "Deploy Prometheus scrapers and configure service discovery." },
-          { week: 3, title: "Grafana Dashboard Suite", description: "Build real-time dashboards monitoring p99 latency, error rates, and CPU load." },
-          { week: 4, title: "Alerting & On-Call Simulation", description: "Configure threshold alerts with webhooks and simulate incident remediation." },
-        ],
-        expectedEvidence: ["Public repo with dashboard JSON definitions and alert configuration", "Live monitoring demo dashboard"],
-      },
-      {
-        id: "idea_3",
-        title: "Zero-Downtime Blue/Green Deployment Gateway",
-        category: "Release Engineering & Networking",
-        tagline: "Traffic shifting reverse-proxy supporting canary releases and instant rollback triggers.",
-        marketAdvantage: "Direct proof of progressive delivery and high-availability traffic routing.",
-        technologies: ["Go", "Envoy/Traefik", "Docker Compose", "Bash/Python"],
-        milestones: [
-          { week: 1, title: "Gateway Architecture & Reverse Proxy", description: "Implement dynamic traffic routing proxy." },
-          { week: 2, title: "Canary Percentage Shifting", description: "Support weighted traffic splits between v1 and v2 deployments." },
-          { week: 3, title: "Automated Health-Check Rollbacks", description: "Trigger instant rollbacks when HTTP 5xx error rate exceeds 1%." },
-          { week: 4, title: "Benchmark & Load Testing", description: "Execute wrk/k6 load test proving zero-downtime under heavy traffic." },
-        ],
-        expectedEvidence: ["GitHub repository with load test results and deployment demonstration"],
-      },
-    ];
-  }
-
-  if (lower.includes("ai") || lower.includes("ml") || lower.includes("machine learning") || lower.includes("data")) {
-    return [
-      {
-        id: "idea_1",
-        title: "Multi-Agent Research Assistant with Vector Retrieval",
-        category: "Generative AI & Agentic Systems",
-        tagline: "Autonomous multi-step research agent using vector embeddings, semantic chunking, and tool calling.",
-        marketAdvantage: "Shows real-world proficiency with agentic workflows and retrieval-augmented generation.",
-        technologies: ["Python", "LangChain/LlamaIndex", "Qdrant/Pinecone", "Groq/OpenAI", "FastAPI"],
-        milestones: [
-          { week: 1, title: "Vector Embedding Pipeline", description: "Chunk and ingest domain documents into a vector database." },
-          { week: 2, title: "Structured Tool Calling", description: "Implement agent tools for search, document summarization, and data extraction." },
-          { week: 3, title: "Evaluation Harness", description: "Measure retrieval precision, answer relevancy, and hallucination rates." },
-          { week: 4, title: "FastAPI & Streaming UI", description: "Expose SSE streaming endpoint with token usage tracking and responsive UI." },
-        ],
-        expectedEvidence: ["Public GitHub repository with evaluation benchmarks and live demo"],
-      },
-      {
-        id: "idea_2",
-        title: "Semantic Code Search & Refactoring Engine",
-        category: "Developer Tools & NLP",
-        tagline: "Natural-language codebase indexer that finds syntax patterns and generates context-aware diffs.",
-        marketAdvantage: "Demonstrates practical AI tooling engineering and AST parsing capabilities.",
-        technologies: ["TypeScript", "Tree-sitter", "Vector Embeddings", "Next.js"],
-        milestones: [
-          { week: 1, title: "AST & Code Parsing", description: "Extract functions, classes, and comments using Tree-sitter." },
-          { week: 2, title: "Hybrid Code Search", description: "Combine BM25 keyword search with dense vector embeddings." },
-          { week: 3, title: "AI Diff Generation", description: "Generate precise unified diffs for refactoring requests." },
-          { week: 4, title: "Web UI & Benchmark Suite", description: "Build split-diff viewer with syntax highlighting and latency benchmarks." },
-        ],
-        expectedEvidence: ["GitHub repository with full documentation and benchmark suite"],
-      },
-      {
-        id: "idea_3",
-        title: "Real-Time Streaming Event Anomaly Detector",
-        category: "Machine Learning & Stream Processing",
-        tagline: "Low-latency anomaly classification for streaming time-series data with automated alerting.",
-        marketAdvantage: "Demonstrates production ML serving and low-latency feature pipelines.",
-        technologies: ["Python", "FastAPI", "Redis", "Scikit-Learn/PyTorch", "Docker"],
-        milestones: [
-          { week: 1, title: "Time-Series Ingestion & Windowing", description: "Build streaming data generator and sliding window feature extractor." },
-          { week: 2, title: "Model Training & Quantization", description: "Train isolation forest / autoencoder and optimize for <10ms inference." },
-          { week: 3, title: "Real-Time Serving Pipeline", description: "Deploy model behind FastAPI with Redis pub/sub queue." },
-          { week: 4, title: "Live Dashboard & Alerting", description: "Visualize anomaly scores and emit webhook notifications." },
-        ],
-        expectedEvidence: ["GitHub repository with test coverage, Dockerfile, and performance metrics"],
-      },
-    ];
-  }
-
-  // Default Full-Stack / Software Engineering
-  return [
+  const allPresets: GeneratedProjectIdea[] = [
+    // DevOps presets
     {
-      id: "idea_1",
+      id: "idea_devops_1",
+      title: "Multi-Region Cloud Infrastructure & CI/CD Pipeline",
+      category: "Cloud & Infrastructure as Code",
+      tagline: "Automated container orchestration with Terraform, GitHub Actions, and multi-stage Docker builds.",
+      marketAdvantage: "Demonstrates production cloud provisioning and immutable deployment pipelines.",
+      technologies: ["Terraform", "Docker", "AWS/GCP", "GitHub Actions", "Nginx"],
+      milestones: [
+        { week: 1, title: "Containerization & Multi-Stage Docker", description: "Package services with optimized, secure alpine container images." },
+        { week: 2, title: "Terraform Infrastructure as Code", description: "Write modular Terraform scripts provisioning VPC, subnets, and cloud clusters." },
+        { week: 3, title: "Automated CI/CD Pipeline", description: "Build GitHub Actions workflow for linting, security scans, and auto-deployments." },
+        { week: 4, title: "TLS & Reverse Proxy Configuration", description: "Configure automated SSL certificates and reverse proxy routing." },
+      ],
+      expectedEvidence: ["GitHub repository with Terraform modules and active CI/CD badges", "Live deployed cloud endpoint"],
+    },
+    {
+      id: "idea_devops_2",
+      title: "Observability & Incident Telemetry Cluster",
+      category: "Site Reliability & Monitoring",
+      tagline: "Centralized Prometheus, Grafana, and OpenTelemetry logging pipeline with automated alerts.",
+      marketAdvantage: "Proves you know how to operate, debug, and monitor production systems at scale.",
+      technologies: ["Prometheus", "Grafana", "OpenTelemetry", "Loki", "Alertmanager"],
+      milestones: [
+        { week: 1, title: "OpenTelemetry Instrumentation", description: "Instrument services to emit traces, RED metrics, and structured logs." },
+        { week: 2, title: "Prometheus Metric Collection", description: "Deploy Prometheus scrapers and configure service discovery." },
+        { week: 3, title: "Grafana Dashboard Suite", description: "Build real-time dashboards monitoring p99 latency, error rates, and CPU load." },
+        { week: 4, title: "Alerting & On-Call Simulation", description: "Configure threshold alerts with webhooks and simulate incident remediation." },
+      ],
+      expectedEvidence: ["Public repo with dashboard JSON definitions and alert configuration", "Live monitoring demo dashboard"],
+    },
+    {
+      id: "idea_devops_3",
+      title: "Zero-Downtime Blue/Green Deployment Gateway",
+      category: "Release Engineering & Networking",
+      tagline: "Traffic shifting reverse-proxy supporting canary releases and instant rollback triggers.",
+      marketAdvantage: "Direct proof of progressive delivery and high-availability traffic routing.",
+      technologies: ["Go", "Envoy/Traefik", "Docker Compose", "Bash/Python"],
+      milestones: [
+        { week: 1, title: "Gateway Architecture & Reverse Proxy", description: "Implement dynamic traffic routing proxy." },
+        { week: 2, title: "Canary Percentage Shifting", description: "Support weighted traffic splits between v1 and v2 deployments." },
+        { week: 3, title: "Automated Health-Check Rollbacks", description: "Trigger instant rollbacks when HTTP 5xx error rate exceeds 1%." },
+        { week: 4, title: "Benchmark & Load Testing", description: "Execute wrk/k6 load test proving zero-downtime under heavy traffic." },
+      ],
+      expectedEvidence: ["GitHub repository with load test results and deployment demonstration"],
+    },
+    {
+      id: "idea_devops_4",
+      title: "Kubernetes GitOps Operator & Cluster Secrets Sync",
+      category: "Kubernetes & Cloud Security",
+      tagline: "Declarative cluster reconciliation with ArgoCD, sealed secrets, and custom Helm charts.",
+      marketAdvantage: "Shows enterprise-grade cloud native deployment automation and security posture.",
+      technologies: ["Kubernetes", "Helm", "ArgoCD", "Vault/SealedSecrets", "Go"],
+      milestones: [
+        { week: 1, title: "Cluster Definition & Helm Packaging", description: "Package microservices with parameterized Helm charts." },
+        { week: 2, title: "ArgoCD GitOps Pipeline", description: "Configure automated sync hooks and rollback policies on git commit." },
+        { week: 3, title: "Secret Encryption at Rest", description: "Deploy automated sealed secrets controller and RBAC policies." },
+        { week: 4, title: "Cluster Disaster Recovery Test", description: "Simulate namespace wipe and verify automated state recovery." },
+      ],
+      expectedEvidence: ["GitOps repository with automated reconciliation verified by CI/CD"],
+    },
+    // AI / ML presets
+    {
+      id: "idea_ai_1",
+      title: "Multi-Agent Research Assistant with Vector Retrieval",
+      category: "Generative AI & Agentic Systems",
+      tagline: "Autonomous multi-step research agent using vector embeddings, semantic chunking, and tool calling.",
+      marketAdvantage: "Shows real-world proficiency with agentic workflows and retrieval-augmented generation.",
+      technologies: ["Python", "LangChain/LlamaIndex", "Qdrant/Pinecone", "Groq/OpenAI", "FastAPI"],
+      milestones: [
+        { week: 1, title: "Vector Embedding Pipeline", description: "Chunk and ingest domain documents into a vector database." },
+        { week: 2, title: "Structured Tool Calling", description: "Implement agent tools for search, document summarization, and data extraction." },
+        { week: 3, title: "Evaluation Harness", description: "Measure retrieval precision, answer relevancy, and hallucination rates." },
+        { week: 4, title: "FastAPI & Streaming UI", description: "Expose SSE streaming endpoint with token usage tracking and responsive UI." },
+      ],
+      expectedEvidence: ["Public GitHub repository with evaluation benchmarks and live demo"],
+    },
+    {
+      id: "idea_ai_2",
+      title: "Semantic Code Search & Refactoring Engine",
+      category: "Developer Tools & NLP",
+      tagline: "Natural-language codebase indexer that finds syntax patterns and generates context-aware diffs.",
+      marketAdvantage: "Demonstrates practical AI tooling engineering and AST parsing capabilities.",
+      technologies: ["TypeScript", "Tree-sitter", "Vector Embeddings", "Next.js"],
+      milestones: [
+        { week: 1, title: "AST & Code Parsing", description: "Extract functions, classes, and comments using Tree-sitter." },
+        { week: 2, title: "Hybrid Code Search", description: "Combine BM25 keyword search with dense vector embeddings." },
+        { week: 3, title: "AI Diff Generation", description: "Generate precise unified diffs for refactoring requests." },
+        { week: 4, title: "Web UI & Benchmark Suite", description: "Build split-diff viewer with syntax highlighting and latency benchmarks." },
+      ],
+      expectedEvidence: ["GitHub repository with full documentation and benchmark suite"],
+    },
+    {
+      id: "idea_ai_3",
+      title: "Real-Time Streaming Event Anomaly Detector",
+      category: "Machine Learning & Stream Processing",
+      tagline: "Low-latency anomaly classification for streaming time-series data with automated alerting.",
+      marketAdvantage: "Demonstrates production ML serving and low-latency feature pipelines.",
+      technologies: ["Python", "FastAPI", "Redis", "Scikit-Learn/PyTorch", "Docker"],
+      milestones: [
+        { week: 1, title: "Time-Series Ingestion & Windowing", description: "Build streaming data generator and sliding window feature extractor." },
+        { week: 2, title: "Model Training & Quantization", description: "Train isolation forest / autoencoder and optimize for <10ms inference." },
+        { week: 3, title: "Real-Time Serving Pipeline", description: "Deploy model behind FastAPI with Redis pub/sub queue." },
+        { week: 4, title: "Live Dashboard & Alerting", description: "Visualize anomaly scores and emit webhook notifications." },
+      ],
+      expectedEvidence: ["GitHub repository with test coverage, Dockerfile, and performance metrics"],
+    },
+    // Full-stack / SWE presets
+    {
+      id: "idea_swe_1",
       title: "Real-Time Collaborative Workspace with CRDT Sync",
       category: "Full-Stack & Distributed State",
       tagline: "Conflict-free real-time document editor with presence indicators and offline sync.",
@@ -238,7 +266,7 @@ function getCuratedFallbackIdeas(targetRole: string): GeneratedProjectIdea[] {
       expectedEvidence: ["Public GitHub repository with automated test suite and live URL"],
     },
     {
-      id: "idea_2",
+      id: "idea_swe_2",
       title: "High-Throughput Webhook Delivery & Retry Engine",
       category: "Backend Systems & Reliability",
       tagline: "Resilient asynchronous webhook dispatcher with exponential backoff, rate limiting, and signature verification.",
@@ -253,7 +281,7 @@ function getCuratedFallbackIdeas(targetRole: string): GeneratedProjectIdea[] {
       expectedEvidence: ["GitHub repository with load test benchmarks and documentation"],
     },
     {
-      id: "idea_3",
+      id: "idea_swe_3",
       title: "Self-Hosted API Gateway & Rate Limiter",
       category: "API Architecture & Security",
       tagline: "Reverse-proxy API gateway featuring token bucket rate-limiting, JWT authentication, and request caching.",
@@ -268,4 +296,24 @@ function getCuratedFallbackIdeas(targetRole: string): GeneratedProjectIdea[] {
       expectedEvidence: ["GitHub repository with automated integration test suite"],
     },
   ];
+
+  // Pick category relevant presets first
+  let candidates: GeneratedProjectIdea[] = [];
+  if (lower.includes("devops") || lower.includes("cloud") || lower.includes("sre") || lower.includes("infra")) {
+    candidates = allPresets.filter((p) => p.id.startsWith("idea_devops_"));
+  } else if (lower.includes("ai") || lower.includes("ml") || lower.includes("machine learning") || lower.includes("data")) {
+    candidates = allPresets.filter((p) => p.id.startsWith("idea_ai_"));
+  } else {
+    candidates = allPresets.filter((p) => p.id.startsWith("idea_swe_"));
+  }
+
+  // Filter out any already completed/existing titles
+  const available = candidates.filter((p) => !lowerExcluded.has(p.title.toLowerCase().trim()));
+  if (available.length >= 3) return available.slice(0, 3);
+
+  // If filtered pool is under 3, fill from remaining uncompleted general presets
+  const remaining = allPresets.filter(
+    (p) => !lowerExcluded.has(p.title.toLowerCase().trim()) && !available.some((a) => a.id === p.id),
+  );
+  return [...available, ...remaining].slice(0, 3);
 }
