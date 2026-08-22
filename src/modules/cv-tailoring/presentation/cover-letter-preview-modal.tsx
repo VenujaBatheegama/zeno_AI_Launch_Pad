@@ -152,6 +152,7 @@ export function CoverLetterPreviewModal({
         filename = `Cover_Letter_${roleSlug}.pdf`;
       }
 
+      a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
