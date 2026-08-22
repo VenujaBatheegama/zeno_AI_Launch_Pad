@@ -72,11 +72,15 @@ export function ApplicationPacketView(props: {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em]">
-          Application packet
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--zeno-primary-deep)]">
+          <span>🚀 Ready-to-Apply Kit</span>
+        </div>
+        <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em] text-[var(--zeno-ink)] mt-1">
+          {fit?.title ?? "Application Kit"}
+          {fit?.organizationName ? ` at ${fit.organizationName}` : ""}
         </h1>
         <p className="mt-1 text-sm text-[var(--zeno-ink-muted)]">
-          Status: {props.packet.status}
+          Status: {props.packet.status === "ready" ? "Ready to Submit" : props.packet.status}
           {props.packet.failureMessage
             ? ` — ${props.packet.failureMessage}`
             : ""}
@@ -90,7 +94,7 @@ export function ApplicationPacketView(props: {
       ) : null}
 
       <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
-        <h2 className="text-base font-semibold">Why this job</h2>
+        <h2 className="text-base font-semibold">Why this job & Key Talking Points</h2>
         <p className="mt-2 text-sm leading-6">
           {fit?.explanation ?? "Fit explanation unavailable."}
         </p>
@@ -102,14 +106,16 @@ export function ApplicationPacketView(props: {
       </section>
 
       <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
-        <h2 className="text-base font-semibold">Tailored CV</h2>
+        <h2 className="text-base font-semibold">1. Tailored CV</h2>
         {props.cvHref ? (
-          <Link
-            href={props.cvHref}
-            className="mt-2 inline-flex text-sm font-semibold text-[var(--zeno-primary)]"
-          >
-            Open editable CV
-          </Link>
+          <div className="mt-2">
+            <Link
+              href={props.cvHref}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--zeno-primary)] hover:underline"
+            >
+              <span>Open & Edit Tailored CV ↗</span>
+            </Link>
+          </div>
         ) : (
           <p className="mt-2 text-sm text-[var(--zeno-ink-muted)]">
             CV not ready yet.
@@ -118,35 +124,36 @@ export function ApplicationPacketView(props: {
       </section>
 
       <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
-        <h2 className="text-base font-semibold">Cover letter draft</h2>
-        <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--zeno-ink)]">
+        <h2 className="text-base font-semibold">2. Custom Cover Letter Draft</h2>
+        <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--zeno-ink)] font-sans">
           {props.packet.coverLetterDraft ?? "No draft yet."}
         </pre>
       </section>
 
       <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5">
-        <h2 className="text-base font-semibold">Apply externally</h2>
+        <h2 className="text-base font-semibold">3. Apply Externally</h2>
         {props.packet.applicationUrl ? (
-          <a
-            href={props.packet.applicationUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex text-sm font-semibold text-[var(--zeno-primary)]"
-          >
-            Open application link
-          </a>
+          <div className="mt-2">
+            <a
+              href={props.packet.applicationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition"
+            >
+              <span>Open Employer Portal & Apply ↗</span>
+            </a>
+          </div>
         ) : (
           <p className="mt-2 text-sm text-[var(--zeno-ink-muted)]">
-            No application URL captured for this listing.
+            No external application URL captured for this listing.
           </p>
         )}
-        <p className="mt-2 text-xs text-[var(--zeno-ink-faint)]">
-          Zeno does not submit applications for you. After you apply on the
-          employer site, mark it applied here.
+        <p className="mt-3 text-xs text-[var(--zeno-ink-faint)]">
+          Zeno prepares your kit for you to submit. After you apply on the employer portal, click "Confirm I Applied" below to track it in your active pipeline.
         </p>
       </section>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 pt-2">
         {props.packet.status === "failed" ||
         props.packet.status === "requested" ||
         props.packet.status === "preparing" ? (
@@ -162,10 +169,10 @@ export function ApplicationPacketView(props: {
                   className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
                   aria-hidden
                 />
-                Preparing packet…
+                Preparing Application Kit…
               </>
             ) : (
-              "Prepare / retry packet"
+              "Prepare / Retry Application Kit"
             )}
           </button>
         ) : null}
@@ -177,14 +184,14 @@ export function ApplicationPacketView(props: {
                 type="button"
                 disabled={busy}
                 onClick={() => void markApplied()}
-                className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-4 py-2.5 text-sm font-semibold text-white transition"
+                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white transition shadow-sm"
               >
-                Confirm I applied
+                Confirm I Applied (Move to Pipeline)
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmApply(false)}
-                className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] px-4 py-2.5 text-sm font-semibold"
+                className="rounded-xl border border-[var(--zeno-border)] px-4 py-2.5 text-sm font-semibold hover:bg-[var(--zeno-surface-elevated)]"
               >
                 Cancel
               </button>
@@ -193,9 +200,9 @@ export function ApplicationPacketView(props: {
             <button
               type="button"
               onClick={() => setConfirmApply(true)}
-              className="rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] px-4 py-2.5 text-sm font-semibold text-white"
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition"
             >
-              Mark as applied
+              ✓ Mark as Applied
             </button>
           )
         ) : null}
@@ -203,3 +210,4 @@ export function ApplicationPacketView(props: {
     </div>
   );
 }
+
