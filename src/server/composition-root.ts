@@ -1021,6 +1021,25 @@ function createCareerFriendApplication(userId: string) {
       const isJobSearch =
         isJobSearchMessage(input.message) && !isCoverLetter && !isCv;
 
+      const ensureConversation = async (): Promise<string> => {
+        if (input.conversationId) {
+          const exists = await repository
+            .conversationBelongsToUser(userId, input.conversationId)
+            .catch(() => false);
+          if (exists) return input.conversationId;
+        }
+        const newId = input.conversationId ?? randomUUID();
+        await repository
+          .createConversation({
+            id: newId,
+            userId,
+            title: input.message.slice(0, 80),
+            createdAt: new Date().toISOString(),
+          })
+          .catch(() => {});
+        return newId;
+      };
+
       if (isJobSearch) {
         try {
           const { sources } = createHybridJobSource(config);
@@ -1040,7 +1059,7 @@ function createCareerFriendApplication(userId: string) {
             },
           );
           if (searchResult.formattedText) {
-            const conversationId = input.conversationId ?? randomUUID();
+            const conversationId = await ensureConversation();
             const nowIso = new Date().toISOString();
             await repository.addMessage({
               id: input.clientMessageId,
@@ -1110,7 +1129,7 @@ function createCareerFriendApplication(userId: string) {
           const answerText =
             "Cover letters need to be addressed to a specific company and role. Which company and role should this be for? Or would you prefer a general cover letter?";
           const nowIso = new Date().toISOString();
-          const conversationId = input.conversationId ?? randomUUID();
+          const conversationId = await ensureConversation();
           await repository.addMessage({
             id: input.clientMessageId,
             userId,
@@ -1141,7 +1160,7 @@ function createCareerFriendApplication(userId: string) {
           const answerText =
             "Cover letters need to address a specific company and role. Please share the company name, role, or job link you're applying to — or let me know if you'd like a general cover letter.";
           const nowIso = new Date().toISOString();
-          const conversationId = input.conversationId ?? randomUUID();
+          const conversationId = await ensureConversation();
           await repository.addMessage({
             id: input.clientMessageId,
             userId,
@@ -1227,7 +1246,7 @@ function createCareerFriendApplication(userId: string) {
               : `Here is your tailored cover letter for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}:`;
 
             const answerText = `${headerSnippet}\n\n${coverResult.draft}\n\nThis has been saved to your **Cover Letters** library. You can view, copy, or download the PDF anytime under **CVs & Cover Letters**.`;
-            const conversationId = input.conversationId ?? randomUUID();
+            const conversationId = await ensureConversation();
             await repository.addMessage({
               id: input.clientMessageId,
               userId,
