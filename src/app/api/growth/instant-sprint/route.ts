@@ -143,40 +143,77 @@ export async function POST(request: Request) {
     } else {
       campaignId = crypto.randomUUID();
       const canonicalSearchId = crypto.randomUUID();
+      const roleName = input.targetRole || "Software Engineer";
+      const canonicalKey = `linkedin-guest:${roleName.toLowerCase()}:remote:any:all`;
 
-      await supabase.from("canonical_job_searches").insert({
-        id: canonicalSearchId,
-        normalized_role: input.targetRole || "Software Engineer",
-        normalized_location: "Remote",
-        work_mode: "remote",
-        employment_types: ["full_time"],
-        experience_levels: ["mid"],
-        fingerprint: `instant-${canonicalSearchId}`,
-        created_at: nowIso,
-        updated_at: nowIso,
-      });
+      const { error: canonErr } = await supabase.from("canonical_job_searches").upsert(
+        {
+          id: canonicalSearchId,
+          canonical_key: canonicalKey,
+          provider: "linkedin-guest",
+          primary_role: roleName,
+          location: "Remote",
+          work_mode: "remote",
+          recency_strategy: "fresh-1h",
+          next_due_at: nowIso,
+          last_result_summary: {},
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        { onConflict: "canonical_key" },
+      );
+      if (canonErr) {
+        console.error("[instant-growth] canonical search error:", canonErr);
+      }
 
-      await supabase.from("job_search_campaigns").insert({
+      const { data: canonData } = await supabase
+        .from("canonical_job_searches")
+        .select("id")
+        .eq("canonical_key", canonicalKey)
+        .maybeSingle();
+
+      const effectiveCanonicalId = canonData?.id ?? canonicalSearchId;
+
+      const { error: campErr } = await supabase.from("job_search_campaigns").insert({
         id: campaignId,
         user_id: userId,
         name: input.targetRole || "Career Growth Campaign",
         status: "active",
-        primary_role: input.targetRole || "Software Engineer",
+        primary_role: roleName,
         location: "Remote",
         work_mode: "remote",
         employment_types: ["full_time"],
         experience_levels: ["mid"],
         minimum_score: 55,
         criteria_version: 1,
-        canonical_search_id: canonicalSearchId,
+        canonical_search_id: effectiveCanonicalId,
         created_at: nowIso,
         updated_at: nowIso,
+      });
+      if (campErr) {
+        console.error("[instant-growth] campaign error:", campErr);
+        return NextResponse.json(
+          { error: `Campaign error: ${campErr.message}` },
+          { status: 500 },
+        );
+      }
+
+      await supabase.from("job_search_campaign_criteria").insert({
+        campaign_id: campaignId,
+        version: 1,
+        primary_role: roleName,
+        location: "Remote",
+        work_mode: "remote",
+        employment_types: ["full_time"],
+        experience_levels: ["mid"],
+        minimum_score: 55,
+        created_at: nowIso,
       });
     }
 
     // 2. Create assessment request
     const requestId = crypto.randomUUID();
-    await supabase.from("growth_assessment_requests").insert({
+    const { error: reqErr } = await supabase.from("growth_assessment_requests").insert({
       id: requestId,
       user_id: userId,
       campaign_id: campaignId,
@@ -189,10 +226,17 @@ export async function POST(request: Request) {
       created_at: nowIso,
       updated_at: nowIso,
     });
+    if (reqErr) {
+      console.error("[instant-growth] assessment request error:", reqErr);
+      return NextResponse.json(
+        { error: `Assessment request error: ${reqErr.message}` },
+        { status: 500 },
+      );
+    }
 
     // 3. Create assessment
     const assessmentId = crypto.randomUUID();
-    await supabase.from("growth_assessments").insert({
+    const { error: assessErr } = await supabase.from("growth_assessments").insert({
       id: assessmentId,
       user_id: userId,
       campaign_id: campaignId,
@@ -206,10 +250,17 @@ export async function POST(request: Request) {
       used_model: false,
       created_at: nowIso,
     });
+    if (assessErr) {
+      console.error("[instant-growth] assessment error:", assessErr);
+      return NextResponse.json(
+        { error: `Assessment error: ${assessErr.message}` },
+        { status: 500 },
+      );
+    }
 
     // 4. Create recommendation
     const recommendationId = crypto.randomUUID();
-    await supabase.from("growth_recommendations").insert({
+    const { error: recErr } = await supabase.from("growth_recommendations").insert({
       id: recommendationId,
       user_id: userId,
       campaign_id: campaignId,
@@ -235,6 +286,13 @@ export async function POST(request: Request) {
       created_at: nowIso,
       updated_at: nowIso,
     });
+    if (recErr) {
+      console.error("[instant-growth] recommendation error:", recErr);
+      return NextResponse.json(
+        { error: `Recommendation error: ${recErr.message}` },
+        { status: 500 },
+      );
+    }
 
     // 5. Create project
     const projectId = crypto.randomUUID();
@@ -258,10 +316,10 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (projErr) {
+    if (projErr || !project) {
       console.error("[instant-growth] project insert error:", projErr);
       return NextResponse.json(
-        { error: "Could not provision growth project." },
+        { error: `Project error: ${projErr?.message ?? "Could not create project"}` },
         { status: 500 },
       );
     }
@@ -317,7 +375,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[instant-growth] unexpected error:", err);
     return NextResponse.json(
-      { error: "Failed to generate instant growth sprint." },
+      { error: err instanceof Error ? err.message : "Failed to generate instant growth sprint." },
       { status: 500 },
     );
   }
