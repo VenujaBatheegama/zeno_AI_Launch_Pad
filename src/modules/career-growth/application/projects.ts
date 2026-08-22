@@ -142,9 +142,43 @@ export async function getGrowthDashboard(
   );
   const completed = projects.filter((item) => item.status === "completed");
   const current = [...active].sort((a, b) => a.targetDate.localeCompare(b.targetDate))[0] ?? null;
-  const currentMilestones = current
+  let currentMilestones = current
     ? await deps.repository.listMilestones(current.id)
     : [];
+
+  if (current && currentMilestones.length === 0) {
+    const rec = current.sourceRecommendationId
+      ? await deps.repository.getRecommendation(current.sourceRecommendationId).catch(() => null)
+      : null;
+    const defaultTitles = [
+      `Architecture & project scaffolding for ${current.title}`,
+      `Core implementation & functional capabilities`,
+      `Testing, optimization & automated CI/CD pipeline`,
+      `Documentation, production readiness & verification`,
+    ];
+    const milestoneTitles = (rec?.proposedMilestones && rec.proposedMilestones.length > 0)
+      ? rec.proposedMilestones.map((m) => m.title)
+      : defaultTitles;
+
+    const now = new Date();
+    const milestonesToBackfill: GrowthMilestone[] = milestoneTitles.map((title, i) => ({
+      id: crypto.randomUUID(),
+      projectId: current.id,
+      userId: input.userId,
+      position: i,
+      title,
+      description: `Complete and deliver verified evidence for: ${title}`,
+      estimatedHours: current.estimatedHoursPerWeek || 5,
+      targetDate: new Date(now.getTime() + (i + 1) * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      status: (i === 0 ? "in_progress" : "todo") as GrowthMilestone["status"],
+      completedAt: null,
+    }));
+
+    currentMilestones = await deps.repository
+      .replaceMilestones(current.id, milestonesToBackfill)
+      .catch(() => []);
+  }
+
   const weeklyHours = active.reduce((sum, item) => sum + item.estimatedHoursPerWeek, 0);
   return {
     weeklyHours,
