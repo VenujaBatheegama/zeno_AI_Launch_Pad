@@ -71,7 +71,7 @@ export function CareerProfileView({
     <div className="space-y-6">
       {!onboardingMode ? <ProfileHeader /> : null}
       <ProfileOverview
-        key={`${evidenceSet.id}-${evidenceSet.updatedAt}`}
+        key={evidenceSet.id}
         evidenceSet={evidenceSet}
         onChanged={setEvidenceSet}
         onUpdateFromCv={() => setShowUpdateFromCv((open) => !open)}
@@ -279,12 +279,12 @@ function ProfileOverview({
   });
 
   useEffect(() => {
-    if (!dirtyRef.current) return;
+    if (!dirtyRef.current || editingId !== null) return;
     const timer = window.setTimeout(() => {
       autosaveDraft();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [evidence]);
+  }, [evidence, editingId]);
 
   function finishEditing() {
     setEditingId(null);
