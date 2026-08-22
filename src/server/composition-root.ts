@@ -111,6 +111,7 @@ import {
 } from "@/modules/cv-tailoring/domain/content-plan";
 import { buildDeterministicResume } from "@/modules/cv-tailoring/domain/deterministic-resume";
 import { recoverEvidenceFromCvText } from "@/modules/cv-tailoring/domain/recover-evidence-from-cv-text";
+import type { CvMode } from "@/modules/cv-tailoring/domain/schemas";
 
 import { getServerConfig } from "./config";
 import { getGroqKeyPool } from "./groq";
@@ -1580,8 +1581,14 @@ function createCareerFriendApplication(userId: string) {
                   evidenceSet.evidence.work_experience[0]?.role ||
                   "Software Engineer",
               );
+              const isTwoPage =
+                /\b(?:two\s*pages?|2\s*pages?|detailed|extended|comprehensive|long)\b/iu.test(
+                  lowerMsg,
+                );
+              const cvMode: CvMode = isTwoPage ? "two_page" : "one_page";
+
               const plan = buildContentPlan({
-                mode: "one_page",
+                mode: cvMode,
                 snapshot: evidenceSnapshot,
                 requirements: [],
                 jobTitle,
@@ -1596,7 +1603,7 @@ function createCareerFriendApplication(userId: string) {
                   ? new PdfKitCvRenderer()
                   : new ReactPdfCvRenderer();
               const rendered = await renderer.render({
-                mode: "one_page",
+                mode: cvMode,
                 content: resume,
                 snapshot: evidenceSnapshot,
                 plan,
@@ -1606,22 +1613,24 @@ function createCareerFriendApplication(userId: string) {
               const compClean = (extractedInfo.organizationName || "")
                 .trim()
                 .replace(/[^a-zA-Z0-9_-]/gu, "_");
+              const pageSuffix = isTwoPage ? "_2Page" : "";
               const cvFilename =
                 isGeneralDoc || !compClean
-                  ? `General_CV_${roleClean}.pdf`
-                  : `CV_${roleClean}_${compClean}.pdf`;
+                  ? `General_CV_${roleClean}${pageSuffix}.pdf`
+                  : `CV_${roleClean}_${compClean}${pageSuffix}.pdf`;
               attachment = {
                 bytes: rendered.bytes,
                 filename: cvFilename,
               };
 
               const isDraft = evidenceSet.status !== "verified";
+              const pageText = isTwoPage ? "2-page " : "";
               if (isGeneralDoc || (!hasUrl && !isLongDescription && !hasSpecificCompany)) {
                 answerText = isDraft
-                  ? "Here is your CV based on your current profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I'll tailor a targeted version for you!"
-                  : "Here is your general CV based on your verified profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I’ll tailor a targeted version for you!";
+                  ? `Here is your ${pageText}CV based on your current profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I'll tailor a targeted version for you!`
+                  : `Here is your general ${pageText}CV based on your verified profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I’ll tailor a targeted version for you!`;
               } else {
-                answerText = `Here is your tailored CV for ${jobTitle}, attached below as a PDF. Let me know if you'd like any adjustments!`;
+                answerText = `Here is your tailored ${pageText}CV for ${jobTitle}, attached below as a PDF. Let me know if you'd like any adjustments!`;
               }
             } else {
               answerText =

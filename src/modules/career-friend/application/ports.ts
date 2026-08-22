@@ -52,9 +52,14 @@ export interface CareerAdvisor {
     recentMessages: CareerConversationMessage[];
   }): Promise<{
     answer: string;
+    thinking?: string;
     suggestedActions: Array<
       "view_jobs" | "review_recommendations" | "start_sprint" | "update_profile"
     >;
+    toolCalls?: Array<{
+      toolName: string;
+      args: Record<string, unknown>;
+    }>;
     usedModel: boolean;
   }>;
 }
