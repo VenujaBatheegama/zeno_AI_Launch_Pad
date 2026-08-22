@@ -1706,11 +1706,21 @@ function Field({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
   return (
     <input
-      value={value}
+      value={text}
       placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => {
+        const next = event.target.value;
+        setText(next);
+        onChange(next);
+      }}
       className="h-9 w-full rounded-[8px] border border-[var(--zeno-border)] px-3 text-[13px]"
     />
   );
@@ -1725,12 +1735,22 @@ function Area({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
   return (
     <textarea
-      value={value}
+      value={text}
       placeholder={placeholder}
       rows={3}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => {
+        const next = event.target.value;
+        setText(next);
+        onChange(next);
+      }}
       className="w-full rounded-[8px] border border-[var(--zeno-border)] px-3 py-2 text-[13px]"
     />
   );
@@ -1739,15 +1759,15 @@ function Area({
 function lines(text: string): string[] {
   return text
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .map((line) => line.replace(/[\r\t]/g, ""))
+    .filter((line) => line.length > 0);
 }
 
 function commas(text: string): string[] {
   return text
     .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
+    .map((part) => part.replace(/^\s+/g, ""))
+    .filter((part) => part.length > 0);
 }
 
 function itemSeedConfirmed(item: {
