@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { ZenoMark } from "@/modules/identity/presentation/zeno-mark";
 import type { UserProfile } from "@/modules/identity/domain/profile";
+import { RibbonBackdrop } from "./ui/ribbon-backdrop";
 
 const NAV = [
   { href: "/app/home", label: "Home", icon: "home" },
@@ -57,7 +58,7 @@ export function AppShell(props: {
   return (
     <div className="flex min-h-screen bg-[var(--zeno-bg)] text-[var(--zeno-ink)]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)] lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-[232px] shrink-0 flex-col border-r border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)] lg:flex">
         <div className="px-5 py-5">
           <Link href="/app/home" className="inline-flex">
             <ZenoMark className="font-[family-name:var(--zeno-font-display)] text-[1.15rem] tracking-[-0.02em]" />
@@ -187,7 +188,10 @@ export function AppShell(props: {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Ambient 3D Particle Wave Backdrop across all workspace pages (strictly contained outside side menu) */}
+        <RibbonBackdrop className="pointer-events-none fixed inset-0 lg:left-[232px] z-0 overflow-hidden" />
+
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--zeno-border)] bg-[var(--zeno-bg)]/90 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-3">
@@ -289,8 +293,8 @@ export function AppShell(props: {
         <main
           className={
             bleedWorkspace
-              ? "min-h-0 flex-1 overflow-hidden pb-16 lg:pb-0"
-              : "min-h-0 flex-1 overflow-y-auto px-3.5 py-4 pb-20 sm:px-6 sm:py-8 lg:px-8 lg:pb-8"
+              ? "relative z-10 min-h-0 flex-1 overflow-hidden pb-16 lg:pb-0"
+              : "relative z-10 min-h-0 flex-1 overflow-y-auto px-3.5 py-4 pb-20 sm:px-6 sm:py-8 lg:px-8 lg:pb-8"
           }
         >
           {bleedWorkspace ? (

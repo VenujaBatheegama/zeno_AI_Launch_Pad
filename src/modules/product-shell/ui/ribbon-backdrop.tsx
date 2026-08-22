@@ -7,7 +7,7 @@ import * as THREE from "three";
  * Undulating 3D Particle Wave Backdrop (adapted to modern Three.js WebGL Points).
  * Contained strictly within the Home content area (does not cover side menu).
  */
-export function RibbonBackdrop() {
+export function RibbonBackdrop({ className }: { className?: string } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -113,19 +113,7 @@ export function RibbonBackdrop() {
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
 
-    // Mouse Parallax
-    let mouseX = 0;
-    let mouseY = 0;
-    let targetMouseX = 0;
-    let targetMouseY = 0;
-
-    const handleMouseMove = (event: MouseEvent) => {
-      targetMouseX = (event.clientX - window.innerWidth / 2) * 0.3;
-      targetMouseY = (event.clientY - window.innerHeight / 2) * 0.3;
-    };
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
-
-    // Animation Loop
+    // Animation Loop (Autonomous, non-reactive to mouse)
     let animationFrameId: number;
     let count = 0;
     let isVisible = true;
@@ -141,12 +129,8 @@ export function RibbonBackdrop() {
         return;
       }
 
-      mouseX += (targetMouseX - mouseX) * 0.05;
-      mouseY += (targetMouseY - mouseY) * 0.05;
-
-      camera.position.x = mouseX * 0.6;
-      camera.position.y = 280 + -mouseY * 0.4;
-      camera.lookAt(0, -30, 0);
+      camera.position.set(0, 280, 750);
+      camera.lookAt(0, -50, 0);
 
       const posArray = geometry.attributes.position.array as Float32Array;
 
@@ -170,7 +154,6 @@ export function RibbonBackdrop() {
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       resizeObserver.disconnect();
 
@@ -189,7 +172,10 @@ export function RibbonBackdrop() {
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 -top-16 -bottom-16 -left-36 -right-36 z-0 overflow-hidden"
+      className={
+        className ??
+        "pointer-events-none absolute inset-0 -top-16 -bottom-16 -left-36 -right-36 z-0 overflow-hidden"
+      }
       aria-hidden
     >
       <div ref={containerRef} className="h-full w-full opacity-80" />

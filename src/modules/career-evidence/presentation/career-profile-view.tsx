@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useEffectEvent,
@@ -18,6 +19,7 @@ import { UploadForm } from "./upload-form";
 type Props = {
   initialEvidenceSet: CareerEvidenceSet | null;
   handoff?: CareerProfileHandoff | null;
+  onboardingMode?: boolean;
 };
 
 type ConfirmationMap = Record<string, boolean>;
@@ -34,14 +36,18 @@ export type CareerProfileHandoff = {
  * Card-based career profile editor — experience, projects, education, skills,
  * certifications, and referees — with inline Edit / Confirm / Remove.
  */
-export function CareerProfileView({ initialEvidenceSet, handoff }: Props) {
+export function CareerProfileView({
+  initialEvidenceSet,
+  handoff,
+  onboardingMode = false,
+}: Props) {
   const [evidenceSet, setEvidenceSet] = useState(initialEvidenceSet);
   const [showUpdateFromCv, setShowUpdateFromCv] = useState(false);
 
   if (!evidenceSet) {
     return (
       <div className="space-y-6">
-        <ProfileHeader />
+        {!onboardingMode ? <ProfileHeader /> : null}
         <div className="rounded-[16px] border border-dashed border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-6 py-12 text-center">
           <p className="text-[15px] font-semibold text-[var(--zeno-ink)]">
             No career evidence yet
@@ -63,7 +69,7 @@ export function CareerProfileView({ initialEvidenceSet, handoff }: Props) {
 
   return (
     <div className="space-y-6">
-      <ProfileHeader />
+      {!onboardingMode ? <ProfileHeader /> : null}
       <ProfileOverview
         key={`${evidenceSet.id}-${evidenceSet.updatedAt}`}
         evidenceSet={evidenceSet}
@@ -71,6 +77,7 @@ export function CareerProfileView({ initialEvidenceSet, handoff }: Props) {
         onUpdateFromCv={() => setShowUpdateFromCv((open) => !open)}
         updateFromCvOpen={showUpdateFromCv}
         handoff={handoff}
+        onboardingMode={onboardingMode}
       />
       {showUpdateFromCv ? (
         <UploadForm
@@ -106,13 +113,16 @@ function ProfileOverview({
   onUpdateFromCv,
   updateFromCvOpen,
   handoff,
+  onboardingMode = false,
 }: {
   evidenceSet: CareerEvidenceSet;
   onChanged: (next: CareerEvidenceSet) => void;
   onUpdateFromCv: () => void;
   updateFromCvOpen: boolean;
   handoff?: CareerProfileHandoff | null;
+  onboardingMode?: boolean;
 }) {
+  const router = useRouter();
   const [evidence, setEvidence] = useState(evidenceSet.evidence);
   const evidenceRef = useRef(evidence);
   evidenceRef.current = evidence;
@@ -121,7 +131,6 @@ function ProfileOverview({
   const [confirmations, setConfirmations] = useState<ConfirmationMap>(() =>
     buildInitialConfirmations(evidenceSet.evidence, evidenceSet.status === "verified"),
   );
-  const [acknowledged, setAcknowledged] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const isVerified = evidenceSet.status === "verified";
@@ -196,6 +205,23 @@ function ProfileOverview({
     if (!options?.quiet) setMessage(null);
     try {
       const payload = options?.nextEvidence ?? evidenceRef.current;
+
+      if (action === "verify" && onboardingMode) {
+        const response = await fetch("/api/onboarding/verify", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ evidence: payload }),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body.error ?? "Could not verify profile.");
+        }
+        dirtyRef.current = false;
+        router.push("/app/home");
+        router.refresh();
+        return;
+      }
+
       const response = await fetch(
         `/api/evidence/${evidenceSet.id}${action === "verify" ? "/verify" : ""}`,
         {
@@ -203,7 +229,7 @@ function ProfileOverview({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             evidence: payload,
-            acknowledged: action === "verify" ? acknowledged : undefined,
+            acknowledged: true,
           }),
         },
       );
@@ -1417,44 +1443,64 @@ function ProfileOverview({
         </ProfileSection>
       </div>
 
-      <section className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3">
+      <section className="sticky bottom-4 z-20 flex flex-wrap items-center gap-3 rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)]/95 backdrop-blur-md px-5 py-3.5 shadow-lg">
         {isVerified ? (
-          <span className="text-[12px] font-semibold text-[var(--zeno-success)]">
-            Profile verified — editing reopens it as a draft
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--zeno-success)]">
+            <span className="size-1.5 rounded-full bg-[var(--zeno-success)]" />
+            Profile verified
           </span>
         ) : null}
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={() => void persist("save")}
-          className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] px-3 text-[13px] font-semibold disabled:opacity-50"
-        >
-          {isSaving ? "Saving…" : isVerified ? "Save changes" : "Save draft"}
-        </button>
-        {!isVerified ? (
+
+        {onboardingMode ? (
           <>
-            <label className="flex items-center gap-2 text-[12px] text-[var(--zeno-ink-muted)]">
-              <input
-                type="checkbox"
-                checked={acknowledged}
-                onChange={(event) => setAcknowledged(event.target.checked)}
-              />
-              I confirm this profile is accurate
-            </label>
             <button
               type="button"
-              disabled={isSaving || !acknowledged}
+              disabled={isSaving}
               onClick={() => void persist("verify")}
-              className="inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-3 text-[13px] font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--zeno-primary)] px-6 text-[14px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-50"
             >
-              Verify profile
+              {isSaving ? "Verifying profile…" : "Verify and finish profile"}
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void persist("save")}
+              className="inline-flex h-10 items-center rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 text-[13px] font-semibold text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)] transition disabled:opacity-50"
+            >
+              {isSaving ? "Saving…" : "Save draft"}
             </button>
           </>
+        ) : (
+          <>
+            {!isVerified ? (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => void persist("verify")}
+                className="inline-flex h-9 items-center rounded-[8px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-[var(--zeno-primary-deep)] transition disabled:opacity-50"
+              >
+                {isSaving ? "Verifying…" : "Verify profile"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void persist("save")}
+              className="inline-flex h-9 items-center rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3 text-[13px] font-semibold text-[var(--zeno-ink)] hover:border-[var(--zeno-border-hover)] disabled:opacity-50"
+            >
+              {isSaving ? "Saving…" : isVerified ? "Save changes" : "Save draft"}
+            </button>
+          </>
+        )}
+
+        {message ? (
+          <span className="text-xs text-[var(--zeno-ink-muted)]">{message}</span>
         ) : null}
+
         <button
           type="button"
           onClick={onUpdateFromCv}
-          className="ml-auto text-[13px] font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+          className="ml-auto text-[13px] font-semibold text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)] transition"
         >
           {updateFromCvOpen ? "Hide CV update" : "Update from CV"}
         </button>
