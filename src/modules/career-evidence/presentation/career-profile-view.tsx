@@ -204,7 +204,24 @@ function ProfileOverview({
     setIsSaving(true);
     if (!options?.quiet) setMessage(null);
     try {
-      const payload = options?.nextEvidence ?? evidenceRef.current;
+      let payload = options?.nextEvidence ?? evidenceRef.current;
+      if (action === "verify") {
+        payload = {
+          ...payload,
+          work_experience: payload.work_experience.filter(
+            (item) => item.role?.trim() || item.employer?.trim(),
+          ),
+          projects: payload.projects.filter(
+            (item) => item.name?.trim() || item.role?.trim() || item.bullets.length > 0,
+          ),
+          skills: payload.skills.filter((item) => item.name?.trim()),
+          certifications: payload.certifications.filter((item) => item.name?.trim()),
+          references: payload.references.filter((item) => item.name?.trim()),
+          education: payload.education.filter(
+            (item) => item.institution?.trim() || item.qualification?.trim(),
+          ),
+        };
+      }
 
       if (action === "verify" && onboardingMode) {
         const response = await fetch("/api/onboarding/verify", {
@@ -421,6 +438,7 @@ function ProfileOverview({
             evidence.work_experience.map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.employer?.trim() || !item.role?.trim();
               return (
                 <ItemCard
                   key={item.id}
@@ -441,6 +459,7 @@ function ProfileOverview({
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -662,6 +681,7 @@ function ProfileOverview({
             evidence.projects.map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.name?.trim();
               const year =
                 item.end_date?.slice(0, 4) ||
                 item.start_date?.slice(0, 4) ||
@@ -686,6 +706,7 @@ function ProfileOverview({
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -836,26 +857,27 @@ function ProfileOverview({
             evidence.education.map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.institution?.trim() && !item.qualification?.trim();
               return (
                 <ItemCard
                   key={item.id}
                   title={
-                    item.qualification || item.institution || "Untitled education"
+                    item.qualification ||
+                    item.institution ||
+                    "Education record"
                   }
                   subtitle={[
-                    item.institution,
+                    item.qualification ? item.institution : null,
                     item.field_of_study,
                     formatDateRange(item.start_date, item.end_date, false),
                   ]
                     .filter(Boolean)
                     .join(" · ")}
-                  body={
-                    (item.details ?? []).slice(0, 2).join(" ") ||
-                    "No details yet."
-                  }
+                  body=""
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -1042,15 +1064,17 @@ function ProfileOverview({
             evidence.skills.map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.name?.trim();
               return (
                 <ItemCard
                   key={item.id}
                   title={item.name || "Untitled skill"}
-                  subtitle={confirmed ? "Confirmed skill" : "Needs confirmation"}
-                  body={item.source_quote ? `From CV: “${item.source_quote}”` : ""}
+                  subtitle=""
+                  body=""
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -1142,17 +1166,17 @@ function ProfileOverview({
             evidence.certifications.map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.name?.trim();
               return (
                 <ItemCard
                   key={item.id}
                   title={item.name || "Untitled certification"}
-                  subtitle={[item.issuer, item.issued_date]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  subtitle={[item.issuer, item.issued_date].filter(Boolean).join(" · ")}
                   body=""
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -1289,6 +1313,7 @@ function ProfileOverview({
             (evidence.references ?? []).map((item, index) => {
               const editing = editingId === item.id;
               const confirmed = isConfirmed(item.id);
+              const incomplete = !item.name?.trim();
               return (
                 <ItemCard
                   key={item.id}
@@ -1300,6 +1325,7 @@ function ProfileOverview({
                   confirmed={confirmed}
                   locked={locked}
                   editing={editing}
+                  incomplete={incomplete}
                   onEdit={() => {
                     if (editing) finishEditing();
                     else setEditingId(item.id);
@@ -1606,6 +1632,7 @@ function ItemCard({
   confirmed,
   locked,
   editing,
+  incomplete,
   onEdit,
   onConfirm,
   onUnconfirm,
@@ -1619,6 +1646,7 @@ function ItemCard({
   confirmed: boolean;
   locked: boolean;
   editing: boolean;
+  incomplete?: boolean;
   onEdit: () => void;
   onConfirm: () => void;
   onUnconfirm: () => void;
@@ -1630,10 +1658,16 @@ function ItemCard({
   void onDuplicate;
 
   return (
-    <li className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)]/35 p-3.5">
+    <li
+      className={`rounded-[12px] border ${
+        incomplete
+          ? "border-[var(--zeno-danger)]/50 bg-[var(--zeno-danger-soft)]/20"
+          : "border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)]/35"
+      } p-3.5`}
+    >
       <div className="flex items-start justify-between gap-3">
         <p className="text-[14px] font-semibold text-[var(--zeno-ink)]">{title}</p>
-        <StatusBadge confirmed={confirmed} />
+        <StatusBadge confirmed={confirmed} incomplete={incomplete} />
       </div>
       {subtitle ? (
         <p className="mt-1 text-[12px] text-[var(--zeno-ink-muted)]">{subtitle}</p>
@@ -1667,7 +1701,20 @@ function ItemCard({
   );
 }
 
-function StatusBadge({ confirmed }: { confirmed: boolean }) {
+function StatusBadge({
+  confirmed,
+  incomplete,
+}: {
+  confirmed: boolean;
+  incomplete?: boolean;
+}) {
+  if (incomplete) {
+    return (
+      <span className="shrink-0 rounded-md bg-[var(--zeno-danger-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--zeno-danger)]">
+        Needs required info
+      </span>
+    );
+  }
   return (
     <span
       className={`shrink-0 text-[11px] font-semibold ${
@@ -1811,6 +1858,19 @@ function mergeConfirmations(
   return next;
 }
 
+function isItemComplete(item: ReturnType<typeof allItems>[number]): boolean {
+  if ("employer" in item && "role" in item) {
+    return Boolean(item.employer?.trim() && item.role?.trim());
+  }
+  if ("institution" in item && "qualification" in item) {
+    return Boolean(item.institution?.trim() || item.qualification?.trim());
+  }
+  if ("name" in item) {
+    return Boolean(item.name?.trim());
+  }
+  return true;
+}
+
 function profileStats(
   evidence: CareerEvidence,
   confirmations: ConfirmationMap,
@@ -1818,13 +1878,19 @@ function profileStats(
 ) {
   const items = allItems(evidence);
   const total = Math.max(items.length, 1);
+  const completeItems = items.filter(isItemComplete);
   const verifiedCount = setVerified
     ? items.length
-    : items.filter((item) => confirmations[item.id]).length;
+    : completeItems.filter((item) => confirmations[item.id]).length;
   const confidence = setVerified
     ? 100
     : Math.round((verifiedCount / total) * 100);
-  return { verifiedCount, confidence };
+  const hasIncomplete = items.some((item) => !isItemComplete(item));
+  return {
+    verifiedCount,
+    confidence: hasIncomplete && confidence === 100 ? 95 : confidence,
+    hasIncomplete,
+  };
 }
 
 function formatDateRange(
