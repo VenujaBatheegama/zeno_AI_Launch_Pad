@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import type { GrowthMilestone, GrowthProject } from "../domain/schemas";
 
@@ -323,8 +323,7 @@ interface GeneratedProjectIdea {
 
 function InstantSprintLauncher() {
   const router = useRouter();
-  const [targetRole, setTargetRole] = useState("DevOps Engineer");
-  const [customRole, setCustomRole] = useState("");
+  const [targetRole, setTargetRole] = useState("");
   const [weeklyHours, setWeeklyHours] = useState(5);
   const [ideas, setIdeas] = useState<GeneratedProjectIdea[]>([]);
   const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
@@ -332,16 +331,22 @@ function InstantSprintLauncher() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeRole = customRole.trim() || targetRole;
-
-  async function fetchIdeas(role: string) {
+  async function fetchIdeas() {
+    const trimmed = targetRole.trim();
+    if (!trimmed) {
+      setError("Please enter a target role to generate ideas.");
+      return;
+    }
     setLoadingIdeas(true);
     setError(null);
     try {
       const res = await fetch("/api/growth/generate-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetRole: role }),
+        body: JSON.stringify({
+          targetRole: trimmed,
+          weeklyHours,
+        }),
       });
       const data = (await res.json()) as { ideas?: GeneratedProjectIdea[]; error?: string };
       if (!res.ok || data.error) {
@@ -359,11 +364,6 @@ function InstantSprintLauncher() {
     }
   }
 
-  // Load initial ideas on mount
-  useState(() => {
-    void fetchIdeas(activeRole);
-  });
-
   const selectedIdea = ideas.find((i) => i.id === selectedIdeaId) ?? ideas[0];
 
   async function handleLaunch() {
@@ -378,7 +378,7 @@ function InstantSprintLauncher() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          targetRole: activeRole,
+          targetRole: targetRole.trim(),
           weeklyHours,
           selectedIdea,
         }),
@@ -396,14 +396,6 @@ function InstantSprintLauncher() {
     }
   }
 
-  const QUICK_ROLES = [
-    "DevOps Engineer",
-    "AI Engineer",
-    "Full Stack Engineer",
-    "Cloud Solutions Architect",
-    "Backend Engineer",
-  ];
-
   return (
     <section className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-[var(--zeno-shadow-sm)] space-y-6">
       <div>
@@ -411,10 +403,10 @@ function InstantSprintLauncher() {
           <span>⚡ Instant Growth Sprint</span>
         </div>
         <h2 className="text-xl font-semibold text-[var(--zeno-ink)]">
-          Launch a Standout Portfolio Sprint
+          Build Market-Demanded Engineering Evidence
         </h2>
         <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
-          Zeno synthesizes your verified profile and current market demand into 3 distinct, high-impact project blueprints.
+          Specify your desired role and available weekly time. Zeno will analyze market gaps and propose 3 standout portfolio blueprints.
         </p>
       </div>
 
@@ -424,178 +416,173 @@ function InstantSprintLauncher() {
         </div>
       ) : null}
 
-      {/* Target Role Selector */}
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
-          Target Role or Career Direction
-        </label>
-        <div className="flex flex-wrap gap-2 mb-2">
-          {QUICK_ROLES.map((role) => (
-            <button
-              key={role}
-              type="button"
-              onClick={() => {
-                setTargetRole(role);
-                setCustomRole("");
-                void fetchIdeas(role);
-              }}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
-                !customRole && targetRole === role
-                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)] font-semibold"
-                  : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
-              }`}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
+      {/* Target Role & Time Inputs */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)]">
+        <div className="md:col-span-2 space-y-1.5">
+          <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
+            1. Target Career Role <span className="text-red-400">*</span>
+          </label>
           <input
             type="text"
-            placeholder="Or enter custom role (e.g. Cybersecurity Analyst, Platform Engineer)..."
-            value={customRole}
-            onChange={(e) => setCustomRole(e.target.value)}
-            className="flex-1 rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3.5 py-2 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-primary)]"
+            placeholder="e.g. Senior DevOps Engineer, AI Systems Architect, Rust Backend Lead..."
+            value={targetRole}
+            onChange={(e) => setTargetRole(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && targetRole.trim() && !loadingIdeas) {
+                void fetchIdeas();
+              }
+            }}
+            className="w-full rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-3.5 py-2.5 text-xs text-[var(--zeno-ink)] outline-none focus:border-[var(--zeno-primary)]"
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
+            2. Planned Weekly Time
+          </label>
+          <div className="flex items-center gap-1.5">
+            {[2, 5, 8, 10].map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setWeeklyHours(h)}
+                className={`flex-1 py-2 rounded-xl border text-xs font-semibold transition ${
+                  weeklyHours === h
+                    ? "border-[var(--zeno-primary)] bg-[var(--zeno-primary)] text-white shadow-sm"
+                    : "border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
+                }`}
+              >
+                {h}h/wk
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="md:col-span-3 pt-1">
           <button
             type="button"
-            disabled={loadingIdeas}
-            onClick={() => void fetchIdeas(activeRole)}
-            className="rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] hover:bg-[var(--zeno-violet-wash)] px-4 py-2 text-xs font-semibold text-[var(--zeno-ink)] transition disabled:opacity-60"
+            disabled={loadingIdeas || !targetRole.trim()}
+            onClick={() => void fetchIdeas()}
+            className="w-full md:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
           >
-            {loadingIdeas ? "Generating…" : "Generate Ideas 🪄"}
+            {loadingIdeas ? "Analyzing Market & Generating Ideas…" : "Generate Project Ideas 🪄"}
           </button>
         </div>
       </div>
 
-      {/* 3 Generated Project Idea Cards */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
-            Select a High-Impact Blueprint ({ideas.length} ideas for {activeRole})
-          </label>
-        </div>
-
-        {loadingIdeas ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-5 animate-pulse space-y-3"
-              >
-                <div className="h-4 bg-zinc-700/30 rounded w-3/4"></div>
-                <div className="h-3 bg-zinc-700/20 rounded w-full"></div>
-                <div className="h-3 bg-zinc-700/20 rounded w-5/6"></div>
-              </div>
-            ))}
+      {/* 3 Generated Project Idea Cards (Only shown after generation) */}
+      {loadingIdeas || ideas.length > 0 ? (
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-[var(--zeno-ink)]">
+              3. Choose Your Project Blueprint ({ideas.length} ideas generated for {targetRole})
+            </label>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            {ideas.map((idea) => {
-              const isSelected = (selectedIdeaId ?? ideas[0]?.id) === idea.id;
-              return (
+
+          {loadingIdeas ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {[1, 2, 3].map((i) => (
                 <div
-                  key={idea.id}
-                  onClick={() => setSelectedIdeaId(idea.id)}
-                  className={`flex flex-col justify-between p-4 rounded-2xl border cursor-pointer transition ${
-                    isSelected
-                      ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-soft)] shadow-md ring-1 ring-[var(--zeno-primary)]"
-                      : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] hover:border-[var(--zeno-border-hover)]"
-                  }`}
+                  key={i}
+                  className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-5 animate-pulse space-y-3"
                 >
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--zeno-primary-deep)] bg-[var(--zeno-primary)]/10 px-2 py-0.5 rounded-md">
-                        {idea.category}
-                      </span>
-                      {isSelected ? (
-                        <span className="text-xs text-[var(--zeno-primary-deep)] font-bold">✓ Selected</span>
+                  <div className="h-4 bg-zinc-700/30 rounded w-3/4"></div>
+                  <div className="h-3 bg-zinc-700/20 rounded w-full"></div>
+                  <div className="h-3 bg-zinc-700/20 rounded w-5/6"></div>
+                  <div className="h-16 bg-zinc-700/10 rounded w-full mt-2"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {ideas.map((idea) => {
+                const isSelected = (selectedIdeaId ?? ideas[0]?.id) === idea.id;
+                return (
+                  <div
+                    key={idea.id}
+                    onClick={() => setSelectedIdeaId(idea.id)}
+                    className={`flex flex-col justify-between p-4 rounded-2xl border cursor-pointer transition ${
+                      isSelected
+                        ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-soft)] shadow-md ring-1 ring-[var(--zeno-primary)]"
+                        : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] hover:border-[var(--zeno-border-hover)]"
+                    }`}
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--zeno-primary-deep)] bg-[var(--zeno-primary)]/10 px-2 py-0.5 rounded-md">
+                          {idea.category}
+                        </span>
+                        {isSelected ? (
+                          <span className="text-xs text-[var(--zeno-primary-deep)] font-bold">✓ Selected</span>
+                        ) : null}
+                      </div>
+
+                      <h3 className="font-semibold text-[14px] text-[var(--zeno-ink)] leading-snug">
+                        {idea.title}
+                      </h3>
+
+                      <p className="text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
+                        {idea.tagline}
+                      </p>
+
+                      <div className="rounded-xl bg-[var(--zeno-surface)]/60 border border-[var(--zeno-border)]/50 p-2.5 space-y-1">
+                        <p className="text-[11px] font-semibold text-[var(--zeno-ink)]">
+                          🎯 Why this stands out:
+                        </p>
+                        <p className="text-[11px] text-[var(--zeno-ink-muted)] leading-normal">
+                          {idea.marketAdvantage}
+                        </p>
+                      </div>
+
+                      {idea.technologies?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {idea.technologies.slice(0, 4).map((tech) => (
+                            <span
+                              key={tech}
+                              className="text-[10px] rounded-md bg-[var(--zeno-surface)] border border-[var(--zeno-border)] px-1.5 py-0.5 text-[var(--zeno-ink-muted)] font-medium"
+                            >
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
 
-                    <h3 className="font-semibold text-[14px] text-[var(--zeno-ink)] leading-snug">
-                      {idea.title}
-                    </h3>
-
-                    <p className="text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
-                      {idea.tagline}
-                    </p>
-
-                    <div className="rounded-xl bg-[var(--zeno-surface)]/60 border border-[var(--zeno-border)]/50 p-2.5 space-y-1">
-                      <p className="text-[11px] font-semibold text-[var(--zeno-ink)]">
-                        🎯 Why this stands out:
-                      </p>
-                      <p className="text-[11px] text-[var(--zeno-ink-muted)] leading-normal">
-                        {idea.marketAdvantage}
-                      </p>
-                    </div>
-
-                    {idea.technologies?.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {idea.technologies.slice(0, 4).map((tech) => (
-                          <span
-                            key={tech}
-                            className="text-[10px] rounded-md bg-[var(--zeno-surface)] border border-[var(--zeno-border)] px-1.5 py-0.5 text-[var(--zeno-ink-muted)] font-medium"
-                          >
-                            {tech}
-                          </span>
-                        ))}
+                    {idea.milestones?.length > 0 ? (
+                      <div className="mt-4 pt-3 border-t border-[var(--zeno-border)]/60 text-[11px] text-[var(--zeno-ink-muted)]">
+                        <p className="font-semibold text-[var(--zeno-ink)] mb-1">4 Milestones:</p>
+                        <ul className="space-y-1">
+                          {idea.milestones.slice(0, 3).map((m, idx) => (
+                            <li key={idx} className="truncate">
+                              {idx + 1}. {m.title}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ) : null}
                   </div>
+                );
+              })}
+            </div>
+          )}
 
-                  {idea.milestones?.length > 0 ? (
-                    <div className="mt-4 pt-3 border-t border-[var(--zeno-border)]/60 text-[11px] text-[var(--zeno-ink-muted)]">
-                      <p className="font-semibold text-[var(--zeno-ink)] mb-1">4 Milestones:</p>
-                      <ul className="space-y-1">
-                        {idea.milestones.slice(0, 3).map((m, idx) => (
-                          <li key={idx} className="truncate">
-                            {idx + 1}. {m.title}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Footer launch bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[var(--zeno-border)]">
-        <div className="flex items-center gap-2 text-xs text-[var(--zeno-ink-muted)]">
-          <span className="font-medium">Planned weekly time:</span>
-          {[2, 5, 8, 10].map((h) => (
-            <button
-              key={h}
-              type="button"
-              onClick={() => setWeeklyHours(h)}
-              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition ${
-                weeklyHours === h
-                  ? "border-[var(--zeno-primary)] bg-[var(--zeno-primary)] text-white"
-                  : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
-              }`}
-            >
-              {h}h/wk
-            </button>
-          ))}
+          {/* Launch Bar */}
+          {!loadingIdeas && selectedIdea ? (
+            <div className="flex items-center justify-end pt-3 border-t border-[var(--zeno-border)]">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleLaunch()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60"
+              >
+                {busy ? "Provisioning Sprint…" : `Launch "${selectedIdea.title}" Sprint (${weeklyHours}h/wk) →`}
+              </button>
+            </div>
+          ) : null}
         </div>
-
-        <button
-          type="button"
-          disabled={busy || !selectedIdea}
-          onClick={() => void handleLaunch()}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60"
-        >
-          {busy ? "Provisioning Sprint…" : `Launch "${selectedIdea?.title ?? activeRole}" Sprint →`}
-        </button>
-      </div>
+      ) : null}
     </section>
   );
 }
-
 
 
