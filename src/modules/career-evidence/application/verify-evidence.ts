@@ -68,16 +68,27 @@ export async function verifyEvidence(
   });
 }
 
-/** Fill blanks that block verification but are common in real CVs. */
+/** Fill blanks that block verification but are common in real CVs, and drop completely empty draft placeholders. */
 function normalizeEvidenceForVerification(evidence: unknown): unknown {
   const parsed = careerEvidenceSchema.parse(evidence);
   return {
     ...parsed,
-    education: parsed.education.map((item) => ({
-      ...item,
-      institution:
-        item.institution.trim() ||
-        (item.qualification?.trim() ? "Not specified" : item.institution),
-    })),
+    work_experience: parsed.work_experience.filter(
+      (item) => item.role?.trim() || item.employer?.trim(),
+    ),
+    projects: parsed.projects.filter(
+      (item) => item.name?.trim() || item.role?.trim() || item.bullets.length > 0,
+    ),
+    skills: parsed.skills.filter((item) => item.name?.trim()),
+    certifications: parsed.certifications.filter((item) => item.name?.trim()),
+    references: parsed.references.filter((item) => item.name?.trim()),
+    education: parsed.education
+      .filter((item) => item.institution?.trim() || item.qualification?.trim())
+      .map((item) => ({
+        ...item,
+        institution:
+          item.institution.trim() ||
+          (item.qualification?.trim() ? "Not specified" : item.institution),
+      })),
   };
 }

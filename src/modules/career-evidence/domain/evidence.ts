@@ -250,20 +250,24 @@ export const careerEvidenceSchema = z
 export type CareerEvidence = z.infer<typeof careerEvidenceSchema>;
 export const verifiedCareerEvidenceSchema = careerEvidenceSchema.superRefine(
   (evidence, context) => {
-    const requireValue = (value: string, path: Array<string | number>) => {
-      if (!value.trim()) {
+    evidence.work_experience.forEach((item, index) => {
+      const label = item.role || item.employer || `Experience #${index + 1}`;
+      if (!item.employer?.trim()) {
         context.addIssue({
           code: "custom",
-          path,
-          message: "Complete this required field before verification.",
+          path: ["work_experience", index, "employer"],
+          message: `Work experience "${label}" is missing an employer or company name.`,
         });
       }
-    };
-
-    evidence.work_experience.forEach((item, index) => {
-      requireValue(item.employer, ["work_experience", index, "employer"]);
-      requireValue(item.role, ["work_experience", index, "role"]);
+      if (!item.role?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["work_experience", index, "role"],
+          message: `Work experience at "${item.employer || `#${index + 1}`}" is missing a job title or role.`,
+        });
+      }
     });
+
     // School exams (A/L, O/L) often omit a school name — qualification alone is enough.
     evidence.education.forEach((item, index) => {
       if (!item.institution.trim() && !item.qualification?.trim()) {
@@ -275,18 +279,46 @@ export const verifiedCareerEvidenceSchema = careerEvidenceSchema.superRefine(
         });
       }
     });
-    evidence.skills.forEach((item, index) =>
-      requireValue(item.name, ["skills", index, "name"]),
-    );
-    evidence.projects.forEach((item, index) =>
-      requireValue(item.name, ["projects", index, "name"]),
-    );
-    evidence.certifications.forEach((item, index) =>
-      requireValue(item.name, ["certifications", index, "name"]),
-    );
-    evidence.references.forEach((item, index) =>
-      requireValue(item.name, ["references", index, "name"]),
-    );
+
+    evidence.skills.forEach((item, index) => {
+      if (!item.name?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["skills", index, "name"],
+          message: `Skill #${index + 1} is missing a skill name.`,
+        });
+      }
+    });
+
+    evidence.projects.forEach((item, index) => {
+      if (!item.name?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["projects", index, "name"],
+          message: `Project #${index + 1} is missing a project name.`,
+        });
+      }
+    });
+
+    evidence.certifications.forEach((item, index) => {
+      if (!item.name?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["certifications", index, "name"],
+          message: `Certification #${index + 1} is missing a certification name.`,
+        });
+      }
+    });
+
+    evidence.references.forEach((item, index) => {
+      if (!item.name?.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["references", index, "name"],
+          message: `Referee #${index + 1} is missing a name.`,
+        });
+      }
+    });
   },
 );
 export type EvidenceStatus = "draft" | "verified";
