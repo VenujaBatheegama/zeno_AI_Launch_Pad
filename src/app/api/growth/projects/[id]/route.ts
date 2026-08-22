@@ -29,6 +29,10 @@ export async function GET(
   }
 }
 
+import { getServerConfig } from "@/server/config";
+import { createSupabaseClient } from "@/server/supabase-client";
+import { SupabaseEvidenceRepository } from "@/modules/career-evidence/infrastructure/supabase-evidence-repository";
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -41,6 +45,51 @@ export async function PATCH(
       projectId: id,
       ...body,
     });
+
+    if (body.status === "completed") {
+      try {
+        const config = getServerConfig();
+        const supabase = createSupabaseClient(config);
+        const evidenceRepo = new SupabaseEvidenceRepository(supabase);
+        const currentEvidence = await evidenceRepo.getCurrent(userId);
+        if (currentEvidence) {
+          const existingProjects = currentEvidence.evidence.projects ?? [];
+          if (
+            !existingProjects.some(
+              (p) => p.name.toLowerCase() === project.title.toLowerCase(),
+            )
+          ) {
+            const updatedProjects = [
+              ...existingProjects,
+              {
+                id: crypto.randomUUID(),
+                name: project.title,
+                description: project.objective,
+                technologies: project.expectedEvidence ?? [],
+                bullets: project.expectedEvidence ?? [],
+                url: null,
+                origin: "user_edited" as const,
+                source_quote: null,
+              },
+            ];
+
+            await supabase
+              .from("career_evidence_sets")
+              .update({
+                evidence: {
+                  ...currentEvidence.evidence,
+                  projects: updatedProjects,
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", currentEvidence.id);
+          }
+        }
+      } catch (err) {
+        console.warn("[growth-project] auto-evidence sync warning:", err);
+      }
+    }
+
     return NextResponse.json({ project });
   } catch (error) {
     return authErrorResponse(error) ?? errorResponse(error);

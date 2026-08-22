@@ -36,43 +36,7 @@ export function GrowthDashboard(props: {
       </header>
 
       {props.current ? (
-        <section className="rounded-[14px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-5 shadow-[var(--zeno-shadow-sm)]">
-          <h2 className="text-[16px] font-semibold">Current focus</h2>
-          <h3 className="mt-2 text-[18px] font-semibold text-[var(--zeno-ink)]">
-            {props.current.project.title}
-          </h3>
-          <p className="mt-1 text-[13px] text-[var(--zeno-ink-muted)]">
-            {props.current.project.campaignNames.join(" · ") || "Job campaign"}
-          </p>
-          <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink)]">
-            {props.current.project.objective}
-          </p>
-          <p className="mt-3 text-[13px] text-[var(--zeno-ink-muted)]">
-            Progress {props.current.project.progress}% · Target {props.current.project.targetDate} ·{" "}
-            {props.current.project.estimatedHoursPerWeek} hours / week
-          </p>
-          {props.current.nextMilestone ? (
-            <p className="mt-2 text-[13px]">
-              Next: {props.current.nextMilestone.title}
-            </p>
-          ) : (
-            <p className="mt-2 text-[13px]">All required milestones are complete.</p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href={`/app/growth/projects/${props.current.project.id}`}
-              className="inline-flex h-10 items-center rounded-[10px] bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white hover:bg-[var(--zeno-primary-deep)] transition"
-            >
-              Continue with Zeno ↗
-            </Link>
-            <Link
-              href={`/app/growth/projects/${props.current.project.id}`}
-              className="inline-flex h-10 items-center rounded-[10px] border border-[var(--zeno-border)] px-4 text-[13px] font-semibold hover:bg-[var(--zeno-surface-elevated)] transition"
-            >
-              Update progress
-            </Link>
-          </div>
-        </section>
+        <FocusProjectCard current={props.current} />
       ) : (
         <InstantSprintLauncher />
       )}
@@ -108,18 +72,224 @@ export function GrowthDashboard(props: {
             {props.completed.map((project) => (
               <li
                 key={project.id}
-                className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px]"
+                className="rounded-[12px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3 text-[13px] flex items-center justify-between"
               >
-                <p className="font-semibold">{project.title}</p>
-                <p className="mt-1 text-[var(--zeno-ink-muted)]">
-                  {project.expectedEvidence.join(" · ") || project.objective}
-                </p>
+                <div>
+                  <p className="font-semibold text-[var(--zeno-ink)]">{project.title}</p>
+                  <p className="mt-0.5 text-xs text-[var(--zeno-ink-muted)]">
+                    {project.expectedEvidence.join(" · ") || project.objective}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-md">
+                  ✓ Verified in Profile
+                </span>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
     </div>
+  );
+}
+
+function FocusProjectCard(props: {
+  current: {
+    project: DashboardProject;
+    milestones: GrowthMilestone[];
+    nextMilestone: GrowthMilestone | null;
+  };
+}) {
+  const router = useRouter();
+  const [milestones, setMilestones] = useState(props.current.milestones);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [autoAdded, setAutoAdded] = useState(props.current.project.status === "completed");
+
+  const completedCount = milestones.filter((m) => m.status === "completed").length;
+  const totalCount = milestones.length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const activeTask = milestones.find((m) => m.status === "in_progress") ?? milestones.find((m) => m.status === "todo");
+
+  async function toggleMilestone(milestoneId: string, currentStatus: GrowthMilestone["status"]) {
+    const nextStatus = currentStatus === "completed" ? "todo" : "completed";
+    setBusyId(milestoneId);
+
+    // Optimistic UI update
+    const updated = milestones.map((m) =>
+      m.id === milestoneId ? { ...m, status: nextStatus as GrowthMilestone["status"] } : m,
+    );
+    setMilestones(updated);
+
+    try {
+      const response = await fetch(`/api/growth/milestones/${milestoneId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) throw new Error("Failed to update milestone");
+
+      // Check if all milestones are now complete
+      const allDone = updated.every((m) => m.status === "completed" || m.status === "skipped");
+      if (allDone && !autoAdded) {
+        setAutoAdded(true);
+        // Mark project completed in background
+        await fetch(`/api/growth/projects/${props.current.project.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "completed" }),
+        }).catch(() => null);
+      }
+      router.refresh();
+    } catch {
+      // Revert on error
+      setMilestones(props.current.milestones);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-6 shadow-[var(--zeno-shadow-sm)] space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-violet-soft)] px-3 py-0.5 text-xs font-bold text-[var(--zeno-primary)] mb-1.5">
+            <span>🎯 Current Focus</span>
+          </div>
+          <h2 className="text-xl font-bold text-[var(--zeno-ink)]">
+            {props.current.project.title}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--zeno-ink-muted)]">
+            {props.current.project.campaignNames.join(" · ") || "Career Growth Project"} · Target: {props.current.project.targetDate} · {props.current.project.estimatedHoursPerWeek} hrs/week
+          </p>
+        </div>
+
+        <div className="text-right sm:shrink-0">
+          <span className="text-2xl font-bold text-[var(--zeno-ink)]">
+            {progressPercent}%
+          </span>
+          <p className="text-[11px] text-[var(--zeno-ink-muted)]">
+            {completedCount} of {totalCount} tasks done
+          </p>
+        </div>
+      </div>
+
+      <p className="text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
+        {props.current.project.objective}
+      </p>
+
+      {/* Visual Progress Bar */}
+      <div className="w-full bg-[var(--zeno-surface-elevated)] rounded-full h-2 overflow-hidden border border-[var(--zeno-border)]">
+        <div
+          className="bg-[var(--zeno-primary)] h-full transition-all duration-300 rounded-full"
+          style={{ width: `${progressPercent}%` }}
+        ></div>
+      </div>
+
+      {/* Current Task Preview Highlight */}
+      {activeTask && progressPercent < 100 ? (
+        <div className="rounded-xl border border-[var(--zeno-primary)]/30 bg-[var(--zeno-violet-soft)]/60 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm">📍</span>
+            <div>
+              <p className="text-xs font-semibold text-[var(--zeno-primary-deep)]">
+                Current Task: {activeTask.title}
+              </p>
+              <p className="text-[11px] text-[var(--zeno-ink-muted)]">
+                {activeTask.description || `Complete and verify ${activeTask.title}`}
+              </p>
+            </div>
+          </div>
+          {activeTask.targetDate ? (
+            <span className="text-[11px] font-semibold text-[var(--zeno-primary-deep)] bg-[var(--zeno-surface)] border border-[var(--zeno-border)] px-2.5 py-1 rounded-lg shrink-0">
+              📅 Due {activeTask.targetDate}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Completion Banner */}
+      {progressPercent === 100 || autoAdded ? (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎉</span>
+              <p className="text-xs font-bold text-emerald-400">
+                All Milestones Complete! Project automatically added to your Verified Profile.
+              </p>
+            </div>
+            <Link
+              href="/app/profile"
+              className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black px-3 py-1 text-xs font-bold transition shadow-sm"
+            >
+              View in Profile →
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Interactive Milestones Checklist */}
+      <div className="space-y-2.5 pt-2">
+        <h3 className="text-xs font-bold text-[var(--zeno-ink)] uppercase tracking-wider">
+          Sprint Tasks & Milestones ({totalCount})
+        </h3>
+        <div className="divide-y divide-[var(--zeno-border)] rounded-xl border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] overflow-hidden">
+          {milestones.map((m, idx) => {
+            const isDone = m.status === "completed";
+            const isBusy = busyId === m.id;
+            return (
+              <div
+                key={m.id}
+                onClick={() => void toggleMilestone(m.id, m.status)}
+                className={`p-3.5 flex items-start gap-3.5 cursor-pointer transition select-none ${
+                  isDone ? "bg-[var(--zeno-surface)]/50 opacity-80" : "hover:bg-[var(--zeno-violet-wash)]"
+                }`}
+              >
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition shrink-0 ${
+                    isDone
+                      ? "border-[var(--zeno-primary)] bg-[var(--zeno-primary)] text-white font-bold text-xs"
+                      : "border-[var(--zeno-border)] bg-[var(--zeno-surface)] hover:border-[var(--zeno-primary)] text-transparent"
+                  }`}
+                >
+                  {isDone ? "✓" : ""}
+                </button>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p
+                      className={`text-xs font-semibold ${
+                        isDone
+                          ? "line-through text-[var(--zeno-ink-muted)]"
+                          : "text-[var(--zeno-ink)]"
+                      }`}
+                    >
+                      {idx + 1}. {m.title}
+                    </p>
+                    {m.targetDate ? (
+                      <span
+                        className={`text-[10px] font-medium shrink-0 px-2 py-0.5 rounded-md ${
+                          isDone
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] border border-[var(--zeno-border)]"
+                        }`}
+                      >
+                        {isDone ? "✓ Done" : `Due ${m.targetDate}`}
+                      </span>
+                    ) : null}
+                  </div>
+                  {m.description ? (
+                    <p className="mt-0.5 text-[11px] text-[var(--zeno-ink-muted)] leading-normal line-clamp-2">
+                      {m.description}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 
