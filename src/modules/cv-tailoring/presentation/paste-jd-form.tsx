@@ -205,7 +205,7 @@ export function PasteJdForm() {
             <button
               type="submit"
               disabled={loading || description.trim().length < 20}
-              className="inline-flex h-10 items-center justify-center rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-ink)] px-5 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-[var(--zeno-radius-sm)] bg-[var(--zeno-primary)] hover:opacity-90 px-5 text-[13px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
             >
               {loading ? "Processing…" : "Create Tailored CV →"}
             </button>

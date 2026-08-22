@@ -620,13 +620,30 @@ function createCareerIntelligenceApplication(userId: string) {
         // plan/search flows, not every Jobs page render.
         { ...deps, escoResolver: undefined },
       ),
-    getMatchDetails: (
+    getMatchDetails: async (
       command: Omit<GetJobMatchDetailsCommand, "userId">,
-    ) =>
-      getJobMatchDetails(
-        { ...command, userId },
-        { ...deps, escoResolver: undefined },
-      ),
+    ) => {
+      try {
+        return await getJobMatchDetails(
+          { ...command, userId },
+          { ...deps, escoResolver: undefined },
+        );
+      } catch (err) {
+        // Automatically perform analysis & match on-the-fly instead of failing
+        try {
+          await analyseAndMatchJob(
+            { listingId: command.listingId, userId, force: true },
+            deps,
+          );
+          return await getJobMatchDetails(
+            { ...command, userId },
+            { ...deps, escoResolver: undefined },
+          );
+        } catch {
+          throw err;
+        }
+      }
+    },
     clearMatches: () =>
       clearMatchAnalysesForUser(
         { userId },
@@ -1056,39 +1073,196 @@ function createCareerFriendApplication(userId: string) {
         }
       }
 
+      if (isCoverLetter) {
+        const hasUrl = /https?:\/\/[^\s]+/iu.test(input.message);
+        const isLongDescription = input.message.trim().length > 180;
+        const isGeneralDoc =
+          /\b(?:general|standard|generic|any\s+role|any\s+job|template)\b/iu.test(
+            lowerMsg,
+          );
+        const extractedInfo = extractRoleAndCompany(input.message);
+        const hasSpecificCompany = Boolean(extractedInfo.organizationName);
+
+        const roleKeywords = [
+          "software engineer",
+          "full stack",
+          "frontend",
+          "backend",
+          "devops",
+          "data scientist",
+          "machine learning",
+          "ai engineer",
+          "qa",
+          "tester",
+          "ui/ux",
+          "designer",
+          "product manager",
+        ];
+        let roleCount = 0;
+        for (const rk of roleKeywords) {
+          if (lowerMsg.includes(rk)) roleCount++;
+        }
+        const hasMultipleRoles =
+          roleCount >= 2 && !hasSpecificCompany && !hasUrl && !isLongDescription;
+
+        if (hasMultipleRoles) {
+          const answerText =
+            "Cover letters need to be addressed to a specific company and role. Which company and role should this be for? Or would you prefer a general cover letter?";
+          const nowIso = new Date().toISOString();
+          const conversationId = input.conversationId ?? randomUUID();
+          await repository.addMessage({
+            id: input.clientMessageId,
+            userId,
+            conversationId,
+            role: "user",
+            content: input.message,
+            metadata: {},
+            createdAt: nowIso,
+          });
+          await repository.addMessage({
+            id: randomUUID(),
+            userId,
+            conversationId,
+            role: "assistant",
+            content: answerText,
+            metadata: {},
+            createdAt: new Date().toISOString(),
+          });
+          return {
+            conversationId,
+            messageId: randomUUID(),
+            clientMessageId: input.clientMessageId,
+            answer: answerText,
+            suggestedActions: ["tailor_cv", "growth_sprint"],
+            createdAt: nowIso,
+          };
+        } else if (!isGeneralDoc && !hasUrl && !isLongDescription && !hasSpecificCompany) {
+          const answerText =
+            "Cover letters need to address a specific company and role. Please share the company name, role, or job link you're applying to — or let me know if you'd like a general cover letter.";
+          const nowIso = new Date().toISOString();
+          const conversationId = input.conversationId ?? randomUUID();
+          await repository.addMessage({
+            id: input.clientMessageId,
+            userId,
+            conversationId,
+            role: "user",
+            content: input.message,
+            metadata: {},
+            createdAt: nowIso,
+          });
+          await repository.addMessage({
+            id: randomUUID(),
+            userId,
+            conversationId,
+            role: "assistant",
+            content: answerText,
+            metadata: {},
+            createdAt: new Date().toISOString(),
+          });
+          return {
+            conversationId,
+            messageId: randomUUID(),
+            clientMessageId: input.clientMessageId,
+            answer: answerText,
+            suggestedActions: ["tailor_cv", "growth_sprint"],
+            createdAt: nowIso,
+          };
+        } else {
+          try {
+            const targetRole =
+              extractedInfo.jobTitle ||
+              snapshot.profile.headline ||
+              "Software Engineer";
+            const targetOrg = extractedInfo.organizationName ?? (isGeneralDoc ? "General" : undefined);
+            const coverResult = await campaign.generateCustomCoverLetter({
+              jobTitle: targetRole,
+              organizationName: targetOrg !== "General" ? targetOrg : undefined,
+              jobDescription: isGeneralDoc
+                ? "General cover letter template highlighting proven track record, core competencies, and career impact."
+                : input.message,
+            });
+
+            const nowIso = new Date().toISOString();
+            const externalId = `cover_letter_${randomUUID()}`;
+            const jobDiscovery = getJobDiscoveryApplication(userId);
+            const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+              userId,
+              source: { key: "manual", name: isGeneralDoc ? "General Application" : "Cover Letter Opportunity" },
+              jobs: [
+                {
+                  external_id: externalId,
+                  title: isGeneralDoc ? `${targetRole} (General)` : targetRole,
+                  organization: targetOrg && targetOrg !== "General" ? { name: targetOrg, logo_url: null, website_url: null } : null,
+                  description: isGeneralDoc ? "General cover letter" : input.message,
+                  location: null,
+                  city: null,
+                  region: null,
+                  country: null,
+                  employment_type: null,
+                  work_mode: null,
+                  experience_level: null,
+                  salary_min: null,
+                  salary_max: null,
+                  salary_currency: null,
+                  salary_period: null,
+                  closing_at: null,
+                  publisher: null,
+                  source_url: null,
+                  application_url: null,
+                  application_is_direct: true,
+                  published_at: nowIso,
+                  raw_payload: {},
+                },
+              ],
+              seenAt: nowIso,
+            });
+
+            if (savedJob) {
+              await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
+            }
+
+            const headerSnippet = isGeneralDoc
+              ? "Here is your general cover letter based on your verified career profile:"
+              : `Here is your tailored cover letter for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}:`;
+
+            const answerText = `${headerSnippet}\n\n${coverResult.draft}\n\nThis has been saved to your **Cover Letters** library. You can view, copy, or download the PDF anytime under **CVs & Cover Letters**.`;
+            const conversationId = input.conversationId ?? randomUUID();
+            await repository.addMessage({
+              id: input.clientMessageId,
+              userId,
+              conversationId,
+              role: "user",
+              content: input.message,
+              metadata: {},
+              createdAt: nowIso,
+            });
+            await repository.addMessage({
+              id: randomUUID(),
+              userId,
+              conversationId,
+              role: "assistant",
+              content: answerText,
+              metadata: { isCoverLetter: true },
+              createdAt: new Date().toISOString(),
+            });
+            return {
+              conversationId,
+              messageId: randomUUID(),
+              clientMessageId: input.clientMessageId,
+              answer: answerText,
+              suggestedActions: ["tailor_cv", "growth_sprint"],
+              createdAt: nowIso,
+            };
+          } catch {
+            // fallback
+          }
+        }
+      }
+
       const reply = await askCareerFriend(
         { userId, ...input, snapshot },
         { repository, advisor, createId: randomUUID, now },
       );
-
-      if (isCoverLetter && (!reply.answer || reply.answer.length < 150)) {
-        try {
-          const recs = await campaign.listRecommendations({ limit: 1 });
-          let coverDraftText = "";
-          if (recs[0]) {
-            const cover = await campaign.generateCoverLetterForListing(
-              recs[0].listingId,
-            );
-            coverDraftText = cover.draft;
-          } else {
-            const extracted = extractRoleAndCompany(input.message);
-            const cover = await campaign.generateCustomCoverLetter({
-              jobTitle: extracted.jobTitle,
-              organizationName: extracted.organizationName ?? undefined,
-              jobDescription: input.message,
-            });
-            coverDraftText = cover.draft;
-          }
-          if (coverDraftText) {
-            return {
-              ...reply,
-              answer: `Here is your tailored cover letter:\n\n${coverDraftText}\n\nLet me know if you want to tweak any sections!`,
-            };
-          }
-        } catch {
-          // fallback
-        }
-      }
 
       return reply;
     },
@@ -1170,115 +1344,195 @@ function createCareerFriendApplication(userId: string) {
         }
       }
 
+      // Helper to classify request context
+      const isGeneralDoc =
+        /\b(?:general|generic|base|standard|default|profile\s+cv|profile\s+cover\s*letter)\b/iu.test(
+          lowerMsg,
+        ) ||
+        /^(?:yes|sure|ok|okay|yep|yeah|yes\s+please|yes\s+general)\b/iu.test(
+          lowerMsg.trim(),
+        );
+
+      const hasUrl = /https?:\/\/[^\s]+/iu.test(message);
+      const isLongDescription = message.trim().length > 120;
+      const extractedInfo = extractRoleAndCompany(message);
+      const hasSpecificCompany = Boolean(extractedInfo.organizationName);
+
+      const roleKeywords = [
+        "frontend",
+        "backend",
+        "fullstack",
+        "full stack",
+        "devops",
+        "cloud",
+        "sre",
+        "software engineer",
+        "mobile",
+        "ios",
+        "android",
+        "data engineer",
+        "data scientist",
+        "machine learning",
+        "ai engineer",
+        "qa",
+        "tester",
+        "ui/ux",
+        "designer",
+        "product manager",
+      ];
+      let roleCount = 0;
+      for (const rk of roleKeywords) {
+        if (lowerMsg.includes(rk)) roleCount++;
+      }
+      const hasMultipleRoles =
+        roleCount >= 2 && !hasSpecificCompany && !hasUrl && !isLongDescription;
+
       // 2. Cover Letter Flow
       if (isCoverLetter) {
-        try {
-          const recs = await campaign.listRecommendations({ limit: 1 });
-          let coverDraftText = "";
-          let coverJobTitle = "Software Engineer";
-          let coverOrg: string | null = null;
-
-          if (recs[0]) {
-            const coverResult = await campaign.generateCoverLetterForListing(
-              recs[0].listingId,
-            );
-            coverDraftText = coverResult.draft;
-            coverJobTitle = coverResult.jobTitle || "Software Engineer";
-            coverOrg = coverResult.organizationName || null;
-          } else {
-            const extracted = extractRoleAndCompany(message);
+        if (hasMultipleRoles) {
+          answerText =
+            "Cover letters need to be addressed to a specific company and role. Which company and role should this be for? Or would you prefer a general cover letter template?";
+        } else if (!isGeneralDoc && !hasUrl && !isLongDescription && !hasSpecificCompany) {
+          answerText =
+            "Cover letters need to address a specific company and role. Please share the company name, role, or job link you're applying to — or let me know if you'd like a general cover letter template.";
+        } else {
+          try {
             const coverResult = await campaign.generateCustomCoverLetter({
-              jobTitle: extracted.jobTitle,
-              organizationName: extracted.organizationName ?? undefined,
-              jobDescription: message,
+              jobTitle: extractedInfo.jobTitle || "Software Engineer",
+              organizationName: extractedInfo.organizationName ?? undefined,
+              jobDescription: isGeneralDoc
+                ? "General cover letter template highlighting proven track record, core competencies, and career impact."
+                : message,
             });
-            coverDraftText = coverResult.draft;
-            coverJobTitle = coverResult.jobTitle || extracted.jobTitle;
-            coverOrg = coverResult.organizationName || extracted.organizationName;
+
+            const coverDraftText = coverResult.draft;
+            const coverJobTitle = coverResult.jobTitle || extractedInfo.jobTitle || "Professional";
+            const coverOrg = coverResult.organizationName || extractedInfo.organizationName;
+
+            if (coverDraftText) {
+              const nowIso = new Date().toISOString();
+              const externalId = `cover_letter_${randomUUID()}`;
+              const jobDiscovery = getJobDiscoveryApplication(userId);
+              const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+                userId,
+                source: { key: "telegram", name: isGeneralDoc ? "General Application (Telegram)" : "Cover Letter (Telegram)" },
+                jobs: [
+                  {
+                    external_id: externalId,
+                    title: isGeneralDoc ? `${coverJobTitle} (General)` : coverJobTitle,
+                    organization: coverOrg && coverOrg !== "General" ? { name: coverOrg, logo_url: null, website_url: null } : null,
+                    description: isGeneralDoc ? "General cover letter" : message,
+                    location: null,
+                    city: null,
+                    region: null,
+                    country: null,
+                    employment_type: null,
+                    work_mode: null,
+                    experience_level: null,
+                    salary_min: null,
+                    salary_max: null,
+                    salary_currency: null,
+                    salary_period: null,
+                    closing_at: null,
+                    publisher: null,
+                    source_url: null,
+                    application_url: null,
+                    application_is_direct: true,
+                    published_at: nowIso,
+                    raw_payload: {},
+                  },
+                ],
+                seenAt: nowIso,
+              });
+
+              if (savedJob) {
+                await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
+              }
+
+              const evidenceSet = await evidenceRepository.getCurrent(userId);
+              const prof = evidenceSet?.evidence?.profile;
+              const pdfBytes = await renderCoverLetterPdf({
+                candidateName:
+                  prof?.full_name || snapshot.profile.name || "Candidate",
+                contact: {
+                  email: prof?.email ?? null,
+                  phone: prof?.phone ?? null,
+                  location: prof?.location ?? null,
+                  linkedinUrl: prof?.linkedin_url ?? null,
+                  githubUrl: prof?.github_url ?? null,
+                },
+                jobTitle: coverJobTitle,
+                organizationName: coverOrg,
+                letterText: coverDraftText,
+              });
+
+              const coverRole = coverJobTitle.replace(/[^a-zA-Z0-9_-]/gu, "_");
+              const coverCompany = (coverOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+              const letterFilename =
+                isGeneralDoc || !coverCompany
+                  ? `Cover_Letter_General_${coverRole}.pdf`
+                  : `Cover_Letter_${coverRole}_${coverCompany}.pdf`;
+              attachment = {
+                bytes: pdfBytes,
+                filename: letterFilename,
+              };
+
+              if (isGeneralDoc) {
+                answerText =
+                  "Here is your general cover letter template based on your verified profile, attached below as a PDF. Whenever you have a specific role or company, let me know and I'll tailor it!";
+              } else {
+                const companySnippet = coverOrg ? ` for ${coverOrg}` : "";
+                answerText = `Here is your tailored cover letter for ${coverJobTitle}${companySnippet}, attached below as a PDF. Let me know if you'd like any tweaks!`;
+              }
+            }
+          } catch {
+            answerText =
+              "I couldn't generate the cover letter right now. Please share the job description or company name and try again.";
           }
-
-          if (coverDraftText) {
-            const evidenceSet = await evidenceRepository.getCurrent(userId);
-            const prof = evidenceSet?.evidence?.profile;
-            const pdfBytes = await renderCoverLetterPdf({
-              candidateName: prof?.full_name || snapshot.profile.name || "Candidate",
-              contact: {
-                email: prof?.email ?? null,
-                phone: prof?.phone ?? null,
-                location: prof?.location ?? null,
-                linkedinUrl: prof?.linkedin_url ?? null,
-                githubUrl: prof?.github_url ?? null,
-              },
-              jobTitle: coverJobTitle,
-              organizationName: coverOrg,
-              letterText: coverDraftText,
-            });
-
-            const coverRole = coverJobTitle.replace(/[^a-zA-Z0-9_-]/gu, "_");
-            attachment = {
-              bytes: pdfBytes,
-              filename: `Cover_Letter_${coverRole}.pdf`,
-            };
-
-            const companySnippet = coverOrg ? ` at ${coverOrg}` : "";
-            answerText = `Here is your tailored cover letter for ${coverJobTitle}${companySnippet}, attached below as a PDF. Let me know if you'd like any tweaks!`;
-
-            const nowIso = new Date().toISOString();
-            await repository.addMessage({
-              id: randomUUID(),
-              userId,
-              conversationId,
-              role: "user",
-              content: message,
-              metadata: {},
-              createdAt: nowIso,
-            });
-            await repository.addMessage({
-              id: randomUUID(),
-              userId,
-              conversationId,
-              role: "assistant",
-              content: answerText,
-              metadata: { isCoverLetter: true },
-              createdAt: new Date().toISOString(),
-            });
-
-            return {
-              conversationId,
-              messageId: randomUUID(),
-              clientMessageId: randomUUID(),
-              answer: answerText,
-              suggestedActions: ["tailor_cv", "growth_sprint"],
-              createdAt: nowIso,
-              attachment,
-            };
-          }
-        } catch {
-          // If cover letter generation fails, proceed with the model's text response
         }
+
+        const nowIso = new Date().toISOString();
+        await repository.addMessage({
+          id: randomUUID(),
+          userId,
+          conversationId,
+          role: "user",
+          content: message,
+          metadata: {},
+          createdAt: nowIso,
+        });
+        await repository.addMessage({
+          id: randomUUID(),
+          userId,
+          conversationId,
+          role: "assistant",
+          content: answerText,
+          metadata: { isCoverLetter: true },
+          createdAt: new Date().toISOString(),
+        });
+
+        return {
+          conversationId,
+          messageId: randomUUID(),
+          clientMessageId: randomUUID(),
+          answer: answerText,
+          suggestedActions: ["tailor_cv", "growth_sprint"],
+          createdAt: nowIso,
+          attachment,
+        };
       }
 
       // 3. CV Flow
       if (isCvRequest) {
-        const cvApp = createCvTailoringApplication(userId);
-        try {
-          const variants = await cvApp.listForUser({
-            statuses: ["ready", "ready_to_render"],
-            limit: 1,
-          });
-          const target = variants[0];
-          if (target) {
-            if (target.status === "ready") {
-              const dl = await cvApp.download({ variantId: target.id });
-              attachment = { bytes: dl.bytes, filename: dl.filename };
-            } else if (target.status === "ready_to_render") {
-              const rendered = await cvApp.render({ variantId: target.id });
-              const dl = await cvApp.download({ variantId: rendered.id });
-              attachment = { bytes: dl.bytes, filename: dl.filename };
-            }
-          }
-
-          if (!attachment) {
+        if (hasMultipleRoles) {
+          answerText =
+            "Which specific role and company would you like this CV tailored for? Please share the job description or link — or let me know if you would prefer a general CV instead.";
+        } else if (!isGeneralDoc && !hasUrl && !isLongDescription && !hasSpecificCompany) {
+          answerText =
+            "No job description or link was provided to tailor your CV. Would you like a general CV based on your verified profile, or would you like to share the job link or description you're applying for?";
+        } else {
+          const cvApp = createCvTailoringApplication(userId);
+          try {
             const evidenceSet = await evidenceRepository.getCurrent(userId);
             if (evidenceSet && evidenceSet.status === "verified") {
               const sourceText = await evidenceRepository
@@ -1296,7 +1550,8 @@ function createCareerFriendApplication(userId: string) {
                 recovered,
               );
               const jobTitle = sanitizeJobTitleForCv(
-                evidenceSet.evidence.work_experience[0]?.role ??
+                extractedInfo.jobTitle ||
+                  evidenceSet.evidence.work_experience[0]?.role ||
                   "Software Engineer",
               );
               const plan = buildContentPlan({
@@ -1321,23 +1576,34 @@ function createCareerFriendApplication(userId: string) {
                 plan,
                 jobTitle,
               });
-              const nameSlug = (
-                evidenceSet.evidence.profile.full_name || "Candidate"
-              )
+              const roleClean = jobTitle.trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+              const compClean = (extractedInfo.organizationName || "")
                 .trim()
                 .replace(/[^a-zA-Z0-9_-]/gu, "_");
+              const cvFilename =
+                isGeneralDoc || !compClean
+                  ? `General_CV_${roleClean}.pdf`
+                  : `CV_${roleClean}_${compClean}.pdf`;
               attachment = {
                 bytes: rendered.bytes,
-                filename: `${nameSlug}_CV.pdf`,
+                filename: cvFilename,
               };
-            }
-          }
-        } catch {
-          // If attachment generation fails, proceed with the text answer
-        }
 
-        answerText =
-          "Here is your CV based on your verified profile, attached below as a PDF. Let me know if you'd like any tweaks or want it tailored for a specific role!";
+              if (isGeneralDoc) {
+                answerText =
+                  "Here is your general CV based on your verified profile, attached below as a PDF. Whenever you have a specific job description or link, share it with me and I’ll tailor a targeted version for you!";
+              } else {
+                answerText = `Here is your tailored CV for ${jobTitle}, attached below as a PDF. Let me know if you'd like any adjustments!`;
+              }
+            } else {
+              answerText =
+                "To generate your CV, please complete your profile verification first at /onboarding or review your career profile in the app.";
+            }
+          } catch {
+            answerText =
+              "I ran into an issue generating the CV PDF. Please verify your profile in the app or try again.";
+          }
+        }
 
         const nowIso = new Date().toISOString();
         await repository.addMessage({
@@ -1621,12 +1887,15 @@ function createCareerCampaignApplication(userId: string) {
       ),
     generateCoverLetterForListing: async (listingId: string) => {
       const evidence = await evidenceRepository.getCurrent(userId);
-      if (!evidence || evidence.status !== "verified") {
-        throw new CareerCampaignError(
-          "EVIDENCE_REQUIRED",
-          "Verify your career profile before generating a cover letter.",
-        );
-      }
+      const evidenceJson = evidence?.evidence ?? {
+        schema_version: 1,
+        profile: { full_name: "Candidate" },
+        work_experience: [],
+        skills: [],
+        projects: [],
+        education: [],
+      };
+
       const details = await careerApp.getMatchDetails({ listingId });
       const jobs = await jobRepository.listJobs({
         userId,
@@ -1660,7 +1929,7 @@ function createCareerCampaignApplication(userId: string) {
         .map((r) => r.statement);
 
       const cover = await coverLetterGenerator.generate({
-        evidenceJson: evidence.evidence,
+        evidenceJson,
         jobTitle: details.card.title,
         organizationName: details.card.organizationName,
         jobDescription: fullJobDescription,
@@ -1671,6 +1940,62 @@ function createCareerCampaignApplication(userId: string) {
         missingRequirements: missingReqs,
         applicationUrl: details.card.applicationUrl ?? null,
       });
+
+      // Persist to application_packets so it appears in the Cover Letters library
+      try {
+        const nowIso = new Date().toISOString();
+        const { recommendation } = await repository.upsertRecommendation({
+          id: randomUUID(),
+          userId,
+          listingId,
+          jobMatchAnalysisId: details.match.id,
+          campaignRunId: randomUUID(),
+          scoreSnapshot: {
+            evidenceFitScore: details.match.evidenceFitScore,
+            careerLevel: details.match.careerLevel,
+            hardConstraintEligible: details.match.hardConstraintEligible,
+            analysisConfidence: details.match.analysisConfidence,
+            scoringPolicyVersion: details.match.scoringPolicyVersion,
+          },
+          fitSummarySnapshot: {
+            explanation: details.match.explanation,
+            topMatched: details.card.topMatched ?? [],
+            primaryGaps: details.card.primaryGaps ?? [],
+            rankingReasons: details.card.rankingReasons ?? [],
+            title: details.card.title,
+            organizationName: details.card.organizationName,
+            applicationUrl: details.card.applicationUrl ?? null,
+          },
+          scoringPolicyVersion: "v1",
+          recommendedAt: nowIso,
+        });
+
+        const { packet } = await repository.createOrGetPacket({
+          id: randomUUID(),
+          userId,
+          recommendationId: recommendation.id,
+          listingId,
+          evidenceSetId: evidence?.id ?? null,
+          evidenceVersion: evidence?.evidence?.schema_version ?? null,
+          jobMatchAnalysisId: details.match.id,
+          applicationUrl: details.card.applicationUrl ?? null,
+          requestedAt: nowIso,
+        });
+
+        await repository.updatePacket(userId, packet.id, {
+          status: "ready",
+          coverLetterDraft: cover.draft,
+          coverLetterMeta: {
+            ...cover.meta,
+            jobTitle: details.card.title,
+            organizationName: details.card.organizationName,
+          },
+          readyAt: nowIso,
+        });
+      } catch (saveErr) {
+        console.warn("Could not persist cover letter to application packet:", saveErr);
+      }
+
       return {
         draft: cover.draft,
         meta: cover.meta,
@@ -1684,14 +2009,16 @@ function createCareerCampaignApplication(userId: string) {
       jobDescription: string;
     }) => {
       const evidence = await evidenceRepository.getCurrent(userId);
-      if (!evidence || evidence.status !== "verified") {
-        throw new CareerCampaignError(
-          "EVIDENCE_REQUIRED",
-          "Verify your career profile before generating a cover letter.",
-        );
-      }
+      const evidenceJson = evidence?.evidence ?? {
+        schema_version: 1,
+        profile: { full_name: "Candidate" },
+        work_experience: [],
+        skills: [],
+        projects: [],
+        education: [],
+      };
       const cover = await coverLetterGenerator.generate({
-        evidenceJson: evidence.evidence,
+        evidenceJson,
         jobTitle: input.jobTitle || "Software Engineer",
         organizationName: input.organizationName || null,
         jobDescription: input.jobDescription,

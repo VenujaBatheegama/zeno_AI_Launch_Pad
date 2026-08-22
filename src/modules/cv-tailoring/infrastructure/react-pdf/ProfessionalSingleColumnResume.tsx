@@ -48,9 +48,16 @@ export function ProfessionalSingleColumnResume(props: {
       : null,
   ].filter(Boolean) as Array<{ value: string; href?: string }>;
 
-  const sectionOrder =
+  const sectionOrder = (
     props.plan?.sectionOrder?.filter((section) => section !== "contact") ??
-    defaultResumeSectionOrder(props.plan?.mode, props.plan?.earlyCareer);
+    defaultResumeSectionOrder(props.plan?.mode, props.plan?.earlyCareer)
+  ).filter((section) => {
+    // One-page CVs never include references — they waste page budget.
+    if (section === "references" && props.plan?.mode === "one_page") return false;
+    return true;
+  });
+
+  const isOnePage = props.plan?.mode === "one_page";
 
   const sections: Record<string, ReactNode> = {
     summary: (
@@ -58,14 +65,19 @@ export function ProfessionalSingleColumnResume(props: {
         key="summary"
         title="Professional Summary"
         styles={styles}
-        minPresenceAhead={56}
+        minPresenceAhead={isOnePage ? 0 : 56}
       >
         <Text style={styles.body}>{props.resume.summary.text}</Text>
       </Section>
     ),
     skills:
       props.resume.skills.length > 0 ? (
-        <Section key="skills" title="Technical Skills" styles={styles}>
+        <Section
+          key="skills"
+          title="Technical Skills"
+          styles={styles}
+          minPresenceAhead={isOnePage ? 0 : 40}
+        >
           {props.resume.skills.map((group) => (
             <Text key={group.category} style={styles.skillRow} wrap>
               <Text style={styles.skillCategory}>{group.category}: </Text>
@@ -76,9 +88,19 @@ export function ProfessionalSingleColumnResume(props: {
       ) : null,
     experience:
       props.resume.experience.length > 0 ? (
-        <Section key="experience" title="Experience" styles={styles}>
+        <Section
+          key="experience"
+          title="Experience"
+          styles={styles}
+          minPresenceAhead={isOnePage ? 0 : 48}
+        >
           {props.resume.experience.map((role) => (
-            <View key={role.id} style={styles.entry} wrap={false} minPresenceAhead={72}>
+            <View
+              key={role.id}
+              style={styles.entry}
+              wrap={false}
+              minPresenceAhead={isOnePage ? 0 : 72}
+            >
               <View style={styles.entryHeaderRow}>
                 <Text style={styles.entryTitle}>{role.title}</Text>
                 <Text style={styles.entryMeta}>
@@ -98,13 +120,18 @@ export function ProfessionalSingleColumnResume(props: {
       ) : null,
     education:
       props.resume.education.length > 0 ? (
-        <Section key="education" title="Education" styles={styles}>
+        <Section
+          key="education"
+          title="Education"
+          styles={styles}
+          minPresenceAhead={isOnePage ? 0 : 36}
+        >
           {props.resume.education.map((item, index) => (
             <View
               key={item.id ?? `${item.institution}-${index}`}
               style={styles.entry}
               wrap={false}
-              minPresenceAhead={48}
+              minPresenceAhead={isOnePage ? 0 : 48}
             >
               <View style={styles.entryHeaderRow}>
                 <Text style={styles.entryTitle}>
@@ -125,13 +152,17 @@ export function ProfessionalSingleColumnResume(props: {
     projects:
       props.resume.projects.length > 0 ? (
         <View key="projects" style={styles.section} wrap>
-          <View wrap={false} minPresenceAhead={160}>
+          <View wrap={false} minPresenceAhead={isOnePage ? 0 : 160}>
             <Text style={styles.sectionHeading}>Selected Projects</Text>
             <View style={styles.rule} />
             {renderProject(props.resume.projects[0]!, styles)}
           </View>
           {props.resume.projects.slice(1).map((project) => (
-            <View key={project.id} wrap={false} minPresenceAhead={88}>
+            <View
+              key={project.id}
+              wrap={false}
+              minPresenceAhead={isOnePage ? 0 : 88}
+            >
               {renderProject(project, styles)}
             </View>
           ))}

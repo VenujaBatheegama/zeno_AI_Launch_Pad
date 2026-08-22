@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { TelegramConnectModal } from "@/modules/career-campaign/presentation/telegram-connect-modal";
+
 type Message = { role: "user" | "assistant"; content: string };
 
 const ACTION_LINKS = {
@@ -184,6 +186,7 @@ export function CareerFriendChat(props: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const [copiedIndex, setCopiedIndex] = useState<number>();
+  const [telegramModalOpen, setTelegramModalOpen] = useState(false);
 
   const featured = Boolean(props.featured);
   const emptyFeatured = featured && messages.length === 0 && !pending;
@@ -243,21 +246,38 @@ export function CareerFriendChat(props: {
   }
 
   return (
-    <section
-      className={
-        featured
-          ? `flex flex-col ${emptyFeatured ? "" : "min-h-[min(42vh,440px)]"}`
-          : "flex flex-col rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)]"
-      }
-    >
-      {featured ? null : (
-        <div className="border-b border-[var(--zeno-border)] px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--zeno-primary)]">
-            Career friend
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-[var(--zeno-ink)]">Ask Zeno</h2>
-        </div>
-      )}
+    <>
+      <TelegramConnectModal
+        isOpen={telegramModalOpen}
+        onClose={() => setTelegramModalOpen(false)}
+      />
+      <section
+        className={
+          featured
+            ? `flex flex-col ${emptyFeatured ? "" : "min-h-[min(42vh,440px)]"}`
+            : "flex flex-col rounded-[var(--zeno-radius-lg)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] shadow-[var(--zeno-shadow-sm)]"
+        }
+      >
+        {featured ? null : (
+          <div className="flex items-center justify-between border-b border-[var(--zeno-border)] px-5 py-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--zeno-primary)]">
+                Career friend
+              </p>
+              <h2 className="mt-0.5 text-lg font-semibold text-[var(--zeno-ink)]">Ask Zeno</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTelegramModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] px-3 py-1.5 text-xs font-semibold text-[var(--zeno-ink-muted)] hover:border-[#229ED9] hover:text-[#229ED9] transition shadow-sm"
+            >
+              <svg viewBox="0 0 24 24" className="size-3.5 fill-[#229ED9]">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+              </svg>
+              <span>Chat on Phone</span>
+            </button>
+          </div>
+        )}
       <div
         className={`flex-1 space-y-4 overflow-y-auto ${
           featured ? "px-1 py-2" : "max-h-[460px] px-5 py-4"
@@ -390,5 +410,6 @@ export function CareerFriendChat(props: {
         )}
       </form>
     </section>
+  </>
   );
 }

@@ -232,10 +232,19 @@ export function AppShell(props: {
           <div className="flex items-center gap-2">
             {incomplete ? (
               <Link
-                href="/onboarding"
-                className="hidden rounded-full bg-[var(--zeno-violet-soft)] px-3 py-1 text-xs font-medium text-[var(--zeno-primary-deep)] sm:inline-flex"
+                href={
+                  props.profile.onboardingProgress >= 100 ||
+                  props.profile.onboardingStatus === "awaiting_verification" ||
+                  props.profile.onboardingCurrentStep === "review"
+                    ? "/onboarding/review"
+                    : "/onboarding"
+                }
+                className="hidden rounded-full bg-[var(--zeno-violet-soft)] px-3 py-1 text-xs font-semibold text-[var(--zeno-primary-deep)] sm:inline-flex hover:bg-[var(--zeno-violet-wash)] transition"
               >
-                Profile {props.profile.onboardingProgress}%
+                {props.profile.onboardingProgress >= 100 ||
+                props.profile.onboardingStatus === "awaiting_verification"
+                  ? "Verify Profile →"
+                  : `Profile ${props.profile.onboardingProgress}%`}
               </Link>
             ) : null}
             <div className="relative">

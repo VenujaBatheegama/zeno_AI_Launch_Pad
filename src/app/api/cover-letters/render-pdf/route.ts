@@ -19,12 +19,27 @@ export async function POST(request: Request) {
     const userId = await requireUserId();
     const json = (await request.json().catch(() => ({}))) as unknown;
     const body = renderPdfSchema.parse(json);
-    const evidenceApp = getCareerEvidenceApplication(userId);
-    const currentEvidence = await evidenceApp.getCurrent();
-    const profile = currentEvidence?.evidence?.profile;
+    let profile: {
+      full_name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      location?: string | null;
+      linkedin_url?: string | null;
+      github_url?: string | null;
+    } | null = null;
+
+    try {
+      const evidenceApp = getCareerEvidenceApplication(userId);
+      const currentEvidence = await evidenceApp.getCurrent();
+      profile = currentEvidence?.evidence?.profile ?? null;
+    } catch {
+      // Safe fallback
+    }
+
+    const candidateName = profile?.full_name?.trim() || "Candidate";
 
     const pdfBytes = await renderCoverLetterPdf({
-      candidateName: profile?.full_name || "Candidate",
+      candidateName,
       contact: {
         email: profile?.email ?? null,
         phone: profile?.phone ?? null,
@@ -37,8 +52,29 @@ export async function POST(request: Request) {
       letterText: body.letterText,
     });
 
-    const slug = (body.jobTitle || "Job").replace(/[^a-zA-Z0-9_-]/gu, "_");
-    const filename = `Cover_Letter_${slug}.pdf`;
+    const clean = (str: string) =>
+      str.trim().replace(/[^a-zA-Z0-9_-]/gu, "_").replace(/_+/gu, "_");
+
+    const isGeneral =
+      !body.jobTitle ||
+      body.jobTitle.toLowerCase().includes("general") ||
+      !body.organizationName ||
+      body.organizationName.toLowerCase() === "general" ||
+      body.organizationName.toLowerCase() === "company";
+
+    const roleSlug = clean(body.jobTitle || "Professional");
+    const compSlug = clean(body.organizationName || "");
+
+    let filename: string;
+    if (isGeneral) {
+      filename = roleSlug !== "Professional" && roleSlug !== "General"
+        ? `Cover_Letter_General_${roleSlug}.pdf`
+        : "Cover_Letter_General.pdf";
+    } else if (compSlug) {
+      filename = `Cover_Letter_${roleSlug}_${compSlug}.pdf`;
+    } else {
+      filename = `Cover_Letter_${roleSlug}.pdf`;
+    }
 
     return new NextResponse(Buffer.from(pdfBytes), {
       status: 200,

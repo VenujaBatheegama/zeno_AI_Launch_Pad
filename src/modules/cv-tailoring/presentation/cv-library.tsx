@@ -10,6 +10,7 @@ type CvCard = {
   status: string;
   targetTitle: string;
   jobAlignment: string;
+  companyName?: string | null;
   pageCount: number | null;
   projectCount: number;
   experienceCount: number;
@@ -125,7 +126,7 @@ export function CvLibrary({ embedded = false }: Props) {
           </div>
           <Link
             href="/app/cvs?tab=create"
-            className="inline-flex rounded-full bg-[var(--zeno-ink)] px-4 py-2 text-[13px] font-medium text-white"
+            className="inline-flex rounded-full bg-[var(--zeno-primary)] hover:opacity-90 px-4 py-2 text-[13px] font-semibold text-white transition shadow-sm"
           >
             Create CV
           </Link>
@@ -226,10 +227,17 @@ export function CvLibrary({ embedded = false }: Props) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-[15px] font-semibold text-[var(--zeno-ink)]">
-                      {variant.targetTitle || "Tailored CV"}
+                      {variant.companyName
+                        ? `${variant.targetTitle || "CV"} · ${variant.companyName}`
+                        : variant.targetTitle?.toLowerCase().includes("general")
+                          ? variant.targetTitle
+                          : `General · ${variant.targetTitle || "CV"}`}
                     </h2>
                     <p className="mt-1 truncate text-[12px] text-[var(--zeno-ink-muted)]">
-                      {formatAlignment(variant.jobAlignment)} ·{" "}
+                      <span className="font-medium text-[var(--zeno-primary)]">
+                        {variant.companyName || "General"}
+                      </span>
+                      {" · "}
                       {formatRelativeDay(variant.updatedAt)}
                     </p>
                     <p className="mt-0.5 text-[12px] text-[var(--zeno-ink-faint)]">

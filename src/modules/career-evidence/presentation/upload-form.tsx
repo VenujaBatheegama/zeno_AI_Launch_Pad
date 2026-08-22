@@ -74,7 +74,7 @@ export function UploadForm({
           <button
             type="submit"
             disabled={isUploading}
-            className="inline-flex h-9 shrink-0 items-center rounded-[8px] bg-[var(--zeno-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 shrink-0 items-center rounded-[8px] bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-3 text-[12px] font-semibold text-white transition disabled:opacity-50"
           >
             {isUploading ? "Extracting…" : "Import"}
           </button>

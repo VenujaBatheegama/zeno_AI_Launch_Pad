@@ -678,9 +678,28 @@ export async function downloadCvVariant(
     );
   }
   const bytes = await dependencies.storage.read(variant.artifactStoragePath);
+
+  const clean = (str: string) =>
+    str.trim().replace(/[^a-zA-Z0-9_-]/gu, "_").replace(/_+/gu, "_");
+
+  const targetTitle =
+    variant.tailoredContent?.targetTitle ||
+    variant.contentPlan?.targetTitle ||
+    "Software_Engineer";
+
+  const isGeneral = targetTitle.toLowerCase().includes("general");
+  const roleSlug = clean(targetTitle);
+
+  let filename: string;
+  if (isGeneral) {
+    filename = `General_CV_${roleSlug}.pdf`;
+  } else {
+    filename = `CV_${roleSlug}.pdf`;
+  }
+
   return {
     bytes,
-    filename: `zeno-cv-${variant.mode.replaceAll("_", "-")}-${variant.id.slice(0, 8)}.pdf`,
+    filename,
     checksum: variant.artifactChecksum,
   };
 }

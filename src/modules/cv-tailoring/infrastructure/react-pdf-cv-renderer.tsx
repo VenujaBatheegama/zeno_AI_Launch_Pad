@@ -59,15 +59,23 @@ export class ReactPdfCvRenderer implements CvPdfRenderer {
     }
 
     if (rendered.pageCount > maxPages) {
+      density = "tight";
+      rendered = await renderResume(working, density, input.plan);
+      diagnostics.push(
+        `Tight retry produced ${rendered.pageCount} page(s).`,
+      );
+    }
+
+    if (rendered.pageCount > maxPages) {
       const reduce =
         input.mode === "one_page"
           ? reduceResumeForOnePage
           : reduceResumeForTwoPage;
-      for (let attempt = 0; attempt < 10 && rendered.pageCount > maxPages; attempt += 1) {
+      for (let attempt = 0; attempt < 35 && rendered.pageCount > maxPages; attempt += 1) {
         const reduced = reduce(working);
         if (JSON.stringify(reduced) === JSON.stringify(working)) break;
         working = reduced;
-        rendered = await renderResume(working, "compact", input.plan);
+        rendered = await renderResume(working, "tight", input.plan);
         diagnostics.push(
           `Content reduction attempt ${attempt + 1} → ${rendered.pageCount} page(s).`,
         );

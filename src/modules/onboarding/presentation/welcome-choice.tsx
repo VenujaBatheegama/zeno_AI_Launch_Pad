@@ -45,8 +45,24 @@ export function WelcomeChoice() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[80vh] max-w-[880px] flex-col px-4 pb-16 pt-16 sm:pt-24">
-      <div className="mx-auto max-w-[560px] text-center">
+    <div>
+      <header className="border-b border-[var(--zeno-border)] bg-[var(--zeno-surface)]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link href="/onboarding" className="inline-flex">
+            <span className="font-[family-name:var(--zeno-font-display)] text-[1.1rem] font-bold text-[var(--zeno-ink)]">
+              Zeno
+            </span>
+          </Link>
+          <Link
+            href="/app/home"
+            className="text-xs font-medium text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
+          >
+            Finish later
+          </Link>
+        </div>
+      </header>
+      <div className="mx-auto flex min-h-[80vh] max-w-[880px] flex-col px-4 pb-16 pt-12 sm:pt-16">
+        <div className="mx-auto max-w-[560px] text-center">
         <p className="inline-flex items-center gap-2 text-[15px] font-medium text-[var(--zeno-ink-muted)]">
           <ZenoPixelAvatar size={26} />
           Hi, I&apos;m Zeno.
@@ -87,6 +103,7 @@ export function WelcomeChoice() {
           I&apos;ll finish this later
         </Link>
       </div>
+    </div>
     </div>
   );
 }

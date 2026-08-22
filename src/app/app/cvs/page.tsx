@@ -1,11 +1,15 @@
 import { Suspense } from "react";
 
 import { CvsHub } from "@/modules/cv-tailoring/presentation/cvs-hub";
+import CvsLoading from "./loading";
+
+export const dynamic = "force-dynamic";
 
 export default function CvsPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-[var(--zeno-ink-muted)]">Loading…</p>}>
+    <Suspense fallback={<CvsLoading />}>
       <CvsHub />
     </Suspense>
   );
 }
+

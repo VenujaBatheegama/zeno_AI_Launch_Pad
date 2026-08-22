@@ -2,22 +2,25 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { CoverLetterLibrary } from "./cover-letter-library";
 import { CvLibrary } from "./cv-library";
 
-type Tab = "mine" | "create";
+type Tab = "mine" | "cover_letters";
 
 /**
- * CVs hub — Lovable-style library tabs and create entry.
+ * CVs and Cover Letters hub — library tabs and create entry.
  */
 export function CvsHub() {
   const searchParams = useSearchParams();
-  const tab: Tab = searchParams.get("tab") === "create" ? "create" : "mine";
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = tabParam === "cover_letters" ? "cover_letters" : "mine";
+  const [coverLetterModalOpen, setCoverLetterModalOpen] = useState(false);
 
-  const createHref = useMemo(() => {
+  const coverLettersHref = useMemo(() => {
     const params = new URLSearchParams();
-    params.set("tab", "create");
+    params.set("tab", "cover_letters");
     return `/app/cvs?${params.toString()}`;
   }, []);
 
@@ -25,39 +28,69 @@ export function CvsHub() {
     <div className="space-y-6">
       <header className="max-w-2xl">
         <h1 className="font-[family-name:var(--zeno-font-display)] text-[2.35rem] leading-none tracking-[-0.03em] text-[var(--zeno-ink)]">
-          CVs
+          CVs & Cover Letters
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-[var(--zeno-ink-muted)]">
-          Every tailored CV is assembled from your verified profile. Zeno does
+          Every tailored CV and cover letter is assembled from your verified profile. Zeno does
           not invent experience.
         </p>
       </header>
 
-      <div className="inline-flex gap-2">
-        {(
-          [
-            ["mine", "My CVs", "/app/cvs"],
-            ["create", "Create CV", createHref],
-          ] as const
-        ).map(([value, label, href]) => {
-          const active = tab === value;
-          return (
-            <Link
-              key={value}
-              href={href}
-              className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] font-medium transition ${
-                active
-                  ? "border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
-                  : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
-              }`}
-            >
-              {label}
-            </Link>
-          );
-        })}
+      {/* Controls Bar: Tabs on Left, Dynamic Action Button on Right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex gap-2">
+          {(
+            [
+              ["mine", "My CVs", "/app/cvs"],
+              ["cover_letters", "Cover Letters", coverLettersHref],
+            ] as const
+          ).map(([value, label, href]) => {
+            const active = tab === value;
+            return (
+              <Link
+                key={value}
+                href={href}
+                className={`inline-flex h-9 items-center rounded-full px-4 text-[13px] font-medium transition ${
+                  active
+                    ? "border border-[var(--zeno-border-hover)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
+                    : "border border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)] hover:text-[var(--zeno-ink)]"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Dynamic Action Button based on active tab */}
+        {tab === "cover_letters" ? (
+          <button
+            type="button"
+            onClick={() => setCoverLetterModalOpen(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:opacity-90 hover:shadow-md"
+          >
+            <span className="text-sm font-bold">+</span>
+            <span>Create Cover Letter</span>
+          </button>
+        ) : (
+          <Link
+            href="/app/cvs/paste"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--zeno-primary)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:opacity-90 hover:shadow-md"
+          >
+            <span className="text-sm font-bold">+</span>
+            <span>Create CV</span>
+          </Link>
+        )}
       </div>
 
-      {tab === "mine" ? <CvLibrary embedded /> : <CreateCvPanel />}
+      {tab === "mine" ? (
+        <CvLibrary embedded />
+      ) : (
+        <CoverLetterLibrary
+          isModalOpen={coverLetterModalOpen}
+          onCloseModal={() => setCoverLetterModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

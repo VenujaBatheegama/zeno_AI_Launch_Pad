@@ -9,7 +9,12 @@ import { TWO_PAGE_PROJECT_TARGET } from "./policy";
 export function reduceResumeForOnePage(resume: TailoredResume): TailoredResume {
   let next: TailoredResume = structuredClone(resume);
 
-  // 0. Drop obviously incomplete strings if any slipped through.
+  // 0a. Drop references entirely — one-page CVs never include references.
+  if (next.references.length > 0) {
+    return { ...next, references: [] };
+  }
+
+  // 0b. Drop obviously incomplete strings if any slipped through.
   next = dropIncompleteStrings(next);
 
   // 1. Keep only the most recent education entry; drop module/detail lines.
@@ -133,17 +138,64 @@ export function reduceResumeForOnePage(resume: TailoredResume): TailoredResume {
     }
   }
 
-  // 9. Trim skill breadth - never drop below two projects or slice sentences.
+  // 9. Trim skill breadth - trim items from skill groups.
   if (next.skills.length > 0) {
-    const skills = next.skills.map((group, index) =>
-      index === next.skills.length - 1 && group.items.length > 2
-        ? { ...group, items: group.items.slice(0, -1) }
-        : group,
+    const groupWithItems = next.skills.find((g) => g.items.length > 2);
+    if (groupWithItems) {
+      return {
+        ...next,
+        skills: next.skills.map((group) =>
+          group.category === groupWithItems.category
+            ? { ...group, items: group.items.slice(0, -1) }
+            : group,
+        ),
+      };
+    }
+  }
+
+  // 10. If still overflowing, drop lowest-priority experience role when above 2 roles.
+  if (next.experience.length > 2) {
+    const sorted = [...next.experience].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
     );
-    const changed = skills.some(
-      (group, index) => group.items.length !== next.skills[index]!.items.length,
+    return { ...next, experience: sorted.slice(0, -1) };
+  }
+
+  // 11. If still overflowing, drop lowest-priority project from 2 down to 1.
+  if (next.projects.length > 1) {
+    const sorted = [...next.projects].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
     );
-    if (changed) return { ...next, skills };
+    return { ...next, projects: sorted.slice(0, 1) };
+  }
+
+  // 12. Trim skill groups down to 1 item each if needed.
+  if (next.skills.length > 0) {
+    const groupWithItems = next.skills.find((g) => g.items.length > 1);
+    if (groupWithItems) {
+      return {
+        ...next,
+        skills: next.skills.map((group) =>
+          group.category === groupWithItems.category
+            ? { ...group, items: group.items.slice(0, -1) }
+            : group,
+        ),
+      };
+    }
+  }
+
+  // 13. Drop empty skill categories.
+  const nonEmptySkills = next.skills.filter((g) => g.items.length > 0);
+  if (nonEmptySkills.length < next.skills.length) {
+    return { ...next, skills: nonEmptySkills };
+  }
+
+  // 14. If still overflowing, drop to 1 single experience role if projects exist.
+  if (next.experience.length > 1 && next.projects.length > 0) {
+    const sorted = [...next.experience].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    );
+    return { ...next, experience: sorted.slice(0, 1) };
   }
 
   return next;
