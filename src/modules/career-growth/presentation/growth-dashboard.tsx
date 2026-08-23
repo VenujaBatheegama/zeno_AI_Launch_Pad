@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import type { GrowthMilestone, GrowthProject } from "../domain/schemas";
 
@@ -18,6 +18,7 @@ export function GrowthDashboard(props: {
   } | null;
   otherActive: DashboardProject[];
   completed: DashboardProject[];
+  initialTargetRole?: string;
 }) {
   return (
     <div className="space-y-8">
@@ -38,7 +39,7 @@ export function GrowthDashboard(props: {
       {props.current ? (
         <FocusProjectCard current={props.current} />
       ) : (
-        <InstantSprintLauncher />
+        <InstantSprintLauncher initialTargetRole={props.initialTargetRole} />
       )}
 
       {props.otherActive.length > 0 ? (
@@ -560,15 +561,24 @@ interface GeneratedProjectIdea {
   expectedEvidence: string[];
 }
 
-function InstantSprintLauncher() {
+function InstantSprintLauncher(props: { initialTargetRole?: string }) {
   const router = useRouter();
-  const [targetRole, setTargetRole] = useState("");
+  const [targetRole, setTargetRole] = useState(props.initialTargetRole || "");
   const [weeklyHours, setWeeklyHours] = useState(5);
   const [ideas, setIdeas] = useState<GeneratedProjectIdea[]>([]);
   const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
   const [loadingIdeas, setLoadingIdeas] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const hasFetchedOnce = useRef(false);
+
+  useEffect(() => {
+    if (props.initialTargetRole && !hasFetchedOnce.current) {
+      hasFetchedOnce.current = true;
+      void fetchIdeas();
+    }
+  }, [props.initialTargetRole]);
 
   async function fetchIdeas() {
     const trimmed = targetRole.trim();

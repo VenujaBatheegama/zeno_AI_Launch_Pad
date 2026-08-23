@@ -62,7 +62,9 @@ export interface CareerAdvisor {
       focusArea?: string;
     }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeSuggestGrowthAction?: (args: {
-      gapArea?: string;
+      gapArea: string;
+      project: string;
+      gapType: "skill" | "evidence" | "visibility" | "qualification";
     }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeCoverLetter?: (args: {
       jobTitle: string;

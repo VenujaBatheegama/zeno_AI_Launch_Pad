@@ -79,6 +79,34 @@ export async function askCareerFriend(
       executeCv: input.executeCv,
     }),
   ]);
+
+  if (reply.uiPayload) {
+    let isValid = true;
+    switch (reply.uiPayload.type) {
+      case "growth_suggestion":
+        if (!reply.uiPayload.project || !reply.uiPayload.gapType || !reply.uiPayload.deepLink) {
+          isValid = false;
+        }
+        break;
+      case "job_listings":
+        if (!reply.uiPayload.items) isValid = false;
+        break;
+      case "role_recommendations":
+        if (!reply.uiPayload.roles) isValid = false;
+        break;
+      case "cv_ready":
+        if (!reply.uiPayload.cvId || !reply.uiPayload.deepLink) isValid = false;
+        break;
+      case "cover_letter_ready":
+        if (!reply.uiPayload.letterId || !reply.uiPayload.deepLink) isValid = false;
+        break;
+    }
+    if (!isValid) {
+      console.warn(`[CareerFriend] Dropping invalid UI payload of type ${reply.uiPayload.type} due to missing required fields`);
+      reply.uiPayload = undefined;
+    }
+  }
+
   await deps.repository.addMessage({
     id: deps.createId(),
     userId: input.userId,

@@ -102,11 +102,11 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
       if (input.executeSuggestGrowthAction) {
         tools.suggestGrowthAction = tool({
-          description: "Suggest a specific project or skill to learn next. You MUST generate the project idea here.",
+          description: "Suggest a specific project or skill to learn next. You MUST generate the project idea and provide concrete values for ALL parameters. Do NOT leave project or gapType empty.",
           parameters: z.object({
-            gapArea: z.string().optional().describe("A specific gap or skill area to focus on"),
-            project: z.string().describe("A short, concrete project or skill to build"),
-            gapType: z.enum(["skill", "evidence", "visibility", "qualification"]).describe("The type of gap this addresses"),
+            gapArea: z.string().describe("The specific gap or skill area to focus on, derived from the user's request (e.g. '.NET development')"),
+            project: z.string().describe("A short, concrete project or skill to build. MUST NOT BE EMPTY."),
+            gapType: z.enum(["skill", "evidence", "visibility", "qualification"]).describe("The type of gap this addresses. MUST NOT BE EMPTY."),
           }),
           execute: async (args: any) => {
             const res = await input.executeSuggestGrowthAction!(args);

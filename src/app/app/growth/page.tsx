@@ -5,8 +5,9 @@ import { getCareerGrowthApplication } from "@/server/composition-root";
 
 export const dynamic = "force-dynamic";
 
-export default async function GrowthPage() {
+export default async function GrowthPage(props: { searchParams?: Promise<{ role?: string }> }) {
   const userId = await requireUserId();
+  const searchParams = await props.searchParams;
   let dashboard: Awaited<
     ReturnType<ReturnType<typeof getCareerGrowthApplication>["getDashboard"]>
   >;
@@ -23,7 +24,7 @@ export default async function GrowthPage() {
     }
     throw error;
   }
-  return <GrowthDashboard {...dashboard} />;
+  return <GrowthDashboard {...dashboard} initialTargetRole={searchParams?.role} />;
 }
 
 function isMissingSchema(error: unknown) {
