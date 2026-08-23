@@ -45,28 +45,35 @@ export interface CareerFriendRepository {
   findOrCreateTelegramConversation(userId: string): Promise<string>;
 }
 
+import type { AgentUIPayload } from "../domain/agent-outputs";
+
 export interface CareerAdvisor {
   reply(input: {
     message: string;
     snapshot: CareerSnapshot;
     recentMessages: CareerConversationMessage[];
-    executeSearchJobs?: (args: {
+    executeSearchJobListings?: (args: {
       roles: string[];
       locations: string[];
       workModes: ("remote" | "hybrid" | "onsite")[];
-      employmentTypes: string[];
       experienceLevels: string[];
-    }) => Promise<string>;
+    }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
+    executeRecommendRoleCategories?: (args: {
+      focusArea?: string;
+    }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
+    executeSuggestGrowthAction?: (args: {
+      gapArea?: string;
+    }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeCoverLetter?: (args: {
       jobTitle: string;
       organizationName?: string;
       jobDescription?: string;
-    }) => Promise<string>;
+    }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeCv?: (args: {
       jobTitle: string;
       organizationName?: string;
       jobDescription?: string;
-    }) => Promise<string>;
+    }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
   }): Promise<{
     answer: string;
     thinking?: string;
@@ -74,5 +81,6 @@ export interface CareerAdvisor {
       "view_jobs" | "review_recommendations" | "start_sprint" | "update_profile"
     >;
     usedModel: boolean;
+    uiPayload?: AgentUIPayload;
   }>;
 }

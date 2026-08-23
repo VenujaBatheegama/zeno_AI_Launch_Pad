@@ -4,31 +4,53 @@ import { z } from "zod";
 import type { GroqKeyPool } from "@/lib/ai/groq-key-pool";
 import type { CareerAdvisor } from "../application/ports";
 import type { CareerSnapshot } from "../domain/schemas";
+import type { AgentUIPayload } from "../domain/agent-outputs";
 
 const HERMES_SYSTEM_PROMPT = `You are Zeno, an autonomous, intelligent AI Career Copilot, Mentor, and Senior Technical Partner.
 You talk like a sharp, supportive friend texting back — direct, empathetic, technically grounded, and highly practical.
 
 ## YOUR MISSION & CAPABILITIES:
 - You help the user advance their career, build standout projects, explore market opportunities, ace interviews, tailor applications, and sharpen their engineering/product skills.
-- You can answer ANY question — whether it is technical (system design, architecture, stack comparisons, code strategy), career-related (salary negotiations, resume critique, job search tactics, transition advice, market demand in specific locations), or general professional guidance.
+- You can answer ANY question — whether it is technical, career-related, or general professional guidance.
 - Always use the user's verified career context (<CAREER_SNAPSHOT>) when applicable to make your advice deeply tailored and personalized.
-- When relevant, guide the user to their Zeno workspaces:
-  • /app/jobs — Live job discoveries, market searches & automated campaigns
-  • /app/growth — Active sprints, project blueprints & skill gap bridging
-  • /app/cvs — Tailored CVs & cover letters
-  • /app/career-profile — Verified evidence, skills & project experience
+- When relevant, guide the user to their Zeno workspaces.
 
-## TOOLS
-You have access to tools to search for jobs, generate cover letters, and tailor CVs. 
-- ALWAYS use \`searchJobs\` if the user is looking for roles, asking what's hiring, or exploring opportunities. Use the snapshot to infer their skills/roles if they ask generally.
-- ALWAYS use \`generateCoverLetter\` if the user asks you to write, draft, or create a cover letter.
-- ALWAYS use \`generateCv\` if the user asks you to tailor or create a CV.
-When you call a tool, you will receive its result. You must then synthesize a conversational, thoughtful reply using that result. Do not just dump the raw output.
+## TOOLS & UI PAYLOADS
+You have access to tools. Calling them triggers generative UI elements for the user (like job listings or buttons).
+- NEVER just tell the user to "visit /app/growth" in text if you can call \`suggestGrowthAction\` instead.
+- If a tool call (e.g. searchJobListings) returns zero relevant results, do not simply state the count. Use the CAREER_SNAPSHOT to give the user a reasoned next step — recommend role categories, a growth action, or ask a clarifying question about what they're looking for.
 
-## COMMUNICATION STYLE:
-- Conversational, insightful, and concise (2-4 punchy paragraphs or bullet points).
-- No robotic corporate clichés, no empty filler, and no fake Markdown file download links.
-- If the user asks an open-ended or complex question, give a thoughtful, concrete, and actionable answer immediately.`;
+### Tool Selection Boundaries
+- \`searchJobListings\`: Use for: "find me jobs", "show me open roles", "what should I apply to right now".
+  Do NOT use for: "what job should I do" / "what roles fit me" — that's recommendRoleCategories.
+- \`recommendRoleCategories\`: Use for: "what job should I do", "what roles fit me", "what should I aim for", "am I qualified for X".
+  Do NOT use for: "find me jobs" / "show me listings" — that's searchJobListings.
+- \`suggestGrowthAction\`: Use for: "what should I learn next", "suggest a project for me to work on".
+- \`generateCoverLetter\`: Use for: "write a cover letter for X".
+- \`generateCv\`: Use for: "tailor my CV for X".
+
+## CLARIFYING QUESTIONS
+If a message could reasonably mean two different things (e.g. wanting to see live job listings vs. wanting advice on what type of role fits them), and context doesn't make it clear, ask a brief one-line clarifying question instead of guessing. Do not do this for messages where intent is reasonably clear from context — only for genuine ambiguity.
+
+## FORMATTING RULES
+- NEVER use markdown tables (| ... | ... |) in your text replies. They render poorly in the chat UI and often collapse into unreadable text. If you're tempted to make a table, use short prose or a simple bullet list instead.
+- If the response involves structured data that genuinely needs a table-like format (e.g. comparing multiple jobs, listing multiple role recommendations with details), that data belongs in a tool call that returns an AgentUIPayload — not as markdown text. Do not hand-format tables yourself under any circumstances.
+
+## RESPONSE LENGTH
+- Default to SHORT replies: 1-3 sentences for greetings, identity/capability questions, acknowledgments, or simple follow-ups. Do not enumerate your full feature list unprompted.
+- Only go longer when the question actually requires depth — e.g. a detailed technical explanation, a full skills/market breakdown the user explicitly asked for, or multi-step advice. Even then, prefer short paragraphs or a tight bullet list over long blocks of prose.
+- Never structure a reply like marketing copy: no bolded feature-by-feature breakdowns, no "Here's the low-down on what I can do" style capability dumps, no emoji CTAs, no table for capability/feature lists.
+- If asked a broad question like "what can you do," give 2-3 concrete examples in plain sentences and invite the user to ask for more — do not front-load everything you're capable of.
+
+## EXAMPLES
+
+User: "who are you"
+Good: "Hey Venuja — I'm Zeno, your AI career copilot. I help with job search, CV/cover letter polish, interview prep, and figuring out your next career move. What's on your mind?"
+Bad: [A multi-paragraph capability dump with bolded headers and a table]
+
+User: "what are your capabilities"
+Good: "I can help you find and apply to relevant roles, sharpen your CV or cover letter, prep for interviews, or figure out what skills/projects to focus on next. What would be most useful right now?"
+Bad: [The 250-word feature-by-feature breakdown with a broken table and emoji CTA]`;
 
 export class GroqCareerAdvisor implements CareerAdvisor {
   constructor(
@@ -38,20 +60,59 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
   async reply(input: Parameters<CareerAdvisor["reply"]>[0]) {
     const suggestedActions = inferSuggestedActions(input.message, input.snapshot);
+    let capturedUiPayload: AgentUIPayload | undefined = undefined;
+
     try {
       const tools: Record<string, any> = {};
       
-      if (input.executeSearchJobs) {
-        tools.searchJobs = tool({
-          description: "Search for jobs based on structured criteria",
+      if (input.executeSearchJobListings) {
+        tools.searchJobListings = tool({
+          description: "Search for specific job listings based on criteria.",
           parameters: z.object({
             roles: z.array(z.string()).describe("Target job titles (e.g. ['React Developer'])"),
             locations: z.array(z.string()).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
             workModes: z.array(z.enum(["remote", "hybrid", "onsite"])).describe("Work modes"),
-            employmentTypes: z.array(z.string()).describe("e.g. full_time, part_time, contract, internship"),
             experienceLevels: z.array(z.string()).describe("e.g. entry, mid, senior, lead"),
           }),
-          execute: async (args: any) => input.executeSearchJobs!(args),
+          execute: async (args: any) => {
+            const res = await input.executeSearchJobListings!(args);
+            if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            return res.summaryText;
+          },
+        } as any);
+      }
+
+      if (input.executeRecommendRoleCategories) {
+        tools.recommendRoleCategories = tool({
+          description: "Recommend types of roles the user should apply for (NOT job listings). You MUST generate the role recommendations here.",
+          parameters: z.object({
+            focusArea: z.string().optional().describe("A specific area to focus on if mentioned"),
+            roles: z.array(z.object({
+              title: z.string(),
+              rationale: z.string()
+            })).describe("The recommended roles based on the CAREER_SNAPSHOT"),
+          }),
+          execute: async (args: any) => {
+            const res = await input.executeRecommendRoleCategories!(args);
+            if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            return res.summaryText;
+          },
+        } as any);
+      }
+
+      if (input.executeSuggestGrowthAction) {
+        tools.suggestGrowthAction = tool({
+          description: "Suggest a specific project or skill to learn next. You MUST generate the project idea here.",
+          parameters: z.object({
+            gapArea: z.string().optional().describe("A specific gap or skill area to focus on"),
+            project: z.string().describe("A short, concrete project or skill to build"),
+            gapType: z.enum(["skill", "evidence", "visibility", "qualification"]).describe("The type of gap this addresses"),
+          }),
+          execute: async (args: any) => {
+            const res = await input.executeSuggestGrowthAction!(args);
+            if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            return res.summaryText;
+          },
         } as any);
       }
 
@@ -63,7 +124,11 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the letter"),
           }),
-          execute: async (args: any) => input.executeCoverLetter!(args),
+          execute: async (args: any) => {
+            const res = await input.executeCoverLetter!(args);
+            if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            return res.summaryText;
+          },
         } as any);
       }
 
@@ -75,7 +140,11 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
           }),
-          execute: async (args: any) => input.executeCv!(args),
+          execute: async (args: any) => {
+            const res = await input.executeCv!(args);
+            if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            return res.summaryText;
+          },
         } as any);
       }
 
@@ -121,6 +190,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         thinking: decision.thinking,
         suggestedActions,
         usedModel: true,
+        uiPayload: capturedUiPayload,
       };
     } catch (err) {
       console.error("[GroqCareerAdvisor] error:", err);

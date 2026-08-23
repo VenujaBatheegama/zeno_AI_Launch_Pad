@@ -54,8 +54,6 @@ export function isRelevantMatch(
 }
 
 export function summarizeJobsForLlm(jobs: NormalizedExternalJob[]): string {
-  if (jobs.length === 0) return "No relevant jobs found matching the criteria.";
-  
   return JSON.stringify(jobs.slice(0, 5).map(j => ({
     title: j.title,
     company: j.organization?.name,

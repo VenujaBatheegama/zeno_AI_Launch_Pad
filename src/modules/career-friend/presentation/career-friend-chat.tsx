@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { TelegramConnectModal } from "@/modules/career-campaign/presentation/telegram-connect-modal";
+import type { AgentUIPayload } from "../domain/agent-outputs";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; uiPayload?: AgentUIPayload };
 
 const ACTION_LINKS: Record<string, { href: string; label: string }> = {
   view_jobs: { href: "/app/jobs", label: "View jobs & campaigns" },
@@ -250,13 +251,14 @@ export function CareerFriendChat(props: {
         answer?: string;
         suggestedActions?: string[];
         usedModel?: boolean;
+        uiPayload?: AgentUIPayload;
         error?: string;
       };
       if (!response.ok || !body.answer) {
         throw new Error(body.error ?? "Zeno could not reply.");
       }
       setConversationId(body.conversationId);
-      setMessages((items) => [...items, { role: "assistant", content: body.answer! }]);
+      setMessages((items) => [...items, { role: "assistant", content: body.answer!, uiPayload: body.uiPayload }]);
       setSuggestedActions(body.suggestedActions ?? []);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Zeno could not reply.");
@@ -336,6 +338,44 @@ export function CareerFriendChat(props: {
               className="max-w-[min(100%,44rem)] rounded-[22px] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
             >
               {safeRenderMarkdown(item.content)}
+              {item.uiPayload && (
+                <div className="mt-4 border-t border-[var(--zeno-border)] pt-4">
+                  {item.uiPayload.type === "job_listings" && (
+                    <div className="space-y-3">
+                      {item.uiPayload.items.map((job) => (
+                        <div key={job.id} className="rounded-lg border border-[var(--zeno-border)] p-3">
+                          <h4 className="font-semibold text-[var(--zeno-ink)]">{job.title}</h4>
+                          <p className="text-sm text-[var(--zeno-ink-muted)]">{job.company} • {job.location}</p>
+                          {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="text-sm text-[var(--zeno-primary)] hover:underline">View Job</a>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {item.uiPayload.type === "role_recommendations" && (
+                    <div className="space-y-3">
+                      {item.uiPayload.roles.map((role, i) => (
+                        <div key={i} className="rounded-lg border border-[var(--zeno-border)] p-3">
+                          <h4 className="font-semibold text-[var(--zeno-ink)]">{role.title}</h4>
+                          <p className="text-sm text-[var(--zeno-ink-muted)]">{role.rationale}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {item.uiPayload.type === "growth_suggestion" && (
+                    <div className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-4">
+                      <h4 className="font-semibold text-[var(--zeno-ink)]">Suggested Project: {item.uiPayload.project}</h4>
+                      <p className="text-sm text-[var(--zeno-ink-muted)] mb-3">Addresses gap: {item.uiPayload.gapType}</p>
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md bg-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold text-white">Start Project</Link>
+                    </div>
+                  )}
+                  {item.uiPayload.type === "cv_ready" && (
+                    <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Tailored CV</Link>
+                  )}
+                  {item.uiPayload.type === "cover_letter_ready" && (
+                    <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Cover Letter</Link>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => void copyReply(item.content, index)}
@@ -350,6 +390,11 @@ export function CareerFriendChat(props: {
               className="max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3"
             >
               {safeRenderMarkdown(item.content)}
+              {item.uiPayload && (
+                <div className="mt-4 border-t border-[var(--zeno-border)]/50 pt-3">
+                  <span className="text-sm italic text-[var(--zeno-ink-muted)]">Interactive element rendered below.</span>
+                </div>
+              )}
             </div>
           ),
         )}

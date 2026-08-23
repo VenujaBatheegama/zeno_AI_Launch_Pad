@@ -1008,14 +1008,13 @@ function createCareerFriendApplication(userId: string) {
     }) => {
       const snapshot = await getSnapshot();
 
-      const executeSearchJobs = async (args: any) => {
+      const executeSearchJobListings = async (args: any) => {
         const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
         const { sources } = createHybridJobSource(config);
         const criteria = {
           role_titles: args.roles.slice(0, 3),
           locations: args.locations.slice(0, 3),
           work_modes: args.workModes.slice(0, 3),
-          employment_types: args.employmentTypes.slice(0, 5),
           experience_levels: args.experienceLevels.slice(0, 5),
           excluded_keywords: [],
           page_size: 10,
@@ -1026,7 +1025,42 @@ function createCareerFriendApplication(userId: string) {
           { userId, criteria },
           { sources, repository: jobDiscoveryRepo }
         );
-        return searchResult.summaryText;
+        return {
+          summaryText: searchResult.summaryText,
+          uiPayload: {
+            type: "job_listings" as const,
+            items: searchResult.jobs.map(j => ({
+              id: j.external_id,
+              title: j.title,
+              company: j.organization?.name,
+              location: j.location ?? undefined,
+              mode: j.work_mode ?? undefined,
+              url: j.application_url || j.source_url || undefined,
+            })),
+          }
+        };
+      };
+
+      const executeRecommendRoleCategories = async (args: any) => {
+        return {
+          summaryText: "Role categories generated based on the snapshot.",
+          uiPayload: {
+            type: "role_recommendations" as const,
+            roles: args.roles || [],
+          }
+        };
+      };
+
+      const executeSuggestGrowthAction = async (args: any) => {
+        return {
+          summaryText: "Growth action generated based on the snapshot.",
+          uiPayload: {
+            type: "growth_suggestion" as const,
+            project: args.project,
+            gapType: args.gapType,
+            deepLink: "/app/growth",
+          }
+        };
       };
 
       const executeCoverLetter = async (args: any) => {
@@ -1078,9 +1112,16 @@ function createCareerFriendApplication(userId: string) {
             await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
           }
 
-          return `Successfully generated cover letter draft:\n\n${coverResult.draft}\n\nTell the user it has been saved to their Cover Letters library.`;
+          return {
+            summaryText: `Successfully generated cover letter draft:\n\n${coverResult.draft}\n\nTell the user it has been saved to their Cover Letters library.`,
+            uiPayload: {
+              type: "cover_letter_ready" as const,
+              letterId: savedJob ? savedJob.listing_id : "",
+              deepLink: "/app/cvs?tab=cover-letters"
+            }
+          };
         } catch (e) {
-          return "Failed to generate cover letter. Please ask the user to provide more details about the role.";
+          return { summaryText: "Failed to generate cover letter. Please ask the user to provide more details about the role." };
         }
       };
 
@@ -1088,7 +1129,7 @@ function createCareerFriendApplication(userId: string) {
         try {
           const evidenceSet = await evidenceRepository.getCurrent(userId);
           if (!evidenceSet || !evidenceSet.evidence) {
-            return "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first.";
+            return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
           }
           
           const sourceText = await evidenceRepository
@@ -1123,9 +1164,16 @@ function createCareerFriendApplication(userId: string) {
             keywordAudit: [],
           });
           
-          return "Successfully tailored the CV based on the user's verified evidence. Tell the user it has been saved to their CV library and they can review or download it.";
+          return {
+            summaryText: "Successfully tailored the CV based on the user's verified evidence. Tell the user it has been saved to their CV library and they can review or download it.",
+            uiPayload: {
+              type: "cv_ready" as const,
+              cvId: "",
+              deepLink: "/app/cvs"
+            }
+          };
         } catch (e) {
-          return "Failed to tailor CV.";
+          return { summaryText: "Failed to tailor CV." };
         }
       };
 
@@ -1134,7 +1182,9 @@ function createCareerFriendApplication(userId: string) {
           userId, 
           ...input, 
           snapshot,
-          executeSearchJobs,
+          executeSearchJobListings,
+          executeRecommendRoleCategories,
+          executeSuggestGrowthAction,
           executeCoverLetter,
           executeCv,
         },
@@ -1149,14 +1199,13 @@ function createCareerFriendApplication(userId: string) {
 
       let attachment: { bytes: Uint8Array; filename: string } | undefined;
 
-      const executeSearchJobs = async (args: any) => {
+      const executeSearchJobListings = async (args: any) => {
         const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
         const { sources } = createHybridJobSource(config);
         const criteria = {
           role_titles: args.roles.slice(0, 3),
           locations: args.locations.slice(0, 3),
           work_modes: args.workModes.slice(0, 3),
-          employment_types: args.employmentTypes.slice(0, 5),
           experience_levels: args.experienceLevels.slice(0, 5),
           excluded_keywords: [],
           page_size: 10,
@@ -1167,7 +1216,42 @@ function createCareerFriendApplication(userId: string) {
           { userId, criteria },
           { sources, repository: jobDiscoveryRepo }
         );
-        return searchResult.summaryText;
+        return {
+          summaryText: searchResult.summaryText,
+          uiPayload: {
+            type: "job_listings" as const,
+            items: searchResult.jobs.map(j => ({
+              id: j.external_id,
+              title: j.title,
+              company: j.organization?.name,
+              location: j.location ?? undefined,
+              mode: j.work_mode ?? undefined,
+              url: j.application_url || j.source_url || undefined,
+            })),
+          }
+        };
+      };
+
+      const executeRecommendRoleCategories = async (args: any) => {
+        return {
+          summaryText: "Role categories generated based on the snapshot.",
+          uiPayload: {
+            type: "role_recommendations" as const,
+            roles: args.roles || [],
+          }
+        };
+      };
+
+      const executeSuggestGrowthAction = async (args: any) => {
+        return {
+          summaryText: "Growth action generated based on the snapshot.",
+          uiPayload: {
+            type: "growth_suggestion" as const,
+            project: args.project,
+            gapType: args.gapType,
+            deepLink: "/app/growth",
+          }
+        };
       };
 
       const executeCoverLetter = async (args: any) => {
@@ -1243,9 +1327,16 @@ function createCareerFriendApplication(userId: string) {
             filename: coverCompany ? `Cover_Letter_${coverRole}_${coverCompany}.pdf` : `Cover_Letter_${coverRole}.pdf`,
           };
 
-          return `Successfully generated cover letter PDF. Inform the user it is attached below.`;
+          return {
+            summaryText: `Successfully generated cover letter PDF. Inform the user it is attached below.`,
+            uiPayload: {
+              type: "cover_letter_ready" as const,
+              letterId: savedJob ? savedJob.listing_id : "",
+              deepLink: "/app/cvs?tab=cover-letters"
+            }
+          };
         } catch (e) {
-          return "Failed to generate cover letter. Ask the user for more details.";
+          return { summaryText: "Failed to generate cover letter. Ask the user for more details." };
         }
       };
 
@@ -1253,7 +1344,7 @@ function createCareerFriendApplication(userId: string) {
         try {
           const evidenceSet = await evidenceRepository.getCurrent(userId);
           if (!evidenceSet || !evidenceSet.evidence) {
-            return "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first.";
+            return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
           }
           
           const sourceText = await evidenceRepository
@@ -1310,9 +1401,16 @@ function createCareerFriendApplication(userId: string) {
             filename: compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`,
           };
           
-          return "Successfully tailored the CV PDF based on the user's verified evidence. Tell the user it is attached below.";
+          return {
+            summaryText: "Successfully tailored the CV PDF based on the user's verified evidence. Tell the user it is attached below.",
+            uiPayload: {
+              type: "cv_ready" as const,
+              cvId: "",
+              deepLink: "/app/cvs"
+            }
+          };
         } catch (e) {
-          return "Failed to tailor CV.";
+          return { summaryText: "Failed to tailor CV." };
         }
       };
 
@@ -1323,7 +1421,9 @@ function createCareerFriendApplication(userId: string) {
           clientMessageId: randomUUID(),
           message,
           snapshot,
-          executeSearchJobs,
+          executeSearchJobListings,
+          executeRecommendRoleCategories,
+          executeSuggestGrowthAction,
           executeCoverLetter,
           executeCv,
         },
