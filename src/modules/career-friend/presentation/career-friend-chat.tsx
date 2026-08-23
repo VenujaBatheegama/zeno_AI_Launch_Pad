@@ -328,14 +328,14 @@ export function CareerFriendChat(props: {
           item.role === "user" ? (
             <div
               key={`user-${index}`}
-              className="ml-auto max-w-[min(92%,36rem)] rounded-full bg-[var(--zeno-violet-soft)] px-4 py-2.5 text-[14px] leading-6 text-[var(--zeno-primary-deep)]"
+              className="ml-auto w-fit max-w-[min(92%,36rem)] rounded-2xl bg-[var(--zeno-violet-soft)] px-4 py-2.5 text-[14px] leading-6 text-[var(--zeno-primary-deep)]"
             >
               {item.content}
             </div>
           ) : featured ? (
             <article
               key={`assistant-${index}`}
-              className="max-w-[min(100%,44rem)] rounded-[22px] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
+              className="w-fit max-w-[min(100%,44rem)] rounded-[22px] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]"
             >
               {safeRenderMarkdown(item.content)}
               {item.uiPayload && (
@@ -387,7 +387,7 @@ export function CareerFriendChat(props: {
           ) : (
             <div
               key={`assistant-${index}`}
-              className="max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3"
+              className="w-fit max-w-[92%] rounded-2xl bg-[var(--zeno-violet-wash)] px-4 py-3"
             >
               {safeRenderMarkdown(item.content)}
               {item.uiPayload && (
