@@ -63,13 +63,17 @@ export async function PATCH(
               ...existingProjects,
               {
                 id: crypto.randomUUID(),
-                name: project.title,
-                description: project.objective,
-                technologies: project.expectedEvidence ?? [],
-                bullets: project.expectedEvidence ?? [],
-                url: null,
                 origin: "user_edited" as const,
                 source_quote: null,
+                name: project.title,
+                role: null,
+                start_date: project.startDate?.slice(0, 7) ?? null,
+                end_date: project.targetDate?.slice(0, 7) ?? null,
+                bullets: [
+                  project.objective,
+                  ...(project.expectedEvidence ?? []),
+                ].filter(Boolean),
+                technologies: project.expectedEvidence ?? [],
               },
             ];
 

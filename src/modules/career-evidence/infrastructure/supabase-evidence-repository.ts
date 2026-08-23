@@ -221,13 +221,128 @@ export class SupabaseEvidenceRepository implements CareerEvidenceRepository {
   }
 }
 
+function sanitizeEvidence(raw: unknown): CareerEvidence {
+  const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+  const profileRaw =
+    typeof obj.profile === "object" && obj.profile !== null
+      ? (obj.profile as Record<string, unknown>)
+      : {};
+
+  const mapList = <T>(list: unknown, mapper: (item: Record<string, unknown>) => T): T[] => {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item) => (typeof item === "object" && item !== null ? mapper(item as Record<string, unknown>) : null))
+      .filter((item): item is T => item !== null);
+  };
+
+  const sanitizeWork = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    employer: String(item.employer || item.company || ""),
+    role: String(item.role || item.title || item.job_title || ""),
+    location: item.location ? String(item.location) : null,
+    start_date: item.start_date ? String(item.start_date).slice(0, 7) : null,
+    end_date: item.end_date ? String(item.end_date).slice(0, 7) : null,
+    is_current: Boolean(item.is_current),
+    bullets: Array.isArray(item.bullets) ? item.bullets.map(String).filter(Boolean) : [],
+  });
+
+  const sanitizeEdu = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    institution: String(item.institution || item.school || ""),
+    qualification: item.qualification ? String(item.qualification) : null,
+    field_of_study: item.field_of_study ? String(item.field_of_study) : null,
+    start_date: item.start_date ? String(item.start_date).slice(0, 7) : null,
+    end_date: item.end_date ? String(item.end_date).slice(0, 7) : null,
+    details: Array.isArray(item.details) ? item.details.map(String).filter(Boolean) : undefined,
+  });
+
+  const sanitizeSkill = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    name: String(item.name || item.skill || ""),
+  });
+
+  const sanitizeProject = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    name: String(item.name || item.title || "Project"),
+    role: item.role ? String(item.role) : null,
+    start_date: item.start_date ? String(item.start_date).slice(0, 7) : null,
+    end_date: item.end_date ? String(item.end_date).slice(0, 7) : null,
+    bullets: Array.isArray(item.bullets)
+      ? item.bullets.map(String).filter(Boolean)
+      : item.description
+        ? [String(item.description)]
+        : [],
+    technologies: Array.isArray(item.technologies) ? item.technologies.map(String).filter(Boolean) : [],
+  });
+
+  const sanitizeCert = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    name: String(item.name || item.title || ""),
+    issuer: item.issuer ? String(item.issuer) : null,
+    issued_date: item.issued_date ? String(item.issued_date).slice(0, 7) : null,
+  });
+
+  const sanitizeAchieve = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    name: String(item.name || item.title || ""),
+    result: item.result ? String(item.result) : null,
+    issuer: item.issuer ? String(item.issuer) : null,
+    date: item.date ? String(item.date).slice(0, 7) : null,
+  });
+
+  const sanitizeRef = (item: Record<string, unknown>) => ({
+    id: String(item.id || crypto.randomUUID()),
+    origin: (item.origin === "extracted" || item.origin === "user_edited" ? item.origin : "user_edited") as "extracted" | "user_edited",
+    source_quote: item.source_quote ? String(item.source_quote) : null,
+    name: String(item.name || ""),
+    title: item.title ? String(item.title) : null,
+    organization: item.organization ? String(item.organization) : null,
+    email: item.email ? String(item.email) : null,
+    phone: item.phone ? String(item.phone) : null,
+  });
+
+  return {
+    schema_version: 1,
+    profile: {
+      full_name: profileRaw.full_name ? String(profileRaw.full_name) : null,
+      email: profileRaw.email ? String(profileRaw.email) : null,
+      phone: profileRaw.phone ? String(profileRaw.phone) : null,
+      location: profileRaw.location ? String(profileRaw.location) : null,
+      summary: profileRaw.summary ? String(profileRaw.summary) : null,
+    },
+    work_experience: mapList(obj.work_experience, sanitizeWork),
+    education: mapList(obj.education, sanitizeEdu),
+    skills: mapList(obj.skills, sanitizeSkill),
+    projects: mapList(obj.projects, sanitizeProject),
+    certifications: mapList(obj.certifications, sanitizeCert),
+    achievements: mapList(obj.achievements, sanitizeAchieve),
+    references: mapList(obj.references, sanitizeRef),
+    warnings: Array.isArray(obj.warnings) ? obj.warnings.map(String).filter(Boolean) : [],
+  };
+}
+
 function mapEvidenceRow(row: EvidenceRow): CareerEvidenceSet {
+  const parsed = careerEvidenceSchema.safeParse(row.evidence);
+  const evidence = parsed.success ? parsed.data : sanitizeEvidence(row.evidence);
+
   return {
     id: row.id,
     userId: row.user_id,
     sourceDocumentId: row.source_document_id,
     status: row.status,
-    evidence: careerEvidenceSchema.parse(row.evidence),
+    evidence,
     extractionModel: row.extraction_model,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
