@@ -472,8 +472,8 @@ export function CareerFriendChat(props: {
             aria-label="Message Zeno"
             className={
               featured
-                ? "min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[16px] sm:text-[14px] outline-none placeholder:text-[var(--zeno-ink-faint)]"
-                : "min-w-0 flex-1 rounded-full border border-[var(--zeno-border)] px-4 py-2 text-[16px] sm:text-sm outline-none focus:border-[var(--zeno-border-hover)]"
+                ? "min-w-0 flex-1 border-0 bg-transparent px-2 py-1.5 text-[16px] sm:text-[14px] outline-none focus:ring-0 focus:border-transparent focus:outline-none placeholder:text-[var(--zeno-ink-faint)]"
+                : "min-w-0 flex-1 rounded-full border border-[var(--zeno-border)] px-4 py-2 text-[16px] sm:text-sm outline-none focus:ring-0 focus:border-[var(--zeno-border-hover)] focus:outline-none"
             }
           />
           <button
