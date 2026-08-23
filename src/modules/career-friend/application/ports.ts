@@ -50,16 +50,29 @@ export interface CareerAdvisor {
     message: string;
     snapshot: CareerSnapshot;
     recentMessages: CareerConversationMessage[];
+    executeSearchJobs?: (args: {
+      roles: string[];
+      locations: string[];
+      workModes: ("remote" | "hybrid" | "onsite")[];
+      employmentTypes: string[];
+      experienceLevels: string[];
+    }) => Promise<string>;
+    executeCoverLetter?: (args: {
+      jobTitle: string;
+      organizationName?: string;
+      jobDescription?: string;
+    }) => Promise<string>;
+    executeCv?: (args: {
+      jobTitle: string;
+      organizationName?: string;
+      jobDescription?: string;
+    }) => Promise<string>;
   }): Promise<{
     answer: string;
     thinking?: string;
     suggestedActions: Array<
       "view_jobs" | "review_recommendations" | "start_sprint" | "update_profile"
     >;
-    toolCalls?: Array<{
-      toolName: string;
-      args: Record<string, unknown>;
-    }>;
     usedModel: boolean;
   }>;
 }

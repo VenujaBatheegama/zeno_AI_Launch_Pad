@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
+import { z } from "zod";
 
 import type { GroqKeyPool } from "@/lib/ai/groq-key-pool";
 import type { CareerAdvisor } from "../application/ports";
@@ -17,6 +18,13 @@ You talk like a sharp, supportive friend texting back — direct, empathetic, te
   • /app/cvs — Tailored CVs & cover letters
   • /app/career-profile — Verified evidence, skills & project experience
 
+## TOOLS
+You have access to tools to search for jobs, generate cover letters, and tailor CVs. 
+- ALWAYS use \`searchJobs\` if the user is looking for roles, asking what's hiring, or exploring opportunities. Use the snapshot to infer their skills/roles if they ask generally.
+- ALWAYS use \`generateCoverLetter\` if the user asks you to write, draft, or create a cover letter.
+- ALWAYS use \`generateCv\` if the user asks you to tailor or create a CV.
+When you call a tool, you will receive its result. You must then synthesize a conversational, thoughtful reply using that result. Do not just dump the raw output.
+
 ## COMMUNICATION STYLE:
 - Conversational, insightful, and concise (2-4 punchy paragraphs or bullet points).
 - No robotic corporate clichés, no empty filler, and no fake Markdown file download links.
@@ -31,6 +39,46 @@ export class GroqCareerAdvisor implements CareerAdvisor {
   async reply(input: Parameters<CareerAdvisor["reply"]>[0]) {
     const suggestedActions = inferSuggestedActions(input.message, input.snapshot);
     try {
+      const tools: Record<string, any> = {};
+      
+      if (input.executeSearchJobs) {
+        tools.searchJobs = tool({
+          description: "Search for jobs based on structured criteria",
+          parameters: z.object({
+            roles: z.array(z.string()).describe("Target job titles (e.g. ['React Developer'])"),
+            locations: z.array(z.string()).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
+            workModes: z.array(z.enum(["remote", "hybrid", "onsite"])).describe("Work modes"),
+            employmentTypes: z.array(z.string()).describe("e.g. full_time, part_time, contract, internship"),
+            experienceLevels: z.array(z.string()).describe("e.g. entry, mid, senior, lead"),
+          }),
+          execute: async (args: any) => input.executeSearchJobs!(args),
+        } as any);
+      }
+
+      if (input.executeCoverLetter) {
+        tools.generateCoverLetter = tool({
+          description: "Generate a tailored cover letter for a specific job",
+          parameters: z.object({
+            jobTitle: z.string().describe("Target role title"),
+            organizationName: z.string().optional().describe("Company name"),
+            jobDescription: z.string().optional().describe("Job description or user's instructions for the letter"),
+          }),
+          execute: async (args: any) => input.executeCoverLetter!(args),
+        } as any);
+      }
+
+      if (input.executeCv) {
+        tools.generateCv = tool({
+          description: "Tailor or generate a CV for a specific job",
+          parameters: z.object({
+            jobTitle: z.string().describe("Target role title"),
+            organizationName: z.string().optional().describe("Company name"),
+            jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
+          }),
+          execute: async (args: any) => input.executeCv!(args),
+        } as any);
+      }
+
       const decision = await this.keyPool.withKey(
         async (apiKey) => {
           const result = await generateText({
@@ -39,6 +87,9 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             temperature: 0.3,
             maxRetries: 1,
             maxOutputTokens: 1200,
+            // @ts-expect-error - Some versions of AI SDK use maxSteps or maxToolRoundtrips
+            maxSteps: 2, // Cap at 2 steps: 1 for tool call, 1 for final reply
+            tools,
             prompt: [
               "<CAREER_SNAPSHOT>",
               JSON.stringify(compactSnapshot(input.snapshot)),

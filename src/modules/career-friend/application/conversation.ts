@@ -9,6 +9,9 @@ export async function askCareerFriend(
     clientMessageId: string;
     message: string;
     snapshot: CareerSnapshot;
+    executeSearchJobs?: Parameters<CareerAdvisor["reply"]>[0]["executeSearchJobs"];
+    executeCoverLetter?: Parameters<CareerAdvisor["reply"]>[0]["executeCoverLetter"];
+    executeCv?: Parameters<CareerAdvisor["reply"]>[0]["executeCv"];
   },
   deps: {
     repository: CareerFriendRepository;
@@ -66,6 +69,9 @@ export async function askCareerFriend(
       message: input.message,
       snapshot: input.snapshot,
       recentMessages,
+      executeSearchJobs: input.executeSearchJobs,
+      executeCoverLetter: input.executeCoverLetter,
+      executeCv: input.executeCv,
     }),
   ]);
   await deps.repository.addMessage({
