@@ -9,7 +9,9 @@ export async function askCareerFriend(
     clientMessageId: string;
     message: string;
     snapshot: CareerSnapshot;
-    executeSearchJobs?: Parameters<CareerAdvisor["reply"]>[0]["executeSearchJobs"];
+    executeSearchJobListings?: Parameters<CareerAdvisor["reply"]>[0]["executeSearchJobListings"];
+    executeRecommendRoleCategories?: Parameters<CareerAdvisor["reply"]>[0]["executeRecommendRoleCategories"];
+    executeSuggestGrowthAction?: Parameters<CareerAdvisor["reply"]>[0]["executeSuggestGrowthAction"];
     executeCoverLetter?: Parameters<CareerAdvisor["reply"]>[0]["executeCoverLetter"];
     executeCv?: Parameters<CareerAdvisor["reply"]>[0]["executeCv"];
   },
@@ -51,6 +53,7 @@ export async function askCareerFriend(
       answer: assistant?.content ?? "I already received that message.",
       suggestedActions: [],
       usedModel: Boolean(assistant?.metadata.usedModel),
+      uiPayload: assistant?.metadata.uiPayload,
       idempotentReplay: true,
     };
   }
@@ -69,7 +72,9 @@ export async function askCareerFriend(
       message: input.message,
       snapshot: input.snapshot,
       recentMessages,
-      executeSearchJobs: input.executeSearchJobs,
+      executeSearchJobListings: input.executeSearchJobListings,
+      executeRecommendRoleCategories: input.executeRecommendRoleCategories,
+      executeSuggestGrowthAction: input.executeSuggestGrowthAction,
       executeCoverLetter: input.executeCoverLetter,
       executeCv: input.executeCv,
     }),
@@ -83,6 +88,7 @@ export async function askCareerFriend(
     metadata: {
       usedModel: reply.usedModel,
       suggestedActions: reply.suggestedActions,
+      uiPayload: reply.uiPayload,
     },
     createdAt: deps.now().toISOString(),
   });
