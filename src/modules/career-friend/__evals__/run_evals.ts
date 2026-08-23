@@ -75,6 +75,21 @@ async function runEvals() {
         mustNotContain: ["|", "**Job hunting**", "**Application polish**", "🚀"],
         maxWordCount: 80,
       }
+    },
+    {
+      name: "Strict Growth Suggestion Payload",
+      message: "suggest a project I need to do in .NET development",
+      snapshot: EMPTY_SNAPSHOT,
+      expectedAction: "Should call executeSuggestGrowthAction and return a populated project and gapType.",
+      expected: {
+        toolCalled: "suggestGrowthAction",
+        validatePayload: (payload: any) => {
+           if (payload.type !== "growth_suggestion") return false;
+           if (!payload.project || !payload.gapType) return false;
+           if (!payload.deepLink.includes("role=")) return false;
+           return true; 
+        }
+      }
     }
   ];
 
@@ -102,7 +117,13 @@ async function runEvals() {
       },
       executeSuggestGrowthAction: async (args) => {
         calledTool = "suggestGrowthAction";
-        return { summaryText: "Suggested a project.", uiPayload: { type: "growth_suggestion" as const, project: "test", gapType: "skill", deepLink: "" } };
+        const isValid = !!args.project && !!args.gapType;
+        return { 
+          summaryText: "Suggested a project.", 
+          uiPayload: isValid 
+            ? { type: "growth_suggestion" as const, project: args.project, gapType: args.gapType, deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}` }
+            : undefined 
+        };
       },
     });
 
@@ -136,6 +157,14 @@ async function runEvals() {
           casePassed = false;
         } else {
           console.log(`✅ Word count: ${wordCount}/${c.expected.maxWordCount}`);
+        }
+      }
+      
+      if (c.expected.validatePayload && reply.uiPayload) {
+        const isValid = c.expected.validatePayload(reply.uiPayload);
+        if (!isValid) {
+          console.error(`❌ FAILED: validatePayload returned false for ${JSON.stringify(reply.uiPayload)}`);
+          casePassed = false;
         }
       }
       

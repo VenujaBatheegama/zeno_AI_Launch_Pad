@@ -1058,7 +1058,7 @@ function createCareerFriendApplication(userId: string) {
             type: "growth_suggestion" as const,
             project: args.project,
             gapType: args.gapType,
-            deepLink: "/app/growth",
+            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
           }
         };
       };
@@ -1249,7 +1249,7 @@ function createCareerFriendApplication(userId: string) {
             type: "growth_suggestion" as const,
             project: args.project,
             gapType: args.gapType,
-            deepLink: "/app/growth",
+            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
           }
         };
       };
