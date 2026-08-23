@@ -217,7 +217,6 @@ export function CareerFriendChat(props: {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
-  const [copiedIndex, setCopiedIndex] = useState<number>();
   const [telegramModalOpen, setTelegramModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -271,18 +270,6 @@ export function CareerFriendChat(props: {
   async function sendMessage(event: React.FormEvent) {
     event.preventDefault();
     await send(message.trim());
-  }
-
-  async function copyReply(content: string, index: number) {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopiedIndex(index);
-      window.setTimeout(() => {
-        setCopiedIndex((current) => (current === index ? undefined : current));
-      }, 1600);
-    } catch {
-      setError("Could not copy that reply.");
-    }
   }
 
   return (
@@ -376,13 +363,6 @@ export function CareerFriendChat(props: {
                   )}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => void copyReply(item.content, index)}
-                className="mt-3 text-[12px] font-medium text-[var(--zeno-ink-faint)] hover:text-[var(--zeno-primary)]"
-              >
-                {copiedIndex === index ? "Copied" : "Copy"}
-              </button>
             </article>
           ) : (
             <div
