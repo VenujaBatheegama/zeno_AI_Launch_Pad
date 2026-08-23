@@ -181,14 +181,20 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
     title: string;
     createdAt: string;
   }) {
-    const { error } = await this.client.from("career_conversations").insert({
-      id: input.id,
-      user_id: input.userId,
-      title: input.title,
-      created_at: input.createdAt,
-      updated_at: input.createdAt,
-    });
-    if (error) throw persistenceError("Career conversation could not be created.", error);
+    const { error } = await this.client.from("career_conversations").upsert(
+      {
+        id: input.id,
+        user_id: input.userId,
+        title: input.title,
+        created_at: input.createdAt,
+        updated_at: input.createdAt,
+      },
+      { onConflict: "id" },
+    );
+    if (error) {
+      console.error("[career-friend] conversation insert error:", error);
+      throw persistenceError(`Career conversation could not be created: ${error.message}`, error);
+    }
   }
 
   async conversationBelongsToUser(userId: string, conversationId: string) {
@@ -203,21 +209,40 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
   }
 
   async addMessage(input: CareerConversationMessage & { userId: string }) {
-    const { error } = await this.client.from("career_messages").insert({
-      id: input.id,
-      conversation_id: input.conversationId,
-      user_id: input.userId,
-      role: input.role,
-      content: input.content,
-      metadata: input.metadata,
-      created_at: input.createdAt,
-    });
-    if (error) throw persistenceError("Career message could not be saved.", error);
+    // Ensure parent conversation exists before adding message to satisfy foreign key
     await this.client
       .from("career_conversations")
-      .update({ updated_at: input.createdAt })
-      .eq("user_id", input.userId)
-      .eq("id", input.conversationId);
+      .upsert(
+        {
+          id: input.conversationId,
+          user_id: input.userId,
+          title: input.content.slice(0, 80) || "Career conversation",
+          updated_at: input.createdAt,
+        },
+        { onConflict: "id" },
+      );
+
+    const safeMetadata =
+      typeof input.metadata === "object" && input.metadata !== null
+        ? input.metadata
+        : {};
+
+    const { error } = await this.client.from("career_messages").upsert(
+      {
+        id: input.id,
+        conversation_id: input.conversationId,
+        user_id: input.userId,
+        role: input.role,
+        content: input.content.slice(0, 7990),
+        metadata: safeMetadata,
+        created_at: input.createdAt,
+      },
+      { onConflict: "id" },
+    );
+    if (error) {
+      console.error("[career-friend] message insert error:", error);
+      throw persistenceError(`Career message could not be saved: ${error.message}`, error);
+    }
   }
 
   async listMessages(input: { userId: string; conversationId: string; limit: number }) {

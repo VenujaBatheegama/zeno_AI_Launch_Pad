@@ -1029,14 +1029,12 @@ function createCareerFriendApplication(userId: string) {
           if (exists) return input.conversationId;
         }
         const newId = input.conversationId ?? randomUUID();
-        await repository
-          .createConversation({
-            id: newId,
-            userId,
-            title: input.message.slice(0, 80),
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => {});
+        await repository.createConversation({
+          id: newId,
+          userId,
+          title: input.message.slice(0, 80),
+          createdAt: new Date().toISOString(),
+        });
         return newId;
       };
 
