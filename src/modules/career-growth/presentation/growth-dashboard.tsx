@@ -286,7 +286,7 @@ function FocusProjectCard(props: {
               </p>
             </div>
             <Link
-              href="/app/profile"
+              href="/app/career-profile"
               className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black px-3 py-1 text-xs font-bold transition shadow-sm"
             >
               View in Profile →
