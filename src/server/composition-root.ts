@@ -1177,6 +1177,13 @@ function createCareerFriendApplication(userId: string) {
         }
       };
 
+      const executeSetPreferredName = async (args: { name: string }) => {
+        if (input.conversationId) {
+          await repository.updateConversationPreferredName(userId, input.conversationId, args.name);
+        }
+        return { summaryText: `Preferred name saved as ${args.name}. Acknowledge this to the user briefly.` };
+      };
+
       const reply = await askCareerFriend(
         { 
           userId, 
@@ -1187,6 +1194,7 @@ function createCareerFriendApplication(userId: string) {
           executeSuggestGrowthAction,
           executeCoverLetter,
           executeCv,
+          executeSetPreferredName,
         },
         { repository, advisor, createId: randomUUID, now },
       );
@@ -1414,6 +1422,13 @@ function createCareerFriendApplication(userId: string) {
         }
       };
 
+      const executeSetPreferredName = async (args: { name: string }) => {
+        if (conversationId) {
+          await repository.updateConversationPreferredName(userId, conversationId, args.name);
+        }
+        return { summaryText: `Preferred name saved as ${args.name}. Acknowledge this to the user briefly.` };
+      };
+
       const reply = await askCareerFriend(
         { 
           userId, 
@@ -1426,6 +1441,7 @@ function createCareerFriendApplication(userId: string) {
           executeSuggestGrowthAction,
           executeCoverLetter,
           executeCv,
+          executeSetPreferredName,
         },
         { repository, advisor, createId: randomUUID, now },
       );
