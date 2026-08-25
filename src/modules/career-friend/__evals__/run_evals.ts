@@ -90,6 +90,65 @@ async function runEvals() {
            return true; 
         }
       }
+    },
+    {
+      name: "Identity Override",
+      message: "what's my name?",
+      snapshot: MOCK_SNAPSHOT, // Real name is Alex
+      preferredName: "Sam",
+      expectedAction: "Should refer to the user as Sam, not Alex.",
+      expected: {
+        toolCalled: "none",
+        mustNotContain: ["Alex"],
+        validatePayload: (payload: any, answer: string) => answer.includes("Sam"),
+      }
+    },
+    {
+      name: "Set Preferred Name Tool",
+      message: "actually call me Max from now on",
+      snapshot: MOCK_SNAPSHOT,
+      expectedAction: "Should call executeSetPreferredName with Max.",
+      expected: {
+        toolCalled: "setPreferredName",
+      }
+    },
+    {
+      name: "General Context: Backend Preference",
+      message: "what kind of jobs should I look at?",
+      snapshot: MOCK_SNAPSHOT,
+      recentMessages: [
+        { id: "1", conversationId: "1", role: "user", content: "I'm most interested in backend roles, not mobile.", metadata: {}, createdAt: "2026-01-01" },
+        { id: "2", conversationId: "1", role: "assistant", content: "Got it.", metadata: {}, createdAt: "2026-01-01" }
+      ],
+      expectedAction: "Should suggest backend roles, avoiding mobile.",
+      expected: {
+        toolCalled: "recommendRoleCategories", // Should call recommendRoleCategories
+      }
+    },
+    {
+      name: "General Context: CV Rejection",
+      message: "can you help with my job search?",
+      snapshot: MOCK_SNAPSHOT,
+      recentMessages: [
+        { id: "1", conversationId: "1", role: "user", content: "I already have a CV, don't need a new one.", metadata: {}, createdAt: "2026-01-01" },
+        { id: "2", conversationId: "1", role: "assistant", content: "Got it.", metadata: {}, createdAt: "2026-01-01" }
+      ],
+      expectedAction: "Should suggest job search tools but NOT CV tailoring.",
+      expected: {
+        toolCalled: "none",
+        mustNotContain: ["tailor your CV", "generate a CV"],
+      }
+    },
+    {
+      name: "Preferred Name Isolation (CV Generation)",
+      message: "can you help me generate a CV for a frontend developer role?",
+      snapshot: MOCK_SNAPSHOT, // Real name is Alex
+      preferredName: "Sam",
+      expectedAction: "Should call generateCv with the job title without leaking 'Sam' into the arguments, and conversational response should acknowledge as Sam.",
+      expected: {
+        toolCalled: "generateCv",
+        validatePayload: (payload: any, answer: string) => answer.includes("Sam"),
+      }
     }
   ];
 
@@ -106,7 +165,8 @@ async function runEvals() {
     const reply = await advisor.reply({
       message: c.message,
       snapshot: c.snapshot,
-      recentMessages: [],
+      recentMessages: (c as any).recentMessages || [],
+      preferredName: (c as any).preferredName,
       executeSearchJobListings: async (args) => {
         calledTool = "searchJobListings";
         return { summaryText: "Found 0 listings.", uiPayload: { type: "job_listings" as const, items: [] } };
@@ -125,6 +185,17 @@ async function runEvals() {
             : undefined 
         };
       },
+      executeSetPreferredName: async (args) => {
+        calledTool = "setPreferredName";
+        return { summaryText: `Set preferred name to ${args.name}.` };
+      },
+      executeCv: async (args) => {
+        calledTool = "generateCv";
+        if (args.jobDescription?.includes("Sam") || args.jobTitle?.includes("Sam") || args.organizationName?.includes("Sam")) {
+           throw new Error("Preferred name leaked into formal CV generation tool arguments.");
+        }
+        return { summaryText: "Generated CV.", uiPayload: { type: "cv_ready" as const, cvId: "123", deepLink: "/app/cvs" } };
+      }
     });
 
     console.log(`Tool Called: ${calledTool}`);
@@ -136,6 +207,13 @@ async function runEvals() {
 
     if (c.expected) {
       let casePassed = true;
+      
+      // Global tone constraint: no em dashes allowed
+      if (reply.answer.includes("—")) {
+        console.error(`❌ FAILED: Output contained forbidden em dash ("—")`);
+        casePassed = false;
+      }
+
       if (c.expected.toolCalled && calledTool !== c.expected.toolCalled) {
         console.error(`❌ FAILED: Expected tool ${c.expected.toolCalled}, got ${calledTool}`);
         casePassed = false;
@@ -160,10 +238,10 @@ async function runEvals() {
         }
       }
       
-      if (c.expected.validatePayload && reply.uiPayload) {
-        const isValid = c.expected.validatePayload(reply.uiPayload);
+      if (c.expected.validatePayload) {
+        const isValid = c.expected.validatePayload(reply.uiPayload, reply.answer);
         if (!isValid) {
-          console.error(`❌ FAILED: validatePayload returned false for ${JSON.stringify(reply.uiPayload)}`);
+          console.error(`❌ FAILED: validatePayload returned false for payload/answer validation.`);
           casePassed = false;
         }
       }

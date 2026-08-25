@@ -279,6 +279,25 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
     });
     return id;
   }
+  async getConversationPreferredName(userId: string, conversationId: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from("career_conversations")
+      .select("preferred_name")
+      .eq("user_id", userId)
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (error) throw persistenceError("Career conversation could not be loaded.", error);
+    return data?.preferred_name ?? null;
+  }
+
+  async updateConversationPreferredName(userId: string, conversationId: string, name: string): Promise<void> {
+    const { error } = await this.client
+      .from("career_conversations")
+      .update({ preferred_name: name })
+      .eq("user_id", userId)
+      .eq("id", conversationId);
+    if (error) throw persistenceError("Could not update preferred name.", error);
+  }
 
   private async withMilestones(row: SprintRow): Promise<CareerSprint> {
     const { data, error } = await this.client

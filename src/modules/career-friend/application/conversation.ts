@@ -14,6 +14,7 @@ export async function askCareerFriend(
     executeSuggestGrowthAction?: Parameters<CareerAdvisor["reply"]>[0]["executeSuggestGrowthAction"];
     executeCoverLetter?: Parameters<CareerAdvisor["reply"]>[0]["executeCoverLetter"];
     executeCv?: Parameters<CareerAdvisor["reply"]>[0]["executeCv"];
+    executeSetPreferredName?: Parameters<CareerAdvisor["reply"]>[0]["executeSetPreferredName"];
   },
   deps: {
     repository: CareerFriendRepository;
@@ -58,6 +59,8 @@ export async function askCareerFriend(
     };
   }
 
+  const preferredName = await deps.repository.getConversationPreferredName(input.userId, conversationId);
+
   const [, reply] = await Promise.all([
     deps.repository.addMessage({
       id: input.clientMessageId,
@@ -72,11 +75,13 @@ export async function askCareerFriend(
       message: input.message,
       snapshot: input.snapshot,
       recentMessages,
+      preferredName: preferredName ?? undefined,
       executeSearchJobListings: input.executeSearchJobListings,
       executeRecommendRoleCategories: input.executeRecommendRoleCategories,
       executeSuggestGrowthAction: input.executeSuggestGrowthAction,
       executeCoverLetter: input.executeCoverLetter,
       executeCv: input.executeCv,
+      executeSetPreferredName: input.executeSetPreferredName,
     }),
   ]);
 
