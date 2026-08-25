@@ -98,6 +98,11 @@ export function buildSkillInventory(snapshot: EvidenceSnapshot): SkillInventory 
   const add = (raw: string) => {
     const trimmed = raw.trim();
     if (!trimmed) return;
+    if (trimmed.includes(":") || trimmed.includes(".")) return;
+    const words = trimmed.split(/\s+/);
+    if (words.length > 4) return;
+    if (words.length > 2 && /^(with|and|for|in|on|at|by|to)$/i.test(words[1] || "")) return;
+    if (/^(worked|developed|built|created|designed|managed|led|implemented|deployed|live)\s/i.test(trimmed)) return;
     if (isSkillCategoryLabel(trimmed)) return;
     if (isSoftSkillLabel(trimmed)) return;
     const { key, label } = normalizeCapabilityLabel(trimmed);
