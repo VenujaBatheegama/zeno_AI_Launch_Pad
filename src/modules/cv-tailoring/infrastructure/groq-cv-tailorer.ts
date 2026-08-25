@@ -37,6 +37,7 @@ Projects (IMPORTANT):
 - Write project content as continuous PARAGRAPHS, not bullet lists.
 - Frame each project as a robust solution to a real-world engineering challenge.
 - Highlight architecture decisions, technologies used, and end-to-end functionality.
+- Sparse Evidence: If a project only has a tech stack and no descriptive bullets in the verified evidence, synthesize a concise, honest technical description from the available metadata. Do NOT mechanically repeat "Implemented with [Tech]".
 - one_page: 1 short, punchy paragraph per project (~35-55 words, about 2 verified facts).
 - two_page: 1-2 balanced paragraphs per project when facts support it.
 - Never truncate a sentence mid-word or mid-phrase.
@@ -97,7 +98,7 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
     let lastError: unknown;
     try {
       return await this.keyPool.withKey(async (apiKey) => {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
             const result = await generateText({
               model: this.keyPool.createModel(apiKey, this.modelId),
@@ -155,6 +156,20 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
               },
             });
 
+            console.log(
+              JSON.stringify(
+                {
+                  event: "cv_tailor_call",
+                  attempt,
+                  inputSize: JSON.stringify(input).length,
+                  prompt: result.request?.messages?.[0]?.content, // Or prompt slice
+                  toolCalls: result.toolCalls,
+                },
+                null,
+                2,
+              ),
+            );
+
             const call = result.toolCalls.find(
               (toolCall) => toolCall.toolName === "recordFinalCvContent",
             );
@@ -170,8 +185,31 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
             };
           } catch (error) {
             lastError = error;
-            if (isGroqRateLimited(error)) throw error;
-            if (attempt === 0 && isMalformedOutput(error)) continue;
+            console.error(
+              JSON.stringify(
+                {
+                  event: "cv_tailor_error",
+                  attempt,
+                  error: error instanceof Error ? error.message : String(error),
+                  name: error instanceof Error ? error.name : undefined,
+                },
+                null,
+                2,
+              ),
+            );
+            if (isGroqRateLimited(error)) {
+              if (attempt < 2) {
+                const delayMs = Math.pow(2, attempt) * 2000;
+                console.warn(`[cv-tailor] Rate limited by Groq. Retrying in ${delayMs}ms (attempt ${attempt + 1})...`);
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+                continue;
+              }
+              throw new CvTailoringError(
+                "API_ERROR",
+                "AI tailoring failed due to persistent rate limiting."
+              );
+            }
+            if (isMalformedOutput(error) && attempt < 2) continue;
             throw error;
           }
         }

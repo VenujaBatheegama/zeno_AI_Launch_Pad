@@ -1093,9 +1093,20 @@ export function CvTailorWorkspace({ listingId }: Props) {
             </p>
           ) : null}
           {error || coverError ? (
-            <p className="rounded-[8px] bg-[var(--zeno-danger-soft)] px-3 py-2 text-xs text-[var(--zeno-danger)]">
-              {error ?? coverError}
-            </p>
+            <div className="flex items-center justify-between rounded-[8px] bg-[var(--zeno-danger-soft)] px-3 py-2">
+              <p className="text-xs text-[var(--zeno-danger)]">
+                {error ? "CV generation ran into an issue — want me to try again?" : coverError}
+              </p>
+              {error && (
+                <button
+                  type="button"
+                  onClick={() => void generateContent(false)}
+                  className="shrink-0 rounded-[6px] bg-[var(--zeno-danger)] px-3 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
           ) : null}
           {saveError ? (
             <p className="rounded-[8px] bg-[var(--zeno-warning-soft)] px-3 py-2 text-xs text-[var(--zeno-warning)]">

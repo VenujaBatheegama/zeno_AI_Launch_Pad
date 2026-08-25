@@ -252,7 +252,6 @@ export async function createTailoredCvContent(
 
     const selectedEvidence = compactSelectedEvidence(snapshot, plan);
     const skillInventory = buildSkillInventory(snapshot).displayNames;
-    let usedDeterministicFallback = false;
     let draft: GroqResumeDraft | null = null;
     let resume: TailoredResume | null = null;
     let usage: TailoringUsage = {
@@ -261,8 +260,7 @@ export async function createTailoredCvContent(
       outputTokens: null,
     };
 
-    try {
-      const tailored = await dependencies.tailorer.tailor({
+    const tailored = await dependencies.tailorer.tailor({
         jobTitle: job.title,
         company: job.organization_name,
         mode,
@@ -279,20 +277,6 @@ export async function createTailoredCvContent(
       });
       draft = tailored.draft;
       usage = tailored.usage;
-    } catch (error) {
-      // Low fit / LLM failure / rate limits must never block CV generation when
-      // basic evidence exists — fall back to verified source wording.
-      console.warn(
-        "[cv-tailor] AI tailor failed; using deterministic fallback:",
-        error instanceof Error ? error.message : error,
-      );
-      resume = buildDeterministicResume({
-        plan,
-        snapshot,
-        keywordAudit: plan.keywordAudit,
-      });
-      usedDeterministicFallback = true;
-    }
 
     variant = await dependencies.repository.saveVariant({
       ...variant,
@@ -305,7 +289,7 @@ export async function createTailoredCvContent(
 
     let repairCount = 0;
 
-    if (!usedDeterministicFallback && draft) {
+    if (draft) {
       const provisional = assessmentFromGeneration(
         provisionalGenerationAssessment(plan),
         plan.keywordAudit,
@@ -365,12 +349,10 @@ export async function createTailoredCvContent(
       }
 
       if (!validation.ok) {
-        resume = buildDeterministicResume({
-          plan,
-          snapshot,
-          keywordAudit: plan.keywordAudit,
-        });
-        usedDeterministicFallback = true;
+        throw new CvTailoringError(
+          "INVALID_AI_OUTPUT",
+          "AI failed to produce a valid CV that meets formatting and constraints."
+        );
       } else {
         resume = {
           ...resume,
@@ -414,11 +396,6 @@ export async function createTailoredCvContent(
       ...new Set([
         ...variant.warnings,
         ...densityWarnings,
-        ...(usedDeterministicFallback
-          ? [
-              "Tailored phrasing could not be fully validated, so verified source wording was used for safety.",
-            ]
-          : []),
       ]),
     ];
 

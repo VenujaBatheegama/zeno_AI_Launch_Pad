@@ -46,6 +46,12 @@ export const MIN_EVIDENCE_VOLUME_FOR_TWO_PAGE = 8;
 
 /** Terms that must never appear in rendered CV text. */
 export const FORBIDDEN_CV_PHRASES = [
+  "worked on",
+  "responsible for",
+  "assisted with",
+  "helped with",
+  "participated in",
+  "various tasks",
   "verified evidence",
   "verified experience",
   "verified project",
