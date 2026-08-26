@@ -1183,7 +1183,7 @@ function createCareerFriendApplication(userId: string) {
             summaryText: "Successfully tailored the CV based on the user's verified evidence. Tell the user it has been saved to their CV library and they can review or download it.",
             uiPayload: {
               type: "cv_ready" as const,
-              cvId: "",
+              cvId: "chat-generated",
               deepLink: "/app/cvs"
             }
           };
@@ -1365,8 +1365,8 @@ function createCareerFriendApplication(userId: string) {
             summaryText: `Successfully generated cover letter PDF. Inform the user it is attached below.`,
             uiPayload: {
               type: "cover_letter_ready" as const,
-              letterId: savedJob ? savedJob.listing_id : "",
-              deepLink: "/app/cvs?tab=cover-letters"
+              letterId: savedJob ? savedJob.listing_id : "chat-generated",
+              deepLink: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`
             }
           };
         } catch (e) {
@@ -1465,8 +1465,8 @@ function createCareerFriendApplication(userId: string) {
             summaryText: "Successfully tailored the CV PDF based on the user's verified evidence. Tell the user it is attached below.",
             uiPayload: {
               type: "cv_ready" as const,
-              cvId: "",
-              deepLink: "/app/cvs"
+              cvId: "chat-generated",
+              deepLink: `data:application/pdf;base64,${Buffer.from(rendered.bytes).toString("base64")}`
             }
           };
         } catch (e) {

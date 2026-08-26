@@ -356,10 +356,18 @@ export function CareerFriendChat(props: {
                     </div>
                   )}
                   {item.uiPayload.type === "cv_ready" && (
-                    <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Tailored CV</Link>
+                    item.uiPayload.deepLink.startsWith("data:") ? (
+                      <a href={item.uiPayload.deepLink} download="Tailored_CV.pdf" className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">Download CV PDF</a>
+                    ) : (
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Tailored CV</Link>
+                    )
                   )}
                   {item.uiPayload.type === "cover_letter_ready" && (
-                    <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Cover Letter</Link>
+                    item.uiPayload.deepLink.startsWith("data:") ? (
+                      <a href={item.uiPayload.deepLink} download="Cover_Letter.pdf" className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">Download Cover Letter</a>
+                    ) : (
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-sm font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Cover Letter</Link>
+                    )
                   )}
                 </div>
               )}
