@@ -305,6 +305,32 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
     }
   }
 
+  async getConversationSummary(userId: string, conversationId: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from("career_conversations")
+      .select("summary")
+      .eq("user_id", userId)
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (error) {
+      if (error.code === "PGRST106") return null;
+      throw persistenceError("Career conversation could not be loaded.", error);
+    }
+    return data?.summary ?? null;
+  }
+
+  async updateConversationSummary(userId: string, conversationId: string, summary: string): Promise<void> {
+    const { error } = await this.client
+      .from("career_conversations")
+      .update({ summary })
+      .eq("user_id", userId)
+      .eq("id", conversationId);
+    if (error) {
+      if (error.code === "PGRST106") return;
+      throw persistenceError("Could not update conversation summary.", error);
+    }
+  }
+
   private async withMilestones(row: SprintRow): Promise<CareerSprint> {
     const { data, error } = await this.client
       .from("career_sprint_milestones")

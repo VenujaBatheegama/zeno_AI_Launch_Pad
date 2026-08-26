@@ -59,7 +59,10 @@ export async function askCareerFriend(
     };
   }
 
-  const preferredName = await deps.repository.getConversationPreferredName(input.userId, conversationId);
+  const [preferredName, previousSummary] = await Promise.all([
+    deps.repository.getConversationPreferredName(input.userId, conversationId),
+    deps.repository.getConversationSummary(input.userId, conversationId)
+  ]);
 
   const [, reply] = await Promise.all([
     deps.repository.addMessage({
@@ -76,6 +79,7 @@ export async function askCareerFriend(
       snapshot: input.snapshot,
       recentMessages,
       preferredName: preferredName ?? undefined,
+      previousSummary: previousSummary ?? undefined,
       executeSearchJobListings: input.executeSearchJobListings,
       executeRecommendRoleCategories: input.executeRecommendRoleCategories,
       executeSuggestGrowthAction: input.executeSuggestGrowthAction,
@@ -125,5 +129,22 @@ export async function askCareerFriend(
     },
     createdAt: deps.now().toISOString(),
   });
+
+  if (recentMessages.length >= 2 && deps.advisor.summarize) {
+    // Fire and forget background summarization
+    deps.advisor.summarize({
+      recentMessages: [...recentMessages, { role: "user", content: input.message }, { role: "assistant", content: reply.answer }],
+      previousSummary: previousSummary ?? undefined,
+    }).then(newSummary => {
+      if (newSummary && newSummary !== previousSummary) {
+        deps.repository.updateConversationSummary(input.userId, conversationId, newSummary).catch(err => {
+          console.error("[CareerFriend] Failed to update conversation summary in background", err);
+        });
+      }
+    }).catch(err => {
+      console.error("[CareerFriend] Failed to generate conversation summary in background", err);
+    });
+  }
+
   return { conversationId, ...reply, idempotentReplay: false };
 }
