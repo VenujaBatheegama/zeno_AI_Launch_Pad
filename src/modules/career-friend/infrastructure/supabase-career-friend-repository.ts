@@ -286,7 +286,10 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
       .eq("user_id", userId)
       .eq("id", conversationId)
       .maybeSingle();
-    if (error) throw persistenceError("Career conversation could not be loaded.", error);
+    if (error) {
+      if (error.code === "PGRST106") return null;
+      throw persistenceError("Career conversation could not be loaded.", error);
+    }
     return data?.preferred_name ?? null;
   }
 
@@ -296,7 +299,10 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
       .update({ preferred_name: name })
       .eq("user_id", userId)
       .eq("id", conversationId);
-    if (error) throw persistenceError("Could not update preferred name.", error);
+    if (error) {
+      if (error.code === "PGRST106") return;
+      throw persistenceError("Could not update preferred name.", error);
+    }
   }
 
   private async withMilestones(row: SprintRow): Promise<CareerSprint> {

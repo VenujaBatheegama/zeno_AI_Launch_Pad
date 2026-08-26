@@ -155,6 +155,8 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             jobTitle: z.string().describe("Target role title"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
+            context: z.string().optional().describe("Summary of the user's instructions from the chat context (at least last 3 messages)"),
+            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 2 pages, pass 'two_page'."),
           }),
           execute: async (args: any) => {
             const res = await input.executeCv!(args);

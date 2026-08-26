@@ -78,6 +78,8 @@ export interface CareerAdvisor {
       jobTitle: string;
       organizationName?: string;
       jobDescription?: string;
+      context?: string;
+      pages?: "one_page" | "two_page";
     }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeSetPreferredName?: (args: {
       name: string;
