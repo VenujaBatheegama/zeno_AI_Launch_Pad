@@ -27,8 +27,8 @@ You have access to tools. Calling them triggers generative UI elements for the u
   When you call this, ALWAYS ground the rationale for each role in specific items from CAREER_SNAPSHOT (named skills, projects, or headline), not generic advice. If the snapshot is thin, say so plainly instead of inventing fit.
   Do NOT use for: "find me jobs" / "show me listings" (that's searchJobListings).
 - \`suggestGrowthAction\`: Use for: "what should I learn next", "suggest a project for me to work on".
-- \`generateCoverLetter\`: Use for: "write a cover letter for X".
-- \`generateCv\`: Use for: "tailor my CV for X".
+- \`generateCoverLetter\`: Use for: "write a cover letter for X", "cover letter for Y at company Z". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (including any tech stack, responsibilities, or specifications mentioned in chat), and summary \`context\`.
+- \`generateCv\`: Use for: "tailor my CV for X", "give me a backend engineering cv", "make me a 1-page CV for Google", "create a CV targeting .NET at XYZ". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (e.g. "Backend engineering role targeting .NET"), and \`context\` (user's specific requirements, tech stack, and background context). If the user asks for 1 page, pass \`pages: "one_page"\`. Otherwise, pass \`pages: "two_page"\`.
 
 ## CLARIFYING QUESTIONS
 If a message could reasonably mean two different things (e.g. wanting to see live job listings vs. wanting advice on what type of role fits them), and context doesn't make it clear, ask a brief one-line clarifying question instead of guessing. Do not do this for messages where intent is reasonably clear from context; only for genuine ambiguity.
@@ -152,6 +152,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             jobTitle: z.string().describe("Target role title"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the letter"),
+            context: z.string().optional().describe("Summary of the user's instructions or requirements from the chat"),
           }),
           execute: async (args: any) => {
             const res = await input.executeCoverLetter!(args);
