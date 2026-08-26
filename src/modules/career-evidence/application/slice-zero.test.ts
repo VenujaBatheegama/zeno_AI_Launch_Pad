@@ -182,6 +182,12 @@ class SliceRepository implements CareerEvidenceRepository {
     return this.current?.userId === userId ? this.current : null;
   }
 
+  async getVerified(userId: string) {
+    return this.current?.userId === userId && this.current.status === "verified"
+      ? this.current
+      : null;
+  }
+
   async getDocumentExtractedText() {
     return null;
   }
