@@ -934,7 +934,11 @@ function createCareerFriendApplication(userId: string) {
   const repository = new SupabaseCareerFriendRepository(supabase);
   const campaign = createCareerCampaignApplication(userId);
   const evidenceRepository = new SupabaseEvidenceRepository(supabase);
-  const advisor = new GroqCareerAdvisor(getGroqKeyPool(), config.GROQ_MODEL);
+  const advisor = new GroqCareerAdvisor(
+    getGroqKeyPool(),
+    config.GROQ_MODEL,
+    config.groqFallbackModels,
+  );
   const now = () => new Date();
 
   const getSnapshot = async (): Promise<CareerSnapshot> => {
@@ -1009,36 +1013,47 @@ function createCareerFriendApplication(userId: string) {
       const snapshot = await getSnapshot();
 
       const executeSearchJobListings = async (args: any) => {
-        const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
-        const { sources } = createHybridJobSource(config);
-        const criteria = {
-          role_titles: args.roles.slice(0, 3),
-          locations: args.locations.slice(0, 3),
-          work_modes: args.workModes.slice(0, 3),
-          experience_levels: args.experienceLevels.slice(0, 5),
-          excluded_keywords: [],
-          page_size: 10,
-          cursor: null,
-        } as any;
+        try {
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const { sources } = createHybridJobSource(config);
+          const criteria = {
+            role_titles: args.roles.slice(0, 3),
+            locations: args.locations.slice(0, 3),
+            work_modes: args.workModes.slice(0, 3),
+            experience_levels: args.experienceLevels.slice(0, 5),
+            excluded_keywords: [],
+            page_size: 10,
+            cursor: null,
+          } as any;
 
-        const searchResult = await executeStructuredJobSearch(
-          { userId, criteria },
-          { sources, repository: jobDiscoveryRepo }
-        );
-        return {
-          summaryText: searchResult.summaryText,
-          uiPayload: {
-            type: "job_listings" as const,
-            items: searchResult.jobs.map(j => ({
-              id: j.external_id,
-              title: j.title,
-              company: j.organization?.name,
-              location: j.location ?? undefined,
-              mode: j.work_mode ?? undefined,
-              url: j.application_url || j.source_url || undefined,
-            })),
-          }
-        };
+          const searchResult = await executeStructuredJobSearch(
+            { userId, criteria },
+            { sources, repository: jobDiscoveryRepo }
+          );
+          return {
+            summaryText: searchResult.summaryText,
+            uiPayload: {
+              type: "job_listings" as const,
+              items: searchResult.jobs.map(j => ({
+                id: j.external_id,
+                title: j.title,
+                company: j.organization?.name,
+                location: j.location ?? undefined,
+                mode: j.work_mode ?? undefined,
+                url: j.application_url || j.source_url || undefined,
+              })),
+            }
+          };
+        } catch (e) {
+          console.error("[executeSearchJobListings] live job search failed:", e);
+          // Don't throw: a thrown error here kills the whole model turn and
+          // forces the scripted fallback reply. Tell the model the search is
+          // down so it can still answer using CAREER_SNAPSHOT (e.g. give a
+          // fit assessment) instead of going silent.
+          return {
+            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+          };
+        }
       };
 
       const executeRecommendRoleCategories = async (args: any) => {
@@ -1208,36 +1223,47 @@ function createCareerFriendApplication(userId: string) {
       let attachment: { bytes: Uint8Array; filename: string } | undefined;
 
       const executeSearchJobListings = async (args: any) => {
-        const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
-        const { sources } = createHybridJobSource(config);
-        const criteria = {
-          role_titles: args.roles.slice(0, 3),
-          locations: args.locations.slice(0, 3),
-          work_modes: args.workModes.slice(0, 3),
-          experience_levels: args.experienceLevels.slice(0, 5),
-          excluded_keywords: [],
-          page_size: 10,
-          cursor: null,
-        } as any;
+        try {
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const { sources } = createHybridJobSource(config);
+          const criteria = {
+            role_titles: args.roles.slice(0, 3),
+            locations: args.locations.slice(0, 3),
+            work_modes: args.workModes.slice(0, 3),
+            experience_levels: args.experienceLevels.slice(0, 5),
+            excluded_keywords: [],
+            page_size: 10,
+            cursor: null,
+          } as any;
 
-        const searchResult = await executeStructuredJobSearch(
-          { userId, criteria },
-          { sources, repository: jobDiscoveryRepo }
-        );
-        return {
-          summaryText: searchResult.summaryText,
-          uiPayload: {
-            type: "job_listings" as const,
-            items: searchResult.jobs.map(j => ({
-              id: j.external_id,
-              title: j.title,
-              company: j.organization?.name,
-              location: j.location ?? undefined,
-              mode: j.work_mode ?? undefined,
-              url: j.application_url || j.source_url || undefined,
-            })),
-          }
-        };
+          const searchResult = await executeStructuredJobSearch(
+            { userId, criteria },
+            { sources, repository: jobDiscoveryRepo }
+          );
+          return {
+            summaryText: searchResult.summaryText,
+            uiPayload: {
+              type: "job_listings" as const,
+              items: searchResult.jobs.map(j => ({
+                id: j.external_id,
+                title: j.title,
+                company: j.organization?.name,
+                location: j.location ?? undefined,
+                mode: j.work_mode ?? undefined,
+                url: j.application_url || j.source_url || undefined,
+              })),
+            }
+          };
+        } catch (e) {
+          console.error("[executeSearchJobListings] live job search failed:", e);
+          // Don't throw: a thrown error here kills the whole model turn and
+          // forces the scripted fallback reply. Tell the model the search is
+          // down so it can still answer using CAREER_SNAPSHOT (e.g. give a
+          // fit assessment) instead of going silent.
+          return {
+            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+          };
+        }
       };
 
       const executeRecommendRoleCategories = async (args: any) => {

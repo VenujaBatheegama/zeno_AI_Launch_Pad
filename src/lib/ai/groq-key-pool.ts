@@ -8,8 +8,14 @@ export class GroqKeyPool {
   private readonly keys: string[];
   private readonly exhaustedUntil = new Map<string, number>();
   private preferredIndex = 0;
-  /** Shared org/project cooldown — quota is not multiplied by extra keys. */
-  private sharedCooldownUntil = 0;
+  /**
+   * Rate-limit cooldowns, scoped per caller (usually per model id).
+   * Groq's free-tier limits are per-model, so a 429 on one model must not
+   * block a fallback attempt on a different model in the same request.
+   * Callers that don't pass a scope share the "default" bucket, matching the
+   * old single-cooldown behavior.
+   */
+  private readonly sharedCooldownUntilByScope = new Map<string, number>();
   lastRateLimitMeta: GroqRateLimitMeta | null = null;
 
   constructor(keys: string[]) {
@@ -43,17 +49,25 @@ export class GroqKeyPool {
        * share an org only burns TPM without helping.
        */
       rotateOnToolFailure?: boolean;
+      /**
+       * Scopes the rate-limit cooldown, defaults to "default". Pass the model
+       * id when you retry the same request against a different model, so a
+       * cooldown from one model doesn't block trying another.
+       */
+      scopeKey?: string;
     },
   ): Promise<T> {
     const rotateOnRateLimit = options?.rotateOnRateLimit === true;
     const rotateOnToolFailure = options?.rotateOnToolFailure !== false;
-    if (this.sharedCooldownUntil > Date.now()) {
+    const scope = options?.scopeKey ?? "default";
+    const sharedCooldownUntil = this.sharedCooldownUntilByScope.get(scope) ?? 0;
+    if (sharedCooldownUntil > Date.now()) {
       throw new GroqCapacityUnavailableError(
-        `Groq is in a shared cooldown until ${new Date(this.sharedCooldownUntil).toISOString()}.`,
+        `Groq is in a shared cooldown until ${new Date(sharedCooldownUntil).toISOString()}.`,
         this.lastRateLimitMeta,
       );
     }
-    const candidates = this.orderedAvailableKeys();
+    const candidates = this.orderedAvailableKeys(scope);
     if (candidates.length === 0) {
       const retryAt = Math.min(...this.exhaustedUntil.values());
       const waitMinutes = Math.max(
@@ -101,12 +115,14 @@ export class GroqKeyPool {
             }
 
             const until = Date.now() + retryMs;
-            this.exhaustedUntil.set(apiKey, until);
-            this.sharedCooldownUntil = Math.max(this.sharedCooldownUntil, until);
+            this.exhaustedUntil.set(`${scope}::${apiKey}`, until);
+            const currentScopeCooldown = this.sharedCooldownUntilByScope.get(scope) ?? 0;
+            this.sharedCooldownUntilByScope.set(scope, Math.max(currentScopeCooldown, until));
             console.warn(
               JSON.stringify({
                 scope: "groq",
                 event: "shared_cooldown_established",
+                cooldownScope: scope,
                 ...meta,
                 until: new Date(until).toISOString(),
                 rotate: rotateOnRateLimit,
@@ -141,7 +157,8 @@ export class GroqKeyPool {
 
     if (lastError instanceof GroqKeysExhaustedError) throw lastError;
     if (lastError instanceof GroqCapacityUnavailableError) throw lastError;
-    if (this.sharedCooldownUntil > Date.now()) {
+    const scopeCooldownAfterLoop = this.sharedCooldownUntilByScope.get(scope) ?? 0;
+    if (scopeCooldownAfterLoop > Date.now()) {
       throw new GroqCapacityUnavailableError(
         "Groq shared quota is exhausted for this window.",
         this.lastRateLimitMeta,
@@ -154,25 +171,27 @@ export class GroqKeyPool {
     );
   }
 
-  isSharedCooldownActive(now = Date.now()): boolean {
-    return this.sharedCooldownUntil > now;
+  isSharedCooldownActive(now = Date.now(), scopeKey = "default"): boolean {
+    return (this.sharedCooldownUntilByScope.get(scopeKey) ?? 0) > now;
   }
 
-  sharedCooldownUntilMs(): number {
-    return this.sharedCooldownUntil;
+  sharedCooldownUntilMs(scopeKey = "default"): number {
+    return this.sharedCooldownUntilByScope.get(scopeKey) ?? 0;
   }
 
   createModel(apiKey: string, modelId: string) {
     return createGroq({ apiKey })(modelId);
   }
 
-  private orderedAvailableKeys(): string[] {
+  private orderedAvailableKeys(scope: string): string[] {
     const now = Date.now();
     for (const [key, until] of this.exhaustedUntil) {
-      if (until <= now) this.exhaustedUntil.delete(key);
+      if (key.startsWith(`${scope}::`) && until <= now) this.exhaustedUntil.delete(key);
     }
 
-    const available = this.keys.filter((key) => !this.exhaustedUntil.has(key));
+    const available = this.keys.filter(
+      (key) => !this.exhaustedUntil.has(`${scope}::${key}`),
+    );
     if (available.length <= 1) return available;
 
     const preferred = this.keys[this.preferredIndex];

@@ -131,19 +131,17 @@ export async function askCareerFriend(
   });
 
   if (recentMessages.length >= 2 && deps.advisor.summarize) {
-    // Fire and forget background summarization
-    deps.advisor.summarize({
-      recentMessages: [...recentMessages, { role: "user", content: input.message }, { role: "assistant", content: reply.answer }],
-      previousSummary: previousSummary ?? undefined,
-    }).then(newSummary => {
+    try {
+      const newSummary = await deps.advisor.summarize({
+        recentMessages: [...recentMessages, { role: "user", content: input.message }, { role: "assistant", content: reply.answer }],
+        previousSummary: previousSummary ?? undefined,
+      });
       if (newSummary && newSummary !== previousSummary) {
-        deps.repository.updateConversationSummary(input.userId, conversationId, newSummary).catch(err => {
-          console.error("[CareerFriend] Failed to update conversation summary in background", err);
-        });
+        await deps.repository.updateConversationSummary(input.userId, conversationId, newSummary);
       }
-    }).catch(err => {
-      console.error("[CareerFriend] Failed to generate conversation summary in background", err);
-    });
+    } catch (err) {
+      console.error("[CareerFriend] Failed to generate conversation summary", err);
+    }
   }
 
   return { conversationId, ...reply, idempotentReplay: false };
