@@ -202,6 +202,23 @@ export class SupabaseEvidenceRepository implements CareerEvidenceRepository {
     return data ? mapEvidenceRow(data as EvidenceRow) : null;
   }
 
+  async getVerified(userId: string): Promise<CareerEvidenceSet | null> {
+    const { data, error } = await this.client
+      .from("career_evidence_sets")
+      .select()
+      .eq("user_id", userId)
+      .eq("status", "verified")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw persistenceError("Career evidence could not be loaded.", error);
+    }
+
+    return data ? mapEvidenceRow(data as EvidenceRow) : null;
+  }
+
   async getDocumentExtractedText(input: {
     documentId: string;
     userId: string;
