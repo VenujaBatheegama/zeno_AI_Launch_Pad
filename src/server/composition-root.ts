@@ -1127,13 +1127,41 @@ function createCareerFriendApplication(userId: string) {
             await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
           }
 
+          const evidenceSet = await evidenceRepository.getVerified(userId);
+          if (evidenceSet) {
+            const prof = evidenceSet.evidence?.profile;
+            const pdfBytes = await renderCoverLetterPdf({
+              candidateName: prof?.full_name ?? "Candidate",
+              contact: {
+                email: prof?.email ?? null,
+                phone: prof?.phone ?? null,
+                location: prof?.location ?? null,
+                linkedinUrl: prof?.linkedin_url ?? null,
+                githubUrl: prof?.github_url ?? null,
+              },
+              jobTitle: targetRole,
+              organizationName: targetOrg || "",
+              letterText: coverResult.draft,
+            });
+            const coverRole = targetRole.replace(/[^a-zA-Z0-9_-]/gu, "_");
+            const coverCompany = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+            const filename = coverCompany ? `Cover_Letter_${coverRole}_${coverCompany}.pdf` : `Cover_Letter_${coverRole}.pdf`;
+            return {
+              summaryText: `Successfully generated cover letter PDF. Inform the user it is attached below.`,
+              uiPayload: {
+                type: "cover_letter_ready" as const,
+                letterId: savedJob ? savedJob.listing_id : "chat-generated",
+                deepLink: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`,
+              },
+            };
+          }
           return {
-            summaryText: `Successfully generated cover letter draft:\n\n${coverResult.draft}\n\nTell the user it has been saved to their Cover Letters library.`,
+            summaryText: `Successfully generated cover letter draft. Tell the user it has been saved.`,
             uiPayload: {
               type: "cover_letter_ready" as const,
-              letterId: savedJob ? savedJob.listing_id : "",
-              deepLink: "/app/cvs?tab=cover-letters"
-            }
+              letterId: savedJob ? savedJob.listing_id : "chat-generated",
+              deepLink: "/app/cvs?tab=cover-letters",
+            },
           };
         } catch (e) {
           return { summaryText: "Failed to generate cover letter. Please ask the user to provide more details about the role." };
@@ -1146,49 +1174,47 @@ function createCareerFriendApplication(userId: string) {
           if (!evidenceSet || !evidenceSet.evidence) {
             return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
           }
-          
+
           const sourceText = await evidenceRepository
-            .getDocumentExtractedText({
-              documentId: evidenceSet.sourceDocumentId,
-              userId,
-            })
+            .getDocumentExtractedText({ documentId: evidenceSet.sourceDocumentId, userId })
             .catch(() => "");
-            
-          const recovered = recoverEvidenceFromCvText(
-            evidenceSet.evidence,
-            sourceText,
-          );
-          
-          const evidenceSnapshot = buildEvidenceSnapshot(
-            evidenceSet.id,
-            recovered,
-          );
-          
+
+          const recovered = recoverEvidenceFromCvText(evidenceSet.evidence, sourceText);
+          const evidenceSnapshot = buildEvidenceSnapshot(evidenceSet.id, recovered);
+
           const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
-          
-          const plan = buildContentPlan({
-            mode: "one_page",
-            snapshot: evidenceSnapshot,
-            requirements: [],
-            jobTitle: targetRole,
-          });
-          
-          buildDeterministicResume({
-            plan,
-            snapshot: evidenceSnapshot,
-            keywordAudit: [],
-          });
-          
+          const targetOrg = args.organizationName;
+
+          const requirements: any[] = [];
+          if (args.jobDescription) {
+            requirements.push({ id: "req-desc", statement: args.jobDescription, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.jobDescription, quantitative_threshold: null });
+          }
+          if (args.context) {
+            requirements.push({ id: "req-ctx", statement: args.context, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.context, quantitative_threshold: null });
+          }
+
+          const pageMode = args.pages || "two_page";
+          const plan = buildContentPlan({ mode: pageMode, snapshot: evidenceSnapshot, requirements, jobTitle: targetRole });
+          const resume = buildDeterministicResume({ plan, snapshot: evidenceSnapshot, keywordAudit: [] });
+
+          const renderer = process.env.CV_PDF_RENDERER === "pdfkit" ? new PdfKitCvRenderer() : new ReactPdfCvRenderer();
+          const rendered = await renderer.render({ mode: pageMode, content: resume, snapshot: evidenceSnapshot, plan, jobTitle: targetRole });
+
+          const roleClean = targetRole.trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+          const compClean = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+          const filename = compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`;
+
           return {
-            summaryText: "Successfully tailored the CV based on the user's verified evidence. Tell the user it has been saved to their CV library and they can review or download it.",
+            summaryText: "Successfully tailored the CV PDF. Tell the user it is attached below as a download button.",
             uiPayload: {
               type: "cv_ready" as const,
               cvId: "chat-generated",
-              deepLink: "/app/cvs"
-            }
+              deepLink: `data:application/pdf;base64,${Buffer.from(rendered.bytes).toString("base64")}`,
+            },
           };
         } catch (e) {
-          return { summaryText: "Failed to tailor CV." };
+          console.error("[executeCv web] failed:", e);
+          return { summaryText: "Failed to tailor CV. Ask the user to try again." };
         }
       };
 
