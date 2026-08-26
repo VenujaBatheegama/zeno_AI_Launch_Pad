@@ -54,6 +54,7 @@ describe("getCurrentEvidence", () => {
       verify: async () => set,
       getById: async () => set,
       getCurrent: async () => set,
+      getVerified: async () => set?.status === "verified" ? set : null,
       getDocumentExtractedText: async () =>
         [
           "REFERENCES",

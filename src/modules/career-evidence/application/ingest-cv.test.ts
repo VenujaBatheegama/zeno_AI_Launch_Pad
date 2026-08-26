@@ -318,6 +318,9 @@ class InMemoryRepository implements CareerEvidenceRepository {
   async getCurrent() {
     return this.evidence;
   }
+  async getVerified() {
+    return this.evidence?.status === "verified" ? this.evidence : null;
+  }
 
   async getDocumentExtractedText() {
     return this.document?.extractedText ?? null;

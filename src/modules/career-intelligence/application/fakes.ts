@@ -341,6 +341,9 @@ export class FakeEvidenceRepository implements CareerEvidenceRepository {
   async getCurrent(): Promise<CareerEvidenceSet | null> {
     return this.current;
   }
+  async getVerified(): Promise<CareerEvidenceSet | null> {
+    return this.current?.status === "verified" ? this.current : null;
+  }
   async getDocumentExtractedText(): Promise<string | null> {
     return null;
   }
