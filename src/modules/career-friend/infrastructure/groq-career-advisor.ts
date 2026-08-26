@@ -85,10 +85,10 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         tools.searchJobListings = tool({
           description: "Search for specific job listings based on criteria.",
           parameters: z.object({
-            roles: z.array(z.string()).describe("Target job titles (e.g. ['React Developer'])"),
-            locations: z.array(z.string()).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
-            workModes: z.array(z.enum(["remote", "hybrid", "onsite"])).describe("Work modes"),
-            experienceLevels: z.array(z.string()).describe("e.g. entry, mid, senior, lead"),
+            roles: z.array(z.string()).default([]).describe("Target job titles (e.g. ['React Developer'])"),
+            locations: z.array(z.string()).default([]).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
+            workModes: z.array(z.enum(["remote", "hybrid", "onsite"])).default([]).describe("Work modes"),
+            experienceLevels: z.array(z.string()).default([]).describe("e.g. entry, mid, senior, lead"),
           }),
           execute: async (args: any) => {
             const res = await input.executeSearchJobListings!(args);
@@ -106,7 +106,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             roles: z.array(z.object({
               title: z.string(),
               rationale: z.string()
-            })).describe("The recommended roles based on the CAREER_SNAPSHOT"),
+            })).default([]).describe("The recommended roles based on the CAREER_SNAPSHOT"),
           }),
           execute: async (args: any) => {
             const res = await input.executeRecommendRoleCategories!(args);
