@@ -45,6 +45,8 @@ export interface CareerFriendRepository {
   findOrCreateTelegramConversation(userId: string): Promise<string>;
   getConversationPreferredName(userId: string, conversationId: string): Promise<string | null>;
   updateConversationPreferredName(userId: string, conversationId: string, name: string): Promise<void>;
+  getConversationSummary(userId: string, conversationId: string): Promise<string | null>;
+  updateConversationSummary(userId: string, conversationId: string, summary: string): Promise<void>;
 }
 
 import type { AgentUIPayload } from "../domain/agent-outputs";
@@ -55,6 +57,7 @@ export interface CareerAdvisor {
     snapshot: CareerSnapshot;
     recentMessages: CareerConversationMessage[];
     preferredName?: string;
+    previousSummary?: string;
     executeSearchJobListings?: (args: {
       roles: string[];
       locations: string[];
@@ -78,6 +81,8 @@ export interface CareerAdvisor {
       jobTitle: string;
       organizationName?: string;
       jobDescription?: string;
+      context?: string;
+      pages?: "one_page" | "two_page";
     }) => Promise<{ summaryText: string; uiPayload?: AgentUIPayload }>;
     executeSetPreferredName?: (args: {
       name: string;
@@ -91,4 +96,8 @@ export interface CareerAdvisor {
     usedModel: boolean;
     uiPayload?: AgentUIPayload;
   }>;
+  summarize(input: {
+    recentMessages: { role: string; content: string }[];
+    previousSummary?: string;
+  }): Promise<string>;
 }

@@ -11,6 +11,8 @@ import { createSupabaseClient } from "@/server/supabase-client";
 import { getCareerFriendApplication } from "@/server/composition-root";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 type TelegramUpdate = {
   update_id?: number;

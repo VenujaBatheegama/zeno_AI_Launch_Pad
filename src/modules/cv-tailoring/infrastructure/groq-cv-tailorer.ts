@@ -205,7 +205,7 @@ export class GroqCvLanguageTailorer implements CvLanguageTailorer {
                 continue;
               }
               throw new CvTailoringError(
-                "API_ERROR",
+                "AI_UNAVAILABLE",
                 "AI tailoring failed due to persistent rate limiting."
               );
             }

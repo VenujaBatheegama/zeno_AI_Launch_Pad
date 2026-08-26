@@ -6,6 +6,7 @@ import {
   getDeflectionMessage,
   sanitizeUserInput,
 } from "@/modules/career-friend/domain/guardrails";
+import { formatTelegramMarkdown } from "./telegram-formatter";
 import type { CareerCampaignRepository } from "./ports";
 
 const LINK_CODE_TTL_MINUTES = 15;
@@ -234,9 +235,11 @@ export async function handleTelegramInboundMessage(input: {
         userId,
         message: sanitized,
       });
-      const formatted = formatTelegramAppLinks(
-        agentResult.answer,
-        input.publicBaseUrl,
+      const formatted = formatTelegramMarkdown(
+        formatTelegramAppLinks(
+          agentResult.answer,
+          input.publicBaseUrl,
+        )
       );
 
       if (agentResult.attachment && input.sendDocument) {

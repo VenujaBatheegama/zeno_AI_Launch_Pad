@@ -64,6 +64,7 @@ export class TelegramBotNotificationSender implements NotificationSender {
     );
     if (caption) {
       formData.append("caption", caption.slice(0, 1024));
+      formData.append("parse_mode", "HTML");
     }
 
     const response = await this.fetchImpl(
@@ -143,6 +144,7 @@ export class TelegramBotNotificationSender implements NotificationSender {
         body: JSON.stringify({
           chat_id: chatId,
           text: text.slice(0, 4096),
+          parse_mode: "HTML",
           disable_web_page_preview: true,
         }),
         signal: AbortSignal.timeout(8_000),

@@ -1375,10 +1375,36 @@ function createCareerFriendApplication(userId: string) {
           const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
           const targetOrg = args.organizationName;
           
+          const requirements: any[] = [];
+          if (args.jobDescription) {
+            requirements.push({
+              id: "req-desc",
+              statement: args.jobDescription,
+              category: "other",
+              importance: "high",
+              explicit: true,
+              confidence: "high",
+              source_quote: args.jobDescription,
+              quantitative_threshold: null
+            });
+          }
+          if (args.context) {
+            requirements.push({
+              id: "req-ctx",
+              statement: args.context,
+              category: "other",
+              importance: "high",
+              explicit: true,
+              confidence: "high",
+              source_quote: args.context,
+              quantitative_threshold: null
+            });
+          }
+
           const plan = buildContentPlan({
-            mode: "one_page",
+            mode: args.pages || "one_page",
             snapshot: evidenceSnapshot,
-            requirements: [],
+            requirements,
             jobTitle: targetRole,
           });
           
@@ -1394,7 +1420,7 @@ function createCareerFriendApplication(userId: string) {
               : new ReactPdfCvRenderer();
               
           const rendered = await renderer.render({
-            mode: "one_page",
+            mode: args.pages || "one_page",
             content: resume,
             snapshot: evidenceSnapshot,
             plan,
