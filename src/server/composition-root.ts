@@ -1029,88 +1029,8 @@ function createCareerFriendApplication(userId: string) {
         const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
         const targetOrg = args.organizationName;
         const pageMode: "one_page" | "two_page" = args.pages === "one_page" ? "one_page" : "two_page";
-        
-        const fullDescription = [
-          args.jobDescription,
-          args.context,
-          targetOrg ? `Company: ${targetOrg}` : null,
-          `Target Role: ${targetRole}`,
-        ].filter(Boolean).join("\n\n") || `Tailored CV for ${targetRole}`;
 
-        const nowIso = new Date().toISOString();
-        const externalId = `custom_cv_${randomUUID()}`;
-
-        try {
-          // 1. Create/upsert a discovered job for this custom tailoring request
-          const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
-            userId,
-            source: { key: "manual", name: "Custom Tailored CV" },
-            jobs: [
-              {
-                external_id: externalId,
-                title: targetRole,
-                organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
-                description: fullDescription,
-                location: null,
-                city: null,
-                region: null,
-                country: null,
-                employment_type: null,
-                work_mode: null,
-                experience_level: null,
-                salary_min: null,
-                salary_max: null,
-                salary_currency: null,
-                salary_period: null,
-                closing_at: null,
-                publisher: null,
-                source_url: null,
-                application_url: null,
-                application_is_direct: true,
-                published_at: nowIso,
-                raw_payload: {},
-              },
-            ],
-            seenAt: nowIso,
-          });
-
-          if (savedJob) {
-            // 2. Perform job analysis & matching
-            await careerApp.analyseAndMatch({ listingId: savedJob.listing_id, force: true });
-
-            // 3. Generate tailored CV content via LLM (GroqCvLanguageTailorer)
-            const variant = await cvApp.generateContent({
-              listingId: savedJob.listing_id,
-              mode: pageMode,
-              tailoringContext: args.context || args.jobDescription,
-              force: true,
-            });
-
-            // 4. Render PDF and save to storage & cv_tailoring_variants
-            const readyVariant = await cvApp.render({ variantId: variant.id });
-            const downloaded = await cvApp.download({ variantId: readyVariant.id });
-
-            if (setAttachment) {
-              setAttachment({
-                bytes: downloaded.bytes,
-                filename: downloaded.filename,
-              });
-            }
-
-            return {
-              summaryText: `Successfully tailored a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. It has been saved to your CV Hub (/app/cvs) and is ready for download.`,
-              uiPayload: {
-                type: "cv_ready" as const,
-                cvId: readyVariant.id,
-                deepLink: `data:application/pdf;base64,${Buffer.from(downloaded.bytes).toString("base64")}`,
-              },
-            };
-          }
-        } catch (err) {
-          console.error("[performTailoredCvGeneration] full tailoring pipeline failed, falling back to deterministic render:", err);
-        }
-
-        // Fallback: in-memory deterministic render
+        // === FAST PATH: deterministic render for the chat turn (no LLM, always < 10s) ===
         const sourceText = await evidenceRepository
           .getDocumentExtractedText({ documentId: evidenceSet.sourceDocumentId, userId })
           .catch(() => "");
@@ -1135,14 +1055,69 @@ function createCareerFriendApplication(userId: string) {
         const filename = compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`;
 
         if (setAttachment) {
-          setAttachment({
-            bytes: rendered.bytes,
-            filename,
-          });
+          setAttachment({ bytes: rendered.bytes, filename });
         }
 
+        // === BACKGROUND PATH: full LLM tailoring to persist in /app/cvs ===
+        const fullDescription = [
+          args.jobDescription,
+          args.context,
+          targetOrg ? `Company: ${targetOrg}` : null,
+          `Target Role: ${targetRole}`,
+        ].filter(Boolean).join("\n\n") || `Tailored CV for ${targetRole}`;
+        const nowIso = new Date().toISOString();
+        const externalId = `custom_cv_${randomUUID()}`;
+
+        // Fire-and-forget - runs after chat turn response is returned
+        void (async () => {
+          try {
+            const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+              userId,
+              source: { key: "manual", name: "Custom Tailored CV" },
+              jobs: [{
+                external_id: externalId,
+                title: targetRole,
+                organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
+                description: fullDescription,
+                location: null,
+                city: null,
+                region: null,
+                country: null,
+                employment_type: null,
+                work_mode: null,
+                experience_level: null,
+                salary_min: null,
+                salary_max: null,
+                salary_currency: null,
+                salary_period: null,
+                closing_at: null,
+                publisher: null,
+                source_url: null,
+                application_url: null,
+                application_is_direct: true,
+                published_at: nowIso,
+                raw_payload: {},
+              }],
+              seenAt: nowIso,
+            });
+            if (savedJob) {
+              await careerApp.analyseAndMatch({ listingId: savedJob.listing_id, force: true });
+              const variant = await cvApp.generateContent({
+                listingId: savedJob.listing_id,
+                mode: pageMode,
+                tailoringContext: args.context || args.jobDescription,
+                force: true,
+              });
+              await cvApp.render({ variantId: variant.id });
+              console.info(`[performTailoredCvGeneration] Background LLM tailoring complete for ${targetRole}, variant ${variant.id}`);
+            }
+          } catch (bgErr) {
+            console.error("[performTailoredCvGeneration] Background LLM tailoring failed:", bgErr);
+          }
+        })();
+
         return {
-          summaryText: `Successfully generated a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}.`,
+          summaryText: `Successfully tailored a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. Your PDF is ready for download below. An LLM-tailored version will appear in your CV Hub (/app/cvs) within a minute.`,
           uiPayload: {
             type: "cv_ready" as const,
             cvId: "chat-generated",
@@ -1150,6 +1125,7 @@ function createCareerFriendApplication(userId: string) {
           },
         };
       };
+
 
       const generateTailoredCoverLetterForTurn = async (
         args: any,
