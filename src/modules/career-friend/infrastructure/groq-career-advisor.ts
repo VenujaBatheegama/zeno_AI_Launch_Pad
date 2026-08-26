@@ -23,7 +23,8 @@ You have access to tools. Calling them triggers generative UI elements for the u
 ### Tool Selection Boundaries
 - \`searchJobListings\`: Use for: "find me jobs", "show me open roles", "what should I apply to right now".
   Do NOT use for: "what job should I do" / "what roles fit me" (that's recommendRoleCategories).
-- \`recommendRoleCategories\`: Use for: "what job should I do", "what roles fit me", "what should I aim for", "am I qualified for X".
+- \`recommendRoleCategories\`: Use for: "what job should I do", "what roles fit me", "what should I aim for", "am I qualified for X", "what do you think about me applying for X".
+  When you call this, ALWAYS ground the rationale for each role in specific items from CAREER_SNAPSHOT (named skills, projects, or headline), not generic advice. If the snapshot is thin, say so plainly instead of inventing fit.
   Do NOT use for: "find me jobs" / "show me listings" (that's searchJobListings).
 - \`suggestGrowthAction\`: Use for: "what should I learn next", "suggest a project for me to work on".
 - \`generateCoverLetter\`: Use for: "write a cover letter for X".
@@ -58,6 +59,12 @@ If a message could reasonably mean two different things (e.g. wanting to see liv
 - Never wrap your final text answer in any tags (like <answer> or <response>). Just write normally.
 - If asked a broad question like "what can you do," give 2-3 concrete examples in plain sentences and invite the user to ask for more. Do not front-load everything you're capable of.
 
+## BE A FRIEND, NOT A FORM
+- You have a memory of this conversation (<RECENT_CONVERSATION> and <CONVERSATION_SUMMARY>). Actually use it. Never ask the user to repeat something they already told you a few messages ago, and never answer a follow-up as if it were a cold, first-ever message.
+- If the user gave you something to go on (a role, a location, a goal) but left something out, it's more natural to ask ONE short, specific follow-up question than to guess or than to dump a generic menu of options. "What kind of roles are you thinking, remote or local?" beats a wall of clarifying bullet points.
+- After you help with something, it's fine (not mandatory, don't do it every single turn) to end with a short, genuinely curious follow-up, the way a friend checking in would: "Want me to start pulling live listings for that?" or "How far along are you on the project side?" Only do this when there's a real next step worth asking about, not as a tic.
+- Don't interrogate. One question at a time, and only when it actually moves the conversation forward.
+
 ## EXAMPLES
 
 User: "who are you"
@@ -72,11 +79,17 @@ export class GroqCareerAdvisor implements CareerAdvisor {
   constructor(
     private readonly keyPool: GroqKeyPool,
     private readonly model: string,
+    private readonly fallbackModels: string[] = [],
   ) {}
 
   async reply(input: Parameters<CareerAdvisor["reply"]>[0]) {
     const suggestedActions = inferSuggestedActions(input.message, input.snapshot);
     let capturedUiPayload: AgentUIPayload | undefined = undefined;
+
+    const candidateModels = [
+      this.model,
+      ...this.fallbackModels.filter((m) => m !== this.model),
+    ];
 
     try {
       const tools: Record<string, any> = {};
@@ -100,12 +113,12 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
       if (input.executeRecommendRoleCategories) {
         tools.recommendRoleCategories = tool({
-          description: "Recommend types of roles the user should apply for (NOT job listings). You MUST generate the role recommendations here.",
+          description: "Recommend types of roles the user should apply for and assess their fit (NOT job listings). You MUST generate the role recommendations here.",
           parameters: z.object({
             focusArea: z.string().optional().describe("A specific area to focus on if mentioned"),
             roles: z.array(z.object({
               title: z.string(),
-              rationale: z.string()
+              rationale: z.string().default("").describe("Why this role fits, referencing the user's skills/projects. Keep it short."),
             })).default([]).describe("The recommended roles based on the CAREER_SNAPSHOT"),
           }),
           execute: async (args: any) => {
@@ -180,51 +193,73 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         } as any);
       }
 
-      const decision = await this.keyPool.withKey(
-        async (apiKey) => {
-          const result = await generateText({
-            model: this.keyPool.createModel(apiKey, this.model),
-            system: HERMES_SYSTEM_PROMPT,
-            temperature: 0.3,
-            maxRetries: 1,
-            maxOutputTokens: 1200,
-            // @ts-expect-error - Some versions of AI SDK use maxSteps or maxToolRoundtrips
-            maxSteps: 2, // Cap at 2 steps: 1 for tool call, 1 for final reply
-            tools,
-            prompt: [
-              "<CAREER_SNAPSHOT>",
-              JSON.stringify(compactSnapshot(input.snapshot)),
-              "</CAREER_SNAPSHOT>",
-              ...(input.preferredName ? ["<PREFERRED_NAME>", input.preferredName, "</PREFERRED_NAME>"] : []),
-              ...(input.previousSummary ? ["<CONVERSATION_SUMMARY>", input.previousSummary, "</CONVERSATION_SUMMARY>"] : []),
-              "<RECENT_CONVERSATION>",
-              ...input.recentMessages.slice(-8).map(
-                (item) => `${item.role}: ${item.content.slice(0, 800)}`,
-              ),
-              "</RECENT_CONVERSATION>",
-              "<USER_MESSAGE>",
-              input.message,
-              "</USER_MESSAGE>",
-            ].join("\n"),
-          });
+      const prompt = [
+        "<CAREER_SNAPSHOT>",
+        JSON.stringify(compactSnapshot(input.snapshot)),
+        "</CAREER_SNAPSHOT>",
+        ...(input.preferredName ? ["<PREFERRED_NAME>", input.preferredName, "</PREFERRED_NAME>"] : []),
+        ...(input.previousSummary ? ["<CONVERSATION_SUMMARY>", input.previousSummary, "</CONVERSATION_SUMMARY>"] : []),
+        "<RECENT_CONVERSATION>",
+        ...input.recentMessages.slice(-8).map(
+          (item) => `${item.role}: ${item.content.slice(0, 800)}`,
+        ),
+        "</RECENT_CONVERSATION>",
+        "<USER_MESSAGE>",
+        input.message,
+        "</USER_MESSAGE>",
+      ].join("\n");
 
-          const rawText = result.text.trim();
-          const { thinking, answer } = parseHermesThinking(rawText);
+      let lastError: unknown;
+      for (const modelId of candidateModels) {
+        try {
+          const decision = await this.keyPool.withKey(
+            async (apiKey) => {
+              const result = await generateText({
+                model: this.keyPool.createModel(apiKey, modelId),
+                system: HERMES_SYSTEM_PROMPT,
+                temperature: 0.3,
+                maxRetries: 1,
+                maxOutputTokens: 1200,
+                // @ts-expect-error - Some versions of AI SDK use maxSteps or maxToolRoundtrips
+                maxSteps: 4, // room for a tool call, a possible follow-up tool call, then the final reply
+                tools,
+                prompt,
+              });
+
+              const rawText = result.text.trim();
+              const { thinking, answer } = parseHermesThinking(rawText);
+
+              return {
+                answer: answer || rawText || deterministicReply(input.message, input.snapshot),
+                thinking,
+              };
+            },
+            // Retry across keys on rate limits AND on tool-call flakiness. A single
+            // hiccup here used to fall straight through to the scripted fallback
+            // reply, which has no memory and no tools, this made the assistant look
+            // like it forgot the conversation. Give it real chances to recover first.
+            { rotateOnRateLimit: true, rotateOnToolFailure: true, scopeKey: modelId },
+          );
 
           return {
-            answer: answer || rawText || deterministicReply(input.message, input.snapshot),
-            thinking,
+            answer: decision.answer,
+            thinking: decision.thinking,
+            suggestedActions,
+            usedModel: true,
+            uiPayload: capturedUiPayload,
           };
-        },
-        { rotateOnRateLimit: false, rotateOnToolFailure: false },
-      );
+        } catch (err) {
+          lastError = err;
+          capturedUiPayload = undefined;
+          console.error(`[GroqCareerAdvisor] model "${modelId}" failed, trying next candidate if any:`, err);
+        }
+      }
 
+      console.error("[GroqCareerAdvisor] all candidate models exhausted:", lastError);
       return {
-        answer: decision.answer,
-        thinking: decision.thinking,
+        answer: deterministicReply(input.message, input.snapshot),
         suggestedActions,
-        usedModel: true,
-        uiPayload: capturedUiPayload,
+        usedModel: false,
       };
     } catch (err) {
       console.error("[GroqCareerAdvisor] error:", err);
@@ -243,8 +278,12 @@ export class GroqCareerAdvisor implements CareerAdvisor {
     try {
       const result = await this.keyPool.withKey(
         async (apiKey) => {
+          // NOTE: this used to hardcode "llama-3.1-8b-instant", which Groq retired
+          // on 2026-08-16. Every summarize() call was silently failing, so the
+          // conversation summary (context beyond the last 8 messages) never got
+          // written. Use the configured model instead so this actually succeeds.
           const { text } = await generateText({
-            model: this.keyPool.createModel(apiKey, "llama-3.1-8b-instant"),
+            model: this.keyPool.createModel(apiKey, this.model),
             maxOutputTokens: 512,
             temperature: 0.1,
             messages: [
