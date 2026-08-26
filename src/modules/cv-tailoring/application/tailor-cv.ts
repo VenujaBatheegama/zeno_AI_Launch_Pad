@@ -87,7 +87,7 @@ export async function createTailoredCvContent(
   const parsed = createSchema.parse(command);
   const context = normalizeContext(parsed.tailoringContext);
 
-  const evidenceSet = await dependencies.evidenceRepository.getCurrent(
+  const evidenceSet = await dependencies.evidenceRepository.getVerified(
     parsed.userId,
   );
   if (!evidenceSet || evidenceSet.status !== "verified") {
@@ -692,7 +692,7 @@ export async function recommendModeForListing(
   reason: string;
   warnings: string[];
 }> {
-  const evidenceSet = await dependencies.evidenceRepository.getCurrent(
+  const evidenceSet = await dependencies.evidenceRepository.getVerified(
     command.userId,
   );
   if (!evidenceSet || evidenceSet.status !== "verified") {

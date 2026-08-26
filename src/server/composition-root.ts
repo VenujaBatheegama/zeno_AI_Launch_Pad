@@ -1142,7 +1142,7 @@ function createCareerFriendApplication(userId: string) {
 
       const executeCv = async (args: any) => {
         try {
-          const evidenceSet = await evidenceRepository.getCurrent(userId);
+          const evidenceSet = await evidenceRepository.getVerified(userId);
           if (!evidenceSet || !evidenceSet.evidence) {
             return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
           }
@@ -1337,7 +1337,7 @@ function createCareerFriendApplication(userId: string) {
             await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
           }
 
-          const evidenceSet = await evidenceRepository.getCurrent(userId);
+          const evidenceSet = await evidenceRepository.getVerified(userId);
           const prof = evidenceSet?.evidence?.profile;
           
           const pdfBytes = await renderCoverLetterPdf({
@@ -1376,7 +1376,7 @@ function createCareerFriendApplication(userId: string) {
 
       const executeCv = async (args: any) => {
         try {
-          const evidenceSet = await evidenceRepository.getCurrent(userId);
+          const evidenceSet = await evidenceRepository.getVerified(userId);
           if (!evidenceSet || !evidenceSet.evidence) {
             return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
           }
@@ -1428,7 +1428,7 @@ function createCareerFriendApplication(userId: string) {
           }
 
           const plan = buildContentPlan({
-            mode: args.pages || "one_page",
+            mode: args.pages || "two_page",
             snapshot: evidenceSnapshot,
             requirements,
             jobTitle: targetRole,
@@ -1446,7 +1446,7 @@ function createCareerFriendApplication(userId: string) {
               : new ReactPdfCvRenderer();
               
           const rendered = await renderer.render({
-            mode: args.pages || "one_page",
+            mode: args.pages || "two_page",
             content: resume,
             snapshot: evidenceSnapshot,
             plan,
@@ -1682,7 +1682,7 @@ function createCareerCampaignApplication(userId: string) {
             return { id: variant.id };
           },
           loadPacketContext: async ({ listingId, recommendationId }) => {
-            const evidence = await evidenceRepository.getCurrent(userId);
+            const evidence = await evidenceRepository.getVerified(userId);
             if (!evidence || evidence.status !== "verified") {
               throw new CareerCampaignError(
                 "EVIDENCE_REQUIRED",
@@ -1736,7 +1736,7 @@ function createCareerCampaignApplication(userId: string) {
         },
       ),
     generateCoverLetterForListing: async (listingId: string) => {
-      const evidence = await evidenceRepository.getCurrent(userId);
+      const evidence = await evidenceRepository.getVerified(userId);
       const evidenceJson = evidence?.evidence ?? {
         schema_version: 1,
         profile: { full_name: "Candidate" },
@@ -1858,7 +1858,7 @@ function createCareerCampaignApplication(userId: string) {
       organizationName?: string;
       jobDescription: string;
     }) => {
-      const evidence = await evidenceRepository.getCurrent(userId);
+      const evidence = await evidenceRepository.getVerified(userId);
       const evidenceJson = evidence?.evidence ?? {
         schema_version: 1,
         profile: { full_name: "Candidate" },
@@ -2009,7 +2009,7 @@ function createCareerCampaignApplication(userId: string) {
         statuses: ["pending_review", "saved", "accepted"],
         limit: 50,
       });
-      const evidence = await evidenceRepository.getCurrent(userId);
+      const evidence = await evidenceRepository.getVerified(userId);
       const supported = new Set(
         (evidence?.evidence.skills ?? []).map((skill) =>
           skill.name.trim().toLocaleLowerCase(),

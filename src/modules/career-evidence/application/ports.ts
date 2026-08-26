@@ -74,6 +74,7 @@ export interface CareerEvidenceRepository {
   }): Promise<CareerEvidenceSet>;
   getById(id: string, userId: string): Promise<CareerEvidenceSet | null>;
   getCurrent(userId: string): Promise<CareerEvidenceSet | null>;
+  getVerified(userId: string): Promise<CareerEvidenceSet | null>;
   getDocumentExtractedText(input: {
     documentId: string;
     userId: string;

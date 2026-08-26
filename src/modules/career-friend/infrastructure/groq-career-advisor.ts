@@ -169,7 +169,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
             context: z.string().optional().describe("Summary of the user's instructions from the chat context (at least last 3 messages)"),
-            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 2 pages, pass 'two_page'."),
+            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 1 page, pass 'one_page'. Otherwise, defaults to 2 pages."),
           }),
           execute: async (args: any) => {
             const res = await input.executeCv!(args);
@@ -230,7 +230,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
               const { thinking, answer } = parseHermesThinking(rawText);
 
               return {
-                answer: answer || rawText || deterministicReply(input.message, input.snapshot),
+                answer: answer || rawText || (capturedUiPayload ? "I have generated what you requested. You can find it below." : deterministicReply(input.message, input.snapshot)),
                 thinking,
               };
             },
