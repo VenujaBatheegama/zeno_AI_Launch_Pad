@@ -27,8 +27,8 @@ You have access to tools. Calling them triggers generative UI elements for the u
   When you call this, ALWAYS ground the rationale for each role in specific items from CAREER_SNAPSHOT (named skills, projects, or headline), not generic advice. If the snapshot is thin, say so plainly instead of inventing fit.
   Do NOT use for: "find me jobs" / "show me listings" (that's searchJobListings).
 - \`suggestGrowthAction\`: Use for: "what should I learn next", "suggest a project for me to work on".
-- \`generateCoverLetter\`: Use for: "write a cover letter for X".
-- \`generateCv\`: Use for: "tailor my CV for X".
+- \`generateCoverLetter\`: Use for: "write a cover letter for X", "cover letter for Y at company Z". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (including any tech stack, responsibilities, or specifications mentioned in chat), and summary \`context\`.
+- \`generateCv\`: Use for: "tailor my CV for X", "give me a backend engineering cv", "make me a 1-page CV for Google", "create a CV targeting .NET at XYZ". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (e.g. "Backend engineering role targeting .NET"), and \`context\` (user's specific requirements, tech stack, and background context). If the user asks for 1 page, pass \`pages: "one_page"\`. Otherwise, pass \`pages: "two_page"\`.
 
 ## CLARIFYING QUESTIONS
 If a message could reasonably mean two different things (e.g. wanting to see live job listings vs. wanting advice on what type of role fits them), and context doesn't make it clear, ask a brief one-line clarifying question instead of guessing. Do not do this for messages where intent is reasonably clear from context; only for genuine ambiguity.
@@ -97,7 +97,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeSearchJobListings) {
         tools.searchJobListings = tool({
           description: "Search for specific job listings based on criteria.",
-          parameters: z.object({
+          inputSchema: z.object({
             roles: z.array(z.string()).default([]).describe("Target job titles (e.g. ['React Developer'])"),
             locations: z.array(z.string()).default([]).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
             workModes: z.array(z.enum(["remote", "hybrid", "onsite"])).default([]).describe("Work modes"),
@@ -114,7 +114,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeRecommendRoleCategories) {
         tools.recommendRoleCategories = tool({
           description: "Recommend types of roles the user should apply for and assess their fit (NOT job listings). You MUST generate the role recommendations here.",
-          parameters: z.object({
+          inputSchema: z.object({
             focusArea: z.string().optional().describe("A specific area to focus on if mentioned"),
             roles: z.array(z.object({
               title: z.string(),
@@ -132,7 +132,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeSuggestGrowthAction) {
         tools.suggestGrowthAction = tool({
           description: "Suggest a specific project or skill to learn next. You MUST generate the project idea and provide concrete values for ALL parameters. Do NOT leave project or gapType empty.",
-          parameters: z.object({
+          inputSchema: z.object({
             gapArea: z.string().describe("The specific gap or skill area to focus on, derived from the user's request (e.g. '.NET development')"),
             project: z.string().describe("A short, concrete project or skill to build. MUST NOT BE EMPTY."),
             gapType: z.enum(["skill", "evidence", "visibility", "qualification"]).describe("The type of gap this addresses. MUST NOT BE EMPTY."),
@@ -148,10 +148,11 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeCoverLetter) {
         tools.generateCoverLetter = tool({
           description: "Generate a tailored cover letter for a specific job",
-          parameters: z.object({
+          inputSchema: z.object({
             jobTitle: z.string().describe("Target role title"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the letter"),
+            context: z.string().optional().describe("Summary of the user's instructions or requirements from the chat"),
           }),
           execute: async (args: any) => {
             const res = await input.executeCoverLetter!(args);
@@ -164,7 +165,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeCv) {
         tools.generateCv = tool({
           description: "Tailor or generate a CV for a specific job",
-          parameters: z.object({
+          inputSchema: z.object({
             jobTitle: z.string().describe("Target role title"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
@@ -182,7 +183,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       if (input.executeSetPreferredName) {
         tools.setPreferredName = tool({
           description: "Set the user's preferred name or nickname for the conversation.",
-          parameters: z.object({
+          inputSchema: z.object({
             name: z.string().describe("The preferred name to use"),
           }),
           execute: async (args: any) => {
@@ -278,35 +279,23 @@ export class GroqCareerAdvisor implements CareerAdvisor {
     try {
       const result = await this.keyPool.withKey(
         async (apiKey) => {
-          // NOTE: this used to hardcode "llama-3.1-8b-instant", which Groq retired
-          // on 2026-08-16. Every summarize() call was silently failing, so the
-          // conversation summary (context beyond the last 8 messages) never got
-          // written. Use the configured model instead so this actually succeeds.
           const { text } = await generateText({
             model: this.keyPool.createModel(apiKey, this.model),
             maxOutputTokens: 512,
             temperature: 0.1,
-            messages: [
-              {
-                role: "system",
-                content: `You are an internal summarization engine for a career assistant.
+            system: `You are an internal summarization engine for a career assistant.
 Your job is to read the conversation and update the CONVERSATION_SUMMARY.
 The summary should only track the user's current goal, target job titles, specific locations, constraints, or requests they have made.
 It should be concise and strictly objective.
 If a previous summary exists, update it with new facts or replace old facts if the user changed their mind.
-Return ONLY the raw updated summary text. Do not wrap in tags, do not acknowledge.`
-              },
-              {
-                role: "user",
-                content: [
-                  ...(input.previousSummary ? ["PREVIOUS SUMMARY:", input.previousSummary, "---"] : []),
-                  "RECENT MESSAGES:",
-                  ...input.recentMessages.map(m => `${m.role}: ${m.content.slice(0, 500)}`),
-                  "---",
-                  "Write the new summary now:"
-                ].join("\n")
-              }
-            ]
+Return ONLY the raw updated summary text. Do not wrap in tags, do not acknowledge.`,
+            prompt: [
+              ...(input.previousSummary ? ["PREVIOUS SUMMARY:", input.previousSummary, "---"] : []),
+              "RECENT MESSAGES:",
+              ...input.recentMessages.map(m => `${m.role}: ${m.content.slice(0, 500)}`),
+              "---",
+              "Write the new summary now:"
+            ].join("\n")
           });
           return text.trim();
         },

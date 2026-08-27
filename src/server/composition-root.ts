@@ -1011,95 +1011,74 @@ function createCareerFriendApplication(userId: string) {
       message: string;
     }) => {
       const snapshot = await getSnapshot();
+      const careerApp = createCareerIntelligenceApplication(userId);
+      const cvApp = createCvTailoringApplication(userId);
+      const jobDiscovery = getJobDiscoveryApplication(userId);
 
-      const executeSearchJobListings = async (args: any) => {
-        try {
-          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
-          const { sources } = createHybridJobSource(config);
-          const criteria = {
-            role_titles: args.roles.slice(0, 3),
-            locations: args.locations.slice(0, 3),
-            work_modes: args.workModes.slice(0, 3),
-            experience_levels: args.experienceLevels.slice(0, 5),
-            excluded_keywords: [],
-            page_size: 10,
-            cursor: null,
-          } as any;
-
-          const searchResult = await executeStructuredJobSearch(
-            { userId, criteria },
-            { sources, repository: jobDiscoveryRepo }
-          );
+      const performTailoredCvGeneration = async (
+        args: any,
+        setAttachment?: (att: { bytes: Uint8Array; filename: string }) => void,
+      ) => {
+        const evidenceSet = await evidenceRepository.getVerified(userId);
+        if (!evidenceSet || !evidenceSet.evidence) {
           return {
-            summaryText: searchResult.summaryText,
-            uiPayload: {
-              type: "job_listings" as const,
-              items: searchResult.jobs.map(j => ({
-                id: j.external_id,
-                title: j.title,
-                company: j.organization?.name,
-                location: j.location ?? undefined,
-                mode: j.work_mode ?? undefined,
-                url: j.application_url || j.source_url || undefined,
-              })),
-            }
-          };
-        } catch (e) {
-          console.error("[executeSearchJobListings] live job search failed:", e);
-          // Don't throw: a thrown error here kills the whole model turn and
-          // forces the scripted fallback reply. Tell the model the search is
-          // down so it can still answer using CAREER_SNAPSHOT (e.g. give a
-          // fit assessment) instead of going silent.
-          return {
-            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+            summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first.",
           };
         }
-      };
 
-      const executeRecommendRoleCategories = async (args: any) => {
-        return {
-          summaryText: "Role categories generated based on the snapshot.",
-          uiPayload: {
-            type: "role_recommendations" as const,
-            roles: args.roles || [],
-          }
-        };
-      };
+        const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
+        const targetOrg = args.organizationName;
+        const pageMode: "one_page" | "two_page" = args.pages === "one_page" ? "one_page" : "two_page";
 
-      const executeSuggestGrowthAction = async (args: any) => {
-        return {
-          summaryText: "Growth action generated based on the snapshot.",
-          uiPayload: {
-            type: "growth_suggestion" as const,
-            project: args.project,
-            gapType: args.gapType,
-            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
-          }
-        };
-      };
+        // === FAST PATH: deterministic render for the chat turn (no LLM, always < 10s) ===
+        const sourceText = await evidenceRepository
+          .getDocumentExtractedText({ documentId: evidenceSet.sourceDocumentId, userId })
+          .catch(() => "");
+        const recovered = recoverEvidenceFromCvText(evidenceSet.evidence, sourceText);
+        const evidenceSnapshot = buildEvidenceSnapshot(evidenceSet.id, recovered);
 
-      const executeCoverLetter = async (args: any) => {
-        try {
-          const targetRole = args.jobTitle || snapshot.profile.headline || "Software Engineer";
-          const targetOrg = args.organizationName;
-          const coverResult = await campaign.generateCustomCoverLetter({
-            jobTitle: targetRole,
-            organizationName: targetOrg,
-            jobDescription: args.jobDescription || "Cover letter highlighting proven track record, core competencies, and career impact.",
-          });
+        const requirements: any[] = [];
+        if (args.jobDescription) {
+          requirements.push({ id: "req-desc", statement: args.jobDescription, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.jobDescription, quantitative_threshold: null });
+        }
+        if (args.context) {
+          requirements.push({ id: "req-ctx", statement: args.context, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.context, quantitative_threshold: null });
+        }
 
-          const nowIso = new Date().toISOString();
-          const externalId = `cover_letter_${randomUUID()}`;
-          const jobDiscovery = getJobDiscoveryApplication(userId);
-          const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
-            userId,
-            source: { key: "manual", name: "Cover Letter Opportunity" },
-            jobs: [
-              {
+        const plan = buildContentPlan({ mode: pageMode, snapshot: evidenceSnapshot, requirements, jobTitle: targetRole });
+        const resume = buildDeterministicResume({ plan, snapshot: evidenceSnapshot, keywordAudit: [] });
+        const renderer = process.env.CV_PDF_RENDERER === "pdfkit" ? new PdfKitCvRenderer() : new ReactPdfCvRenderer();
+        const rendered = await renderer.render({ mode: pageMode, content: resume, snapshot: evidenceSnapshot, plan, jobTitle: targetRole });
+
+        const roleClean = targetRole.trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+        const compClean = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+        const filename = compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`;
+
+        if (setAttachment) {
+          setAttachment({ bytes: rendered.bytes, filename });
+        }
+
+        // === BACKGROUND PATH: full LLM tailoring to persist in /app/cvs ===
+        const fullDescription = [
+          args.jobDescription,
+          args.context,
+          targetOrg ? `Company: ${targetOrg}` : null,
+          `Target Role: ${targetRole}`,
+        ].filter(Boolean).join("\n\n") || `Tailored CV for ${targetRole}`;
+        const nowIso = new Date().toISOString();
+        const externalId = `custom_cv_${randomUUID()}`;
+
+        // Fire-and-forget - runs after chat turn response is returned
+        void (async () => {
+          try {
+            const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+              userId,
+              source: { key: "manual", name: "Custom Tailored CV" },
+              jobs: [{
                 external_id: externalId,
                 title: targetRole,
                 organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
-                description: args.jobDescription || "Cover letter",
+                description: fullDescription,
                 location: null,
                 city: null,
                 region: null,
@@ -1118,198 +1097,60 @@ function createCareerFriendApplication(userId: string) {
                 application_is_direct: true,
                 published_at: nowIso,
                 raw_payload: {},
-              },
-            ],
-            seenAt: nowIso,
-          });
-
-          if (savedJob) {
-            await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
+              }],
+              seenAt: nowIso,
+            });
+            if (savedJob) {
+              await careerApp.analyseAndMatch({ listingId: savedJob.listing_id, force: true });
+              const variant = await cvApp.generateContent({
+                listingId: savedJob.listing_id,
+                mode: pageMode,
+                tailoringContext: args.context || args.jobDescription,
+                force: true,
+              });
+              await cvApp.render({ variantId: variant.id });
+              console.info(`[performTailoredCvGeneration] Background LLM tailoring complete for ${targetRole}, variant ${variant.id}`);
+            }
+          } catch (bgErr) {
+            console.error("[performTailoredCvGeneration] Background LLM tailoring failed:", bgErr);
           }
+        })();
 
-          return {
-            summaryText: `Successfully generated cover letter draft:\n\n${coverResult.draft}\n\nTell the user it has been saved to their Cover Letters library.`,
-            uiPayload: {
-              type: "cover_letter_ready" as const,
-              letterId: savedJob ? savedJob.listing_id : "",
-              deepLink: "/app/cvs?tab=cover-letters"
-            }
-          };
-        } catch (e) {
-          return { summaryText: "Failed to generate cover letter. Please ask the user to provide more details about the role." };
-        }
-      };
-
-      const executeCv = async (args: any) => {
-        try {
-          const evidenceSet = await evidenceRepository.getVerified(userId);
-          if (!evidenceSet || !evidenceSet.evidence) {
-            return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
-          }
-          
-          const sourceText = await evidenceRepository
-            .getDocumentExtractedText({
-              documentId: evidenceSet.sourceDocumentId,
-              userId,
-            })
-            .catch(() => "");
-            
-          const recovered = recoverEvidenceFromCvText(
-            evidenceSet.evidence,
-            sourceText,
-          );
-          
-          const evidenceSnapshot = buildEvidenceSnapshot(
-            evidenceSet.id,
-            recovered,
-          );
-          
-          const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
-          
-          const plan = buildContentPlan({
-            mode: "one_page",
-            snapshot: evidenceSnapshot,
-            requirements: [],
-            jobTitle: targetRole,
-          });
-          
-          buildDeterministicResume({
-            plan,
-            snapshot: evidenceSnapshot,
-            keywordAudit: [],
-          });
-          
-          return {
-            summaryText: "Successfully tailored the CV based on the user's verified evidence. Tell the user it has been saved to their CV library and they can review or download it.",
-            uiPayload: {
-              type: "cv_ready" as const,
-              cvId: "",
-              deepLink: "/app/cvs"
-            }
-          };
-        } catch (e) {
-          return { summaryText: "Failed to tailor CV." };
-        }
-      };
-
-      const executeSetPreferredName = async (args: { name: string }) => {
-        if (input.conversationId) {
-          await repository.updateConversationPreferredName(userId, input.conversationId, args.name);
-        }
-        return { summaryText: `Preferred name saved as ${args.name}. Acknowledge this to the user briefly.` };
-      };
-
-      const reply = await askCareerFriend(
-        { 
-          userId, 
-          ...input, 
-          snapshot,
-          executeSearchJobListings,
-          executeRecommendRoleCategories,
-          executeSuggestGrowthAction,
-          executeCoverLetter,
-          executeCv,
-          executeSetPreferredName,
-        },
-        { repository, advisor, createId: randomUUID, now },
-      );
-
-      return reply;
-    },
-    askTelegram: async (message: string) => {
-      const conversationId = await repository.findOrCreateTelegramConversation(userId);
-      const snapshot = await getSnapshot();
-
-      let attachment: { bytes: Uint8Array; filename: string } | undefined;
-
-      const executeSearchJobListings = async (args: any) => {
-        try {
-          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
-          const { sources } = createHybridJobSource(config);
-          const criteria = {
-            role_titles: args.roles.slice(0, 3),
-            locations: args.locations.slice(0, 3),
-            work_modes: args.workModes.slice(0, 3),
-            experience_levels: args.experienceLevels.slice(0, 5),
-            excluded_keywords: [],
-            page_size: 10,
-            cursor: null,
-          } as any;
-
-          const searchResult = await executeStructuredJobSearch(
-            { userId, criteria },
-            { sources, repository: jobDiscoveryRepo }
-          );
-          return {
-            summaryText: searchResult.summaryText,
-            uiPayload: {
-              type: "job_listings" as const,
-              items: searchResult.jobs.map(j => ({
-                id: j.external_id,
-                title: j.title,
-                company: j.organization?.name,
-                location: j.location ?? undefined,
-                mode: j.work_mode ?? undefined,
-                url: j.application_url || j.source_url || undefined,
-              })),
-            }
-          };
-        } catch (e) {
-          console.error("[executeSearchJobListings] live job search failed:", e);
-          // Don't throw: a thrown error here kills the whole model turn and
-          // forces the scripted fallback reply. Tell the model the search is
-          // down so it can still answer using CAREER_SNAPSHOT (e.g. give a
-          // fit assessment) instead of going silent.
-          return {
-            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
-          };
-        }
-      };
-
-      const executeRecommendRoleCategories = async (args: any) => {
         return {
-          summaryText: "Role categories generated based on the snapshot.",
+          summaryText: `Successfully tailored a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. Your PDF is ready for download below. An LLM-tailored version will appear in your CV Hub (/app/cvs) within a minute.`,
           uiPayload: {
-            type: "role_recommendations" as const,
-            roles: args.roles || [],
-          }
+            type: "cv_ready" as const,
+            cvId: "chat-generated",
+            deepLink: `data:application/pdf;base64,${Buffer.from(rendered.bytes).toString("base64")}`,
+          },
         };
       };
 
-      const executeSuggestGrowthAction = async (args: any) => {
-        return {
-          summaryText: "Growth action generated based on the snapshot.",
-          uiPayload: {
-            type: "growth_suggestion" as const,
-            project: args.project,
-            gapType: args.gapType,
-            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
-          }
-        };
-      };
 
-      const executeCoverLetter = async (args: any) => {
+      const generateTailoredCoverLetterForTurn = async (
+        args: any,
+        setAttachment?: (att: { bytes: Uint8Array; filename: string }) => void,
+      ) => {
         try {
           const targetRole = args.jobTitle || snapshot.profile.headline || "Software Engineer";
           const targetOrg = args.organizationName;
           const coverResult = await campaign.generateCustomCoverLetter({
             jobTitle: targetRole,
             organizationName: targetOrg,
-            jobDescription: args.jobDescription || "Cover letter highlighting proven track record, core competencies, and career impact.",
+            jobDescription: args.jobDescription || args.context || "Cover letter highlighting proven track record, core competencies, and career impact.",
           });
 
           const nowIso = new Date().toISOString();
           const externalId = `cover_letter_${randomUUID()}`;
-          const jobDiscovery = getJobDiscoveryApplication(userId);
           const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
             userId,
-            source: { key: "telegram", name: "Cover Letter (Telegram)" },
+            source: { key: "manual", name: "Custom Cover Letter Opportunity" },
             jobs: [
               {
                 external_id: externalId,
                 title: targetRole,
                 organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
-                description: args.jobDescription || "Cover letter",
+                description: args.jobDescription || args.context || "Cover letter",
                 location: null,
                 city: null,
                 region: null,
@@ -1356,122 +1197,429 @@ function createCareerFriendApplication(userId: string) {
 
           const coverRole = targetRole.replace(/[^a-zA-Z0-9_-]/gu, "_");
           const coverCompany = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
-          attachment = {
-            bytes: pdfBytes,
-            filename: coverCompany ? `Cover_Letter_${coverRole}_${coverCompany}.pdf` : `Cover_Letter_${coverRole}.pdf`,
-          };
+          const filename = coverCompany ? `Cover_Letter_${coverRole}_${coverCompany}.pdf` : `Cover_Letter_${coverRole}.pdf`;
+
+          if (setAttachment) {
+            setAttachment({
+              bytes: pdfBytes,
+              filename,
+            });
+          }
 
           return {
-            summaryText: `Successfully generated cover letter PDF. Inform the user it is attached below.`,
+            summaryText: `Successfully generated cover letter PDF for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. It has been saved to your Cover Letters library (/app/cvs?tab=cover-letters) and is available for download below.`,
             uiPayload: {
               type: "cover_letter_ready" as const,
-              letterId: savedJob ? savedJob.listing_id : "",
-              deepLink: "/app/cvs?tab=cover-letters"
+              letterId: savedJob ? savedJob.listing_id : "chat-generated",
+              deepLink: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`,
+            },
+          };
+        } catch (e) {
+          console.error("[generateTailoredCoverLetterForTurn] failed:", e);
+          return { summaryText: "Failed to generate cover letter. Please ask the user to provide more details about the role." };
+        }
+      };
+
+      const executeSearchJobListings = async (args: any) => {
+        try {
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const { sources } = createHybridJobSource(config);
+          const criteria = {
+            role_titles: args.roles.slice(0, 3),
+            locations: args.locations.slice(0, 3),
+            work_modes: args.workModes.slice(0, 3),
+            experience_levels: args.experienceLevels.slice(0, 5),
+            excluded_keywords: [],
+            page_size: 10,
+            cursor: null,
+          } as any;
+
+          const searchResult = await executeStructuredJobSearch(
+            { userId, criteria },
+            { sources, repository: jobDiscoveryRepo }
+          );
+          return {
+            summaryText: searchResult.summaryText,
+            uiPayload: {
+              type: "job_listings" as const,
+              items: searchResult.jobs.map(j => ({
+                id: j.external_id,
+                title: j.title,
+                company: j.organization?.name,
+                location: j.location ?? undefined,
+                mode: j.work_mode ?? undefined,
+                url: j.application_url || j.source_url || undefined,
+              })),
             }
           };
         } catch (e) {
+          console.error("[executeSearchJobListings] live job search failed:", e);
+          return {
+            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+          };
+        }
+      };
+
+      const executeRecommendRoleCategories = async (args: any) => {
+        return {
+          summaryText: "Role categories generated based on the snapshot.",
+          uiPayload: {
+            type: "role_recommendations" as const,
+            roles: args.roles || [],
+          }
+        };
+      };
+
+      const executeSuggestGrowthAction = async (args: any) => {
+        return {
+          summaryText: "Growth action generated based on the snapshot.",
+          uiPayload: {
+            type: "growth_suggestion" as const,
+            project: args.project,
+            gapType: args.gapType,
+            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
+          }
+        };
+      };
+
+      const executeCoverLetter = async (args: any) => {
+        return generateTailoredCoverLetterForTurn(args);
+      };
+
+      const executeCv = async (args: any) => {
+        return performTailoredCvGeneration(args);
+      };
+
+      const executeSetPreferredName = async (args: { name: string }) => {
+        if (input.conversationId) {
+          await repository.updateConversationPreferredName(userId, input.conversationId, args.name);
+        }
+        return { summaryText: `Preferred name saved as ${args.name}. Acknowledge this to the user briefly.` };
+      };
+
+      const reply = await askCareerFriend(
+        { 
+          userId, 
+          ...input, 
+          snapshot,
+          executeSearchJobListings,
+          executeRecommendRoleCategories,
+          executeSuggestGrowthAction,
+          executeCoverLetter,
+          executeCv,
+          executeSetPreferredName,
+        },
+        { repository, advisor, createId: randomUUID, now },
+      );
+
+      return reply;
+    },
+    askTelegram: async (message: string) => {
+      const conversationId = await repository.findOrCreateTelegramConversation(userId);
+      const snapshot = await getSnapshot();
+      const careerApp = createCareerIntelligenceApplication(userId);
+      const cvApp = createCvTailoringApplication(userId);
+      const jobDiscovery = getJobDiscoveryApplication(userId);
+
+      let attachment: { bytes: Uint8Array; filename: string } | undefined;
+
+      const performTailoredCvGeneration = async (
+        args: any,
+        setAttachment?: (att: { bytes: Uint8Array; filename: string }) => void,
+      ) => {
+        const evidenceSet = await evidenceRepository.getVerified(userId);
+        if (!evidenceSet || !evidenceSet.evidence) {
+          return {
+            summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first.",
+          };
+        }
+
+        const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
+        const targetOrg = args.organizationName;
+        const pageMode: "one_page" | "two_page" = args.pages === "one_page" ? "one_page" : "two_page";
+        
+        const fullDescription = [
+          args.jobDescription,
+          args.context,
+          targetOrg ? `Company: ${targetOrg}` : null,
+          `Target Role: ${targetRole}`,
+        ].filter(Boolean).join("\n\n") || `Tailored CV for ${targetRole}`;
+
+        const nowIso = new Date().toISOString();
+        const externalId = `custom_cv_${randomUUID()}`;
+
+        try {
+          const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+            userId,
+            source: { key: "telegram", name: "Custom Tailored CV (Telegram)" },
+            jobs: [
+              {
+                external_id: externalId,
+                title: targetRole,
+                organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
+                description: fullDescription,
+                location: null,
+                city: null,
+                region: null,
+                country: null,
+                employment_type: null,
+                work_mode: null,
+                experience_level: null,
+                salary_min: null,
+                salary_max: null,
+                salary_currency: null,
+                salary_period: null,
+                closing_at: null,
+                publisher: null,
+                source_url: null,
+                application_url: null,
+                application_is_direct: true,
+                published_at: nowIso,
+                raw_payload: {},
+              },
+            ],
+            seenAt: nowIso,
+          });
+
+          if (savedJob) {
+            await careerApp.analyseAndMatch({ listingId: savedJob.listing_id, force: true });
+
+            const variant = await cvApp.generateContent({
+              listingId: savedJob.listing_id,
+              mode: pageMode,
+              tailoringContext: args.context || args.jobDescription,
+              force: true,
+            });
+
+            const readyVariant = await cvApp.render({ variantId: variant.id });
+            const downloaded = await cvApp.download({ variantId: readyVariant.id });
+
+            if (setAttachment) {
+              setAttachment({
+                bytes: downloaded.bytes,
+                filename: downloaded.filename,
+              });
+            }
+
+            return {
+              summaryText: `Successfully tailored a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. It has been saved to your CV Hub (/app/cvs) and is ready for download.`,
+              uiPayload: {
+                type: "cv_ready" as const,
+                cvId: readyVariant.id,
+                deepLink: `data:application/pdf;base64,${Buffer.from(downloaded.bytes).toString("base64")}`,
+              },
+            };
+          }
+        } catch (err) {
+          console.error("[performTailoredCvGeneration Telegram] failed, falling back to deterministic render:", err);
+        }
+
+        // Fallback: in-memory deterministic render
+        const sourceText = await evidenceRepository
+          .getDocumentExtractedText({ documentId: evidenceSet.sourceDocumentId, userId })
+          .catch(() => "");
+        const recovered = recoverEvidenceFromCvText(evidenceSet.evidence, sourceText);
+        const evidenceSnapshot = buildEvidenceSnapshot(evidenceSet.id, recovered);
+
+        const requirements: any[] = [];
+        if (args.jobDescription) {
+          requirements.push({ id: "req-desc", statement: args.jobDescription, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.jobDescription, quantitative_threshold: null });
+        }
+        if (args.context) {
+          requirements.push({ id: "req-ctx", statement: args.context, category: "other", importance: "high", explicit: true, confidence: "high", source_quote: args.context, quantitative_threshold: null });
+        }
+
+        const plan = buildContentPlan({ mode: pageMode, snapshot: evidenceSnapshot, requirements, jobTitle: targetRole });
+        const resume = buildDeterministicResume({ plan, snapshot: evidenceSnapshot, keywordAudit: [] });
+        const renderer = process.env.CV_PDF_RENDERER === "pdfkit" ? new PdfKitCvRenderer() : new ReactPdfCvRenderer();
+        const rendered = await renderer.render({ mode: pageMode, content: resume, snapshot: evidenceSnapshot, plan, jobTitle: targetRole });
+
+        const roleClean = targetRole.trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+        const compClean = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+        const filename = compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`;
+
+        if (setAttachment) {
+          setAttachment({
+            bytes: rendered.bytes,
+            filename,
+          });
+        }
+
+        return {
+          summaryText: `Successfully generated a ${pageMode === "one_page" ? "1-page" : "2-page"} CV for ${targetRole}.`,
+          uiPayload: {
+            type: "cv_ready" as const,
+            cvId: "chat-generated",
+            deepLink: `data:application/pdf;base64,${Buffer.from(rendered.bytes).toString("base64")}`,
+          },
+        };
+      };
+
+      const generateTailoredCoverLetterForTurn = async (
+        args: any,
+        setAttachment?: (att: { bytes: Uint8Array; filename: string }) => void,
+      ) => {
+        try {
+          const targetRole = args.jobTitle || snapshot.profile.headline || "Software Engineer";
+          const targetOrg = args.organizationName;
+          const coverResult = await campaign.generateCustomCoverLetter({
+            jobTitle: targetRole,
+            organizationName: targetOrg,
+            jobDescription: args.jobDescription || args.context || "Cover letter highlighting proven track record, core competencies, and career impact.",
+          });
+
+          const nowIso = new Date().toISOString();
+          const externalId = `cover_letter_${randomUUID()}`;
+          const [savedJob] = await jobDiscovery.repository.upsertDiscoveredJobs({
+            userId,
+            source: { key: "telegram", name: "Cover Letter (Telegram)" },
+            jobs: [
+              {
+                external_id: externalId,
+                title: targetRole,
+                organization: targetOrg ? { name: targetOrg, logo_url: null, website_url: null } : null,
+                description: args.jobDescription || args.context || "Cover letter",
+                location: null,
+                city: null,
+                region: null,
+                country: null,
+                employment_type: null,
+                work_mode: null,
+                experience_level: null,
+                salary_min: null,
+                salary_max: null,
+                salary_currency: null,
+                salary_period: null,
+                closing_at: null,
+                publisher: null,
+                source_url: null,
+                application_url: null,
+                application_is_direct: true,
+                published_at: nowIso,
+                raw_payload: {},
+              },
+            ],
+            seenAt: nowIso,
+          });
+
+          if (savedJob) {
+            await campaign.generateCoverLetterForListing(savedJob.listing_id).catch(() => {});
+          }
+
+          const evidenceSet = await evidenceRepository.getVerified(userId);
+          const prof = evidenceSet?.evidence?.profile;
+          
+          const pdfBytes = await renderCoverLetterPdf({
+            candidateName: prof?.full_name || snapshot.profile.name || "Candidate",
+            contact: {
+              email: prof?.email ?? null,
+              phone: prof?.phone ?? null,
+              location: prof?.location ?? null,
+              linkedinUrl: prof?.linkedin_url ?? null,
+              githubUrl: prof?.github_url ?? null,
+            },
+            jobTitle: targetRole,
+            organizationName: targetOrg || "",
+            letterText: coverResult.draft,
+          });
+
+          const coverRole = targetRole.replace(/[^a-zA-Z0-9_-]/gu, "_");
+          const coverCompany = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
+          const filename = coverCompany ? `Cover_Letter_${coverRole}_${coverCompany}.pdf` : `Cover_Letter_${coverRole}.pdf`;
+
+          if (setAttachment) {
+            setAttachment({
+              bytes: pdfBytes,
+              filename,
+            });
+          }
+
+          return {
+            summaryText: `Successfully generated cover letter PDF for ${targetRole}${targetOrg ? ` at ${targetOrg}` : ""}. Inform the user it is attached below and saved to their Cover Letters library.`,
+            uiPayload: {
+              type: "cover_letter_ready" as const,
+              letterId: savedJob ? savedJob.listing_id : "chat-generated",
+              deepLink: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`
+            }
+          };
+        } catch (e) {
+          console.error("[generateTailoredCoverLetterForTurn Telegram] failed:", e);
           return { summaryText: "Failed to generate cover letter. Ask the user for more details." };
         }
       };
 
-      const executeCv = async (args: any) => {
+      const executeSearchJobListings = async (args: any) => {
         try {
-          const evidenceSet = await evidenceRepository.getVerified(userId);
-          if (!evidenceSet || !evidenceSet.evidence) {
-            return { summaryText: "User has no verified career evidence. Tell them to add their experience at /onboarding or /app/career-profile first." };
-          }
-          
-          const sourceText = await evidenceRepository
-            .getDocumentExtractedText({
-              documentId: evidenceSet.sourceDocumentId,
-              userId,
-            })
-            .catch(() => "");
-            
-          const recovered = recoverEvidenceFromCvText(
-            evidenceSet.evidence,
-            sourceText,
-          );
-          
-          const evidenceSnapshot = buildEvidenceSnapshot(
-            evidenceSet.id,
-            recovered,
-          );
-          
-          const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
-          const targetOrg = args.organizationName;
-          
-          const requirements: any[] = [];
-          if (args.jobDescription) {
-            requirements.push({
-              id: "req-desc",
-              statement: args.jobDescription,
-              category: "other",
-              importance: "high",
-              explicit: true,
-              confidence: "high",
-              source_quote: args.jobDescription,
-              quantitative_threshold: null
-            });
-          }
-          if (args.context) {
-            requirements.push({
-              id: "req-ctx",
-              statement: args.context,
-              category: "other",
-              importance: "high",
-              explicit: true,
-              confidence: "high",
-              source_quote: args.context,
-              quantitative_threshold: null
-            });
-          }
+          const jobDiscoveryRepo = new SupabaseJobDiscoveryRepository(supabase);
+          const { sources } = createHybridJobSource(config);
+          const criteria = {
+            role_titles: args.roles.slice(0, 3),
+            locations: args.locations.slice(0, 3),
+            work_modes: args.workModes.slice(0, 3),
+            experience_levels: args.experienceLevels.slice(0, 5),
+            excluded_keywords: [],
+            page_size: 10,
+            cursor: null,
+          } as any;
 
-          const plan = buildContentPlan({
-            mode: args.pages || "two_page",
-            snapshot: evidenceSnapshot,
-            requirements,
-            jobTitle: targetRole,
-          });
-          
-          const resume = buildDeterministicResume({
-            plan,
-            snapshot: evidenceSnapshot,
-            keywordAudit: [],
-          });
-          
-          const renderer =
-            process.env.CV_PDF_RENDERER === "pdfkit"
-              ? new PdfKitCvRenderer()
-              : new ReactPdfCvRenderer();
-              
-          const rendered = await renderer.render({
-            mode: args.pages || "two_page",
-            content: resume,
-            snapshot: evidenceSnapshot,
-            plan,
-            jobTitle: targetRole,
-          });
-          
-          const roleClean = targetRole.trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
-          const compClean = (targetOrg || "").trim().replace(/[^a-zA-Z0-9_-]/gu, "_");
-          
-          attachment = {
-            bytes: rendered.bytes,
-            filename: compClean ? `CV_${roleClean}_${compClean}.pdf` : `CV_${roleClean}.pdf`,
-          };
-          
+          const searchResult = await executeStructuredJobSearch(
+            { userId, criteria },
+            { sources, repository: jobDiscoveryRepo }
+          );
           return {
-            summaryText: "Successfully tailored the CV PDF based on the user's verified evidence. Tell the user it is attached below.",
+            summaryText: searchResult.summaryText,
             uiPayload: {
-              type: "cv_ready" as const,
-              cvId: "",
-              deepLink: "/app/cvs"
+              type: "job_listings" as const,
+              items: searchResult.jobs.map(j => ({
+                id: j.external_id,
+                title: j.title,
+                company: j.organization?.name,
+                location: j.location ?? undefined,
+                mode: j.work_mode ?? undefined,
+                url: j.application_url || j.source_url || undefined,
+              })),
             }
           };
         } catch (e) {
-          return { summaryText: "Failed to tailor CV." };
+          console.error("[executeSearchJobListings] live job search failed:", e);
+          return {
+            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+          };
         }
+      };
+
+      const executeRecommendRoleCategories = async (args: any) => {
+        return {
+          summaryText: "Role categories generated based on the snapshot.",
+          uiPayload: {
+            type: "role_recommendations" as const,
+            roles: args.roles || [],
+          }
+        };
+      };
+
+      const executeSuggestGrowthAction = async (args: any) => {
+        return {
+          summaryText: "Growth action generated based on the snapshot.",
+          uiPayload: {
+            type: "growth_suggestion" as const,
+            project: args.project,
+            gapType: args.gapType,
+            deepLink: `/app/growth?role=${encodeURIComponent(args.gapArea || args.gapType || "")}`,
+          }
+        };
+      };
+
+      const executeCoverLetter = async (args: any) => {
+        return generateTailoredCoverLetterForTurn(args, (att) => {
+          attachment = att;
+        });
+      };
+
+      const executeCv = async (args: any) => {
+        return performTailoredCvGeneration(args, (att) => {
+          attachment = att;
+        });
       };
 
       const executeSetPreferredName = async (args: { name: string }) => {

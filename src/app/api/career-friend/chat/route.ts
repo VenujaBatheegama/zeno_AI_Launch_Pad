@@ -6,7 +6,7 @@ import { authErrorResponse, requireUserId } from "@/server/auth";
 import { getCareerFriendApplication } from "@/server/composition-root";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
