@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+import { GlobalProgressBar } from "@/modules/product-shell/progress-bar";
+
 export const metadata: Metadata = {
   title: "Zeno",
   description:
@@ -21,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-[var(--zeno-bg)] text-[var(--zeno-ink)] selection:bg-[var(--zeno-primary)] selection:text-white">
+        <GlobalProgressBar />
         {children}
       </body>
     </html>
