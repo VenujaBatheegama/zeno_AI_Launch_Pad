@@ -27,7 +27,7 @@ function StepIcon({ status }: { status: StepStatus }) {
   if (status === "complete") {
     return (
       <span
-        className="flex size-9 items-center justify-center rounded-[10px] bg-[var(--zeno-primary)] text-white shadow-[var(--zeno-shadow-sm)] transition-all duration-500 transform scale-100"
+        className="flex size-9 items-center justify-center rounded-full bg-[var(--zeno-primary)] text-white shadow-[var(--zeno-shadow-sm)] transition-all duration-500 transform scale-100"
         aria-hidden
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -46,20 +46,20 @@ function StepIcon({ status }: { status: StepStatus }) {
   if (status === "active") {
     return (
       <span
-        className="relative flex size-9 items-center justify-center rounded-[10px] bg-[var(--zeno-primary)] shadow-[0_0_12px_rgba(242,121,60,0.4)] ring-4 ring-[var(--zeno-primary)]/25 transition-all duration-500 scale-105"
+        className="relative flex size-9 items-center justify-center rounded-full bg-[var(--zeno-primary)] shadow-[0_0_12px_rgba(242,121,60,0.4)] ring-4 ring-[var(--zeno-primary)]/25 transition-all duration-500 scale-105"
         aria-hidden
       >
-        <span className="size-3.5 animate-pulse rounded-[4px] bg-[var(--zeno-surface)]" />
+        <span className="size-3.5 animate-pulse rounded-full bg-[var(--zeno-surface)]" />
       </span>
     );
   }
 
   return (
     <span
-      className="flex size-9 items-center justify-center rounded-[10px] bg-[var(--zeno-surface-elevated)] border border-[var(--zeno-border)] transition-all duration-500"
+      className="flex size-9 items-center justify-center rounded-full bg-[var(--zeno-surface-elevated)] border border-[var(--zeno-border)] transition-all duration-500"
       aria-hidden
     >
-      <span className="size-3 rounded-[3px] bg-[var(--zeno-ink-faint)]/60" />
+      <span className="size-3 rounded-full bg-[var(--zeno-ink-faint)]/60" />
     </span>
   );
 }

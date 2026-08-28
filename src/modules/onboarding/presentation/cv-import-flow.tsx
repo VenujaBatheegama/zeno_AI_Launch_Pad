@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
+
 type Stage =
   | "choose"
   | "uploading"
@@ -13,11 +15,11 @@ type Stage =
   | "preparing"
   | "summary";
 
-const STAGES: Array<{ key: Stage; label: string }> = [
-  { key: "reading", label: "Reading your CV" },
-  { key: "identifying", label: "Identifying your experience" },
-  { key: "organizing", label: "Organizing projects and skills" },
-  { key: "preparing", label: "Preparing your review" },
+const STAGES: Array<{ id: Stage; title: string; description: string }> = [
+  { id: "reading", title: "Reading your CV", description: "Extracting text" },
+  { id: "identifying", title: "Identifying experience", description: "Finding roles" },
+  { id: "organizing", title: "Organizing", description: "Structuring data" },
+  { id: "preparing", title: "Preparing", description: "Readying review" },
 ];
 
 type Summary = {
@@ -153,7 +155,7 @@ export function CvImportFlow() {
             : "organizing";
     const activeIndex = Math.max(
       0,
-      STAGES.findIndex((item) => item.key === progressStage),
+      STAGES.findIndex((item) => item.id === progressStage),
     );
     const liveHint =
       elapsedSec >= 45
@@ -162,58 +164,20 @@ export function CvImportFlow() {
           ? "Model is still working — hang tight"
           : (statusHint ?? "Working…");
     return (
-      <div className="mx-auto max-w-lg px-4 py-16">
-        <h1 className="text-2xl font-semibold">Working through your CV</h1>
-        <p className="mt-2 text-sm text-[var(--zeno-ink-muted)]">
+      <div className="mx-auto max-w-2xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-center">Working through your CV</h1>
+        <p className="mt-2 text-sm text-center text-[var(--zeno-ink-muted)]">
           AI extraction can take 20–60 seconds when the model is busy. Keep this
           tab open — progress updates as work continues.
         </p>
-        <div className="mt-4 flex items-center gap-3 rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-4 py-3">
-          <span
-            className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--zeno-primary)] border-t-transparent"
-            aria-hidden
-          />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--zeno-ink)]">
-              {liveHint}
-            </p>
-            <p className="text-xs text-[var(--zeno-ink-faint)]">
-              Elapsed {elapsedSec}s
-              {elapsedSec >= 15
-                ? " · still extracting — this is normal"
-                : ""}
-            </p>
-          </div>
-        </div>
-        <ol className="mt-8 space-y-3">
-          {STAGES.map((item, index) => {
-            const done = index < activeIndex;
-            const active = index === activeIndex;
-            return (
-              <li
-                key={item.key}
-                className={`rounded-[var(--zeno-radius-sm)] border px-4 py-3 text-sm transition ${
-                  active
-                    ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-wash)] text-[var(--zeno-ink)] shadow-[var(--zeno-shadow-sm)]"
-                    : done
-                      ? "border-[var(--zeno-border)] bg-[var(--zeno-surface)] text-[var(--zeno-ink)]"
-                      : "border-[var(--zeno-border)] text-[var(--zeno-ink-faint)]"
-                }`}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span>{item.label}</span>
-                  {active ? (
-                    <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-[var(--zeno-primary)]" />
-                  ) : done ? (
-                    <span className="text-xs font-medium text-[var(--zeno-success)]">
-                      Done
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+
+        <ProgressStepper
+          className="mt-10"
+          steps={STAGES}
+          activeIndex={activeIndex}
+          elapsedSec={elapsedSec}
+          hint={liveHint}
+        />
       </div>
     );
   }
