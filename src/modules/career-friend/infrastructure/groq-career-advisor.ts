@@ -91,6 +91,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
   async reply(input: Parameters<CareerAdvisor["reply"]>[0]) {
     const suggestedActions = inferSuggestedActions(input.message, input.snapshot);
     let capturedUiPayload: AgentUIPayload | undefined = undefined;
+    let capturedSummaryText: string | undefined = undefined;
 
     const candidateModels = [
       this.model,
@@ -112,6 +113,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           execute: async (args: any) => {
             const res = await input.executeSearchJobListings!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -130,6 +132,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           execute: async (args: any) => {
             const res = await input.executeRecommendRoleCategories!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -146,6 +149,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           execute: async (args: any) => {
             const res = await input.executeSuggestGrowthAction!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -162,6 +166,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           execute: async (args: any) => {
             const res = await input.executeCoverLetter!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -175,11 +180,12 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
             context: z.string().optional().describe("Summary of the user's instructions from the chat context (at least last 3 messages)"),
-            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 2 pages, pass 'two_page'."),
+            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. Default is two_page unless user asks for 1 page."),
           }),
           execute: async (args: any) => {
             const res = await input.executeCv!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -194,6 +200,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           execute: async (args: any) => {
             const res = await input.executeSetPreferredName!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
+            capturedSummaryText = res.summaryText;
             return res.summaryText;
           },
         });
@@ -208,10 +215,13 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       ].join("\n");
 
       const messages: any[] = [
-        ...input.recentMessages.slice(-8).map((m) => ({
-          role: m.role,
-          content: m.content.slice(0, 1000),
-        })),
+        ...input.recentMessages.slice(-8).map((m) => {
+          let injectedContent = m.content.slice(0, 1000);
+          if (m.metadata?.uiPayload) {
+            injectedContent += `\n\n[System note: The assistant successfully displayed a UI element to the user of type '${(m.metadata.uiPayload as any).type}'.]`;
+          }
+          return { role: m.role, content: injectedContent };
+        }),
         { role: "user", content: input.message },
       ];
 
@@ -236,7 +246,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
               const { thinking, answer } = parseHermesThinking(rawText);
 
               return {
-                answer: answer || rawText || deterministicReply(input.message, input.snapshot),
+                answer: answer || rawText || capturedSummaryText || deterministicReply(input.message, input.snapshot),
                 thinking,
               };
             },
