@@ -1190,9 +1190,10 @@ function createCareerFriendApplication(userId: string) {
           );
           
           const targetRole = args.jobTitle || snapshot.profile.headline || evidenceSet.evidence.work_experience[0]?.role || "Software Engineer";
+          const mode = args.pages || "two_page";
           
           const plan = buildContentPlan({
-            mode: "one_page",
+            mode,
             snapshot: evidenceSnapshot,
             requirements: [],
             jobTitle: targetRole,
@@ -1210,7 +1211,7 @@ function createCareerFriendApplication(userId: string) {
               : new ReactPdfCvRenderer();
 
           const rendered = await renderer.render({
-            mode: "one_page",
+            mode,
             content: resume,
             snapshot: evidenceSnapshot,
             plan,
@@ -1485,7 +1486,7 @@ function createCareerFriendApplication(userId: string) {
           }
 
           const plan = buildContentPlan({
-            mode: args.pages || "one_page",
+            mode: args.pages || "two_page",
             snapshot: evidenceSnapshot,
             requirements,
             jobTitle: targetRole,

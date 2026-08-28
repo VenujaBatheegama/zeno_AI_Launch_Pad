@@ -199,21 +199,21 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         });
       }
 
-      const prompt = [
+      const contextData = [
         "<CAREER_SNAPSHOT>",
         JSON.stringify(compactSnapshot(input.snapshot)),
         "</CAREER_SNAPSHOT>",
         ...(input.preferredName ? ["<PREFERRED_NAME>", input.preferredName, "</PREFERRED_NAME>"] : []),
         ...(input.previousSummary ? ["<CONVERSATION_SUMMARY>", input.previousSummary, "</CONVERSATION_SUMMARY>"] : []),
-        "<RECENT_CONVERSATION>",
-        ...input.recentMessages.slice(-8).map(
-          (item) => `${item.role}: ${item.content.slice(0, 800)}`,
-        ),
-        "</RECENT_CONVERSATION>",
-        "<USER_MESSAGE>",
-        input.message,
-        "</USER_MESSAGE>",
       ].join("\n");
+
+      const messages: any[] = [
+        ...input.recentMessages.slice(-8).map((m) => ({
+          role: m.role,
+          content: m.content.slice(0, 1000),
+        })),
+        { role: "user", content: input.message },
+      ];
 
       let lastError: unknown;
       for (const modelId of candidateModels) {
@@ -222,14 +222,14 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             async (apiKey) => {
               const result = await generateText({
                 model: this.keyPool.createModel(apiKey, modelId),
-                system: HERMES_SYSTEM_PROMPT,
+                system: HERMES_SYSTEM_PROMPT + "\n\n" + contextData,
                 temperature: 0.3,
                 maxRetries: 1,
                 maxOutputTokens: 1200,
                 // @ts-expect-error - Some versions of AI SDK use maxSteps or maxToolRoundtrips
                 maxSteps: 4, // room for a tool call, a possible follow-up tool call, then the final reply
                 tools,
-                prompt,
+                messages,
               });
 
               const rawText = result.text.trim();
