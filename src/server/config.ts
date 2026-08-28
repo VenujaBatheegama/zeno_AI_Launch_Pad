@@ -23,6 +23,19 @@ const configSchema = z
     SUPABASE_STORAGE_BUCKET: z.string().min(1).default("cv-sources"),
     // Primary key (still required for backwards compatibility).
     GROQ_API_KEY: z.string().min(1),
+    // Optional: free-tier Google Gemini key. When set, CV evidence extraction
+    // (the highest-stakes AI call, its output lands verbatim on a CV) uses
+    // Gemini instead of Groq, since it's the call most worth spending a
+    // stronger free model on. Falls back to Groq automatically if unset or
+    // if Gemini errors/rate-limits.
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    // Growth (skill-gap / project suggestions) is opt-in, off by default.
+    // It's the least-connected-to-getting-hired feature; keep it hidden
+    // from the chat tool list and behind this flag until it's re-scoped.
+    FEATURE_GROWTH_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v === "true"),
     // Optional extra free-tier keys for temporary MVP rotation.
     GROQ_API_KEY_2: z.string().min(1).optional(),
     GROQ_API_KEY_3: z.string().min(1).optional(),
