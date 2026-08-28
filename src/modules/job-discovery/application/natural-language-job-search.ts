@@ -57,7 +57,7 @@ export function isRelevantMatch(
     
     // Fallback title check if the API didn't normalize the experience level
     const combinedTitle = job.title.toLowerCase();
-    const wantsEntry = criteria.experience_levels.includes("entry") || criteria.experience_levels.includes("internship");
+    const wantsEntry = criteria.experience_levels.includes("entry") || criteria.employment_types?.includes("internship");
     const wantsSenior = criteria.experience_levels.includes("senior") || criteria.experience_levels.includes("lead") || criteria.experience_levels.includes("executive");
     
     const isSeniorTitle = combinedTitle.includes("senior") || combinedTitle.includes("lead") || combinedTitle.includes("principal") || combinedTitle.includes("manager") || combinedTitle.includes("head");
