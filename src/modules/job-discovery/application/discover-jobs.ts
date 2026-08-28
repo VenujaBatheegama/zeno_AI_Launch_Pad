@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
 
 import {
   jobSearchCriteriaSchema,
@@ -86,9 +87,25 @@ export async function discoverJobs(
     [];
   for (const request of criteria) {
     try {
+      const queryHash = createHash("sha256").update(JSON.stringify(request)).digest("hex");
+      let result = dependencies.repository.getCachedSearch ? await dependencies.repository.getCachedSearch(queryHash) : null;
+      
+      if (!result) {
+        result = await dependencies.source.search(request);
+        if (dependencies.repository.setCachedSearch) {
+          const expiresAt = new Date(dependencies.now().getTime() + 6 * 60 * 60 * 1000).toISOString(); // 6 hours
+          await dependencies.repository.setCachedSearch({
+            queryHash,
+            criteria: request,
+            result,
+            expiresAt
+          });
+        }
+      }
+      
       outcomes.push({
         status: "fulfilled",
-        value: await dependencies.source.search(request),
+        value: result,
       });
     } catch (reason) {
       outcomes.push({ status: "rejected", reason });

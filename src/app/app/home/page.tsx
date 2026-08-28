@@ -164,6 +164,62 @@ export default async function HomePage() {
         ) : null}
 
         <HomeGreeting name={name} />
+
+        {dashboard ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
+                Jobs Discovered
+              </p>
+              <p className="mt-2 text-3xl font-[family-name:var(--zeno-font-display)] font-semibold text-[var(--zeno-ink)]">
+                {dashboard.funnel.jobsDiscovered}
+              </p>
+            </div>
+            <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
+                Matches Found
+              </p>
+              <p className="mt-2 text-3xl font-[family-name:var(--zeno-font-display)] font-semibold text-[var(--zeno-ink)]">
+                {dashboard.funnel.recommendationsMade}
+              </p>
+            </div>
+            <div className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
+                Interviews
+              </p>
+              <p className="mt-2 text-3xl font-[family-name:var(--zeno-font-display)] font-semibold text-[var(--zeno-primary-deep)]">
+                {dashboard.funnel.interviews}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {dashboard?.bottleneck ? (
+          <section
+            className="flex items-start gap-3 rounded-[var(--zeno-radius-md)] border px-5 py-4"
+            style={{
+              borderColor: "var(--zeno-primary-border)",
+              backgroundColor: "var(--zeno-primary-soft)",
+            }}
+          >
+            <div className="mt-0.5 text-[var(--zeno-primary-deep)]">
+              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--zeno-primary-deep)]">
+                Insight
+              </h2>
+              <p className="mt-1 text-sm text-[var(--zeno-primary-deep)]/90">
+                {dashboard.bottleneck}
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         <ActivityStrip stats={activityStats} />
         <CareerFriendChat featured disabled={schemaMissing || incomplete} />
       </div>

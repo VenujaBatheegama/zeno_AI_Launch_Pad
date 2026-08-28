@@ -18,6 +18,19 @@ import type {
 } from "./fresh-watch-ports";
 import { defaultFreshWatchLogger } from "./fresh-watch-ports";
 
+export function getDigestScheduledAt(now: Date): string {
+  const hour = now.getUTCHours();
+  // Quiet hours: 10 PM to 8 AM UTC
+  if (hour >= 22 || hour < 8) {
+    const scheduled = new Date(now);
+    if (hour >= 22) {
+      scheduled.setUTCDate(scheduled.getUTCDate() + 1);
+    }
+    scheduled.setUTCHours(8, 0, 0, 0);
+    return scheduled.toISOString();
+  }
+  return now.toISOString();
+}
 export type ProcessLinkedInFreshSearchCommand = {
   canonicalSearchId: string;
   runId: string;
@@ -479,7 +492,7 @@ export async function processLinkedInFreshSearch(
             reviewPath: "/app/recommendations",
           },
           idempotencyKey: `rec:${recommendation.id}:telegram`,
-          scheduledAt: nowIso,
+          scheduledAt: getDigestScheduledAt(deps.now()),
         });
       }
       if (queued) {
