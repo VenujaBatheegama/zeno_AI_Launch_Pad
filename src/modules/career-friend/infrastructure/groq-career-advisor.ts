@@ -9,6 +9,12 @@ import type { AgentUIPayload } from "../domain/agent-outputs";
 const HERMES_SYSTEM_PROMPT = `You are Zeno, an autonomous, intelligent AI Career Copilot, Mentor, and Senior Technical Partner.
 You talk like a sharp, supportive friend texting back: direct, empathetic, technically grounded, and highly practical.
 
+## YOUR ROLE IN THIS PRODUCT
+Chat is the fast, instant-feedback layer, not the whole product. The heavy lifting (ongoing job discovery, full CV builds) happens elsewhere in the app on their own schedule. Your job here is quick, sharp answers and quick actions, not to run an entire multi-step workflow end to end in one conversation.
+- Answer the actual question first, briefly.
+- If a request is genuinely a big task (e.g. "build me a full application strategy," "do a deep audit of my whole profile"), give a real, useful, short answer right now AND say the fuller version happens through their regular job matches / CV Hub, don't silently expand into a long multi-tool chain trying to do it all in chat.
+- Quick, scoped tool calls (search a few jobs, generate one CV, look up one thing) are exactly what you're for, and you should still do these fully and well. The line is between "quick, concrete thing" and "open-ended project," not between "using tools" and "not using tools."
+
 ## YOUR MISSION & CAPABILITIES:
 - You help the user advance their career, build standout projects, explore market opportunities, ace interviews, tailor applications, and sharpen their engineering/product skills.
 - You can answer ANY question, whether it is technical, career-related, or general professional guidance.
@@ -27,8 +33,8 @@ You have access to tools. Calling them triggers generative UI elements for the u
   When you call this, ALWAYS ground the rationale for each role in specific items from CAREER_SNAPSHOT (named skills, projects, or headline), not generic advice. If the snapshot is thin, say so plainly instead of inventing fit.
   Do NOT use for: "find me jobs" / "show me listings" (that's searchJobListings).
 - \`suggestGrowthAction\`: Use for: "what should I learn next", "suggest a project for me to work on".
-- \`generateCoverLetter\`: Use for: "write a cover letter for X", "cover letter for Y at company Z". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (including any tech stack, responsibilities, or specifications mentioned in chat), and summary \`context\`.
-- \`generateCv\`: Use for: "tailor my CV for X", "give me a backend engineering cv", "make me a 1-page CV for Google", "create a CV targeting .NET at XYZ". Extract \`jobTitle\` (e.g. "Backend Engineer"), \`organizationName\` (e.g. "XYZ"), \`jobDescription\` (e.g. "Backend engineering role targeting .NET"), and \`context\` (user's specific requirements, tech stack, and background context). If the user asks for 1 page, pass \`pages: "one_page"\`. Otherwise, pass \`pages: "two_page"\`.
+- \`generateCoverLetter\`: Use for: "write a cover letter for X".
+- \`generateCv\`: Use for: "tailor my CV for X".
 
 ## CLARIFYING QUESTIONS
 If a message could reasonably mean two different things (e.g. wanting to see live job listings vs. wanting advice on what type of role fits them), and context doesn't make it clear, ask a brief one-line clarifying question instead of guessing. Do not do this for messages where intent is reasonably clear from context; only for genuine ambiguity.
@@ -108,7 +114,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       if (input.executeRecommendRoleCategories) {
@@ -126,7 +132,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       if (input.executeSuggestGrowthAction) {
@@ -142,7 +148,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       if (input.executeCoverLetter) {
@@ -152,14 +158,13 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             jobTitle: z.string().describe("Target role title"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the letter"),
-            context: z.string().optional().describe("Summary of the user's instructions or requirements from the chat"),
           }),
           execute: async (args: any) => {
             const res = await input.executeCoverLetter!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       if (input.executeCv) {
@@ -170,14 +175,14 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
             context: z.string().optional().describe("Summary of the user's instructions from the chat context (at least last 3 messages)"),
-            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 1 page, pass 'one_page'. Otherwise, defaults to 2 pages."),
+            pages: z.enum(["one_page", "two_page"]).optional().describe("Number of pages. If user asks for 2 pages, pass 'two_page'."),
           }),
           execute: async (args: any) => {
             const res = await input.executeCv!(args);
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       if (input.executeSetPreferredName) {
@@ -191,7 +196,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
             if (res.uiPayload) capturedUiPayload = res.uiPayload;
             return res.summaryText;
           },
-        } as any);
+        });
       }
 
       const prompt = [
@@ -231,7 +236,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
               const { thinking, answer } = parseHermesThinking(rawText);
 
               return {
-                answer: answer || rawText || (capturedUiPayload ? "I have generated what you requested. You can find it below." : deterministicReply(input.message, input.snapshot)),
+                answer: answer || rawText || deterministicReply(input.message, input.snapshot),
                 thinking,
               };
             },
@@ -279,23 +284,35 @@ export class GroqCareerAdvisor implements CareerAdvisor {
     try {
       const result = await this.keyPool.withKey(
         async (apiKey) => {
+          // NOTE: this used to hardcode "llama-3.1-8b-instant", which Groq retired
+          // on 2026-08-16. Every summarize() call was silently failing, so the
+          // conversation summary (context beyond the last 8 messages) never got
+          // written. Use the configured model instead so this actually succeeds.
           const { text } = await generateText({
             model: this.keyPool.createModel(apiKey, this.model),
             maxOutputTokens: 512,
             temperature: 0.1,
-            system: `You are an internal summarization engine for a career assistant.
+            messages: [
+              {
+                role: "system",
+                content: `You are an internal summarization engine for a career assistant.
 Your job is to read the conversation and update the CONVERSATION_SUMMARY.
 The summary should only track the user's current goal, target job titles, specific locations, constraints, or requests they have made.
 It should be concise and strictly objective.
 If a previous summary exists, update it with new facts or replace old facts if the user changed their mind.
-Return ONLY the raw updated summary text. Do not wrap in tags, do not acknowledge.`,
-            prompt: [
-              ...(input.previousSummary ? ["PREVIOUS SUMMARY:", input.previousSummary, "---"] : []),
-              "RECENT MESSAGES:",
-              ...input.recentMessages.map(m => `${m.role}: ${m.content.slice(0, 500)}`),
-              "---",
-              "Write the new summary now:"
-            ].join("\n")
+Return ONLY the raw updated summary text. Do not wrap in tags, do not acknowledge.`
+              },
+              {
+                role: "user",
+                content: [
+                  ...(input.previousSummary ? ["PREVIOUS SUMMARY:", input.previousSummary, "---"] : []),
+                  "RECENT MESSAGES:",
+                  ...input.recentMessages.map(m => `${m.role}: ${m.content.slice(0, 500)}`),
+                  "---",
+                  "Write the new summary now:"
+                ].join("\n")
+              }
+            ]
           });
           return text.trim();
         },

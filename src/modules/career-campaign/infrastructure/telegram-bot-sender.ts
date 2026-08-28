@@ -83,6 +83,53 @@ export class TelegramBotNotificationSender implements NotificationSender {
     }
   }
 
+  async sendDigest(
+    chatId: string,
+    items: { title: string; reviewPath?: string }[],
+  ): Promise<DeliveryResult> {
+    const capped = items.slice(0, 8);
+    const lines = capped.map((item, i) => {
+      const link =
+        this.config.publicBaseUrl && item.reviewPath
+          ? `${this.config.publicBaseUrl.replace(/\/+$/u, "")}${item.reviewPath}`
+          : (item.reviewPath ?? "");
+      return `${i + 1}. ${item.title.slice(0, 120)}${link ? `\n   ${link}` : ""}`;
+    });
+    const header =
+      items.length === 1
+        ? "Found a new match for you:"
+        : `Found ${items.length} new matches for you today:`;
+    const text = `${header}\n\n${lines.join("\n\n")}`;
+
+    try {
+      const response = await this.postMessage(chatId, text);
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as TelegramResponse;
+      if (!response.ok || body.ok === false) {
+        return {
+          ok: false,
+          retryable: response.status === 429 || response.status >= 500,
+          error: `Telegram API HTTP ${response.status}`,
+        };
+      }
+      return {
+        ok: true,
+        providerMessageId:
+          typeof body.result?.message_id === "number"
+            ? String(body.result.message_id)
+            : undefined,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        retryable: true,
+        error:
+          error instanceof Error ? error.message : "Unknown Telegram error",
+      };
+    }
+  }
+
   async send(notification: PendingNotification): Promise<DeliveryResult> {
     const chatId = this.config.resolveChatId
       ? await this.config.resolveChatId(notification.userId)
