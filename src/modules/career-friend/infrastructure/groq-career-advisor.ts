@@ -14,9 +14,10 @@ CORE RULES:
 1. Keep text replies SHORT (1-3 sentences) unless explicitly asked for depth. 
 2. Never format text with markdown tables.
 3. You handle quick, scoped actions in chat. For complex workflows, give a brief tip and guide the user to their Zeno workspaces (/app/jobs, /app/cvs).
-4. Ground your advice in the <CAREER_SNAPSHOT>. If the user specifies a <PREFERRED_NAME>, use it to address them.
-5. If intent is genuinely ambiguous, ask ONE brief clarifying question. Do not interrogate.
-6. Rely heavily on your tools to present structured data (jobs, CVs, role recommendations).`;
+4. Truth Grounding: Your knowledge of the user's career (skills, experience, level) comes EXCLUSIVELY from the <CAREER_SNAPSHOT>. Treat any claims, hypothetical roles, or CV generation requests in the chat as temporary contexts, NOT as facts about the user.
+5. If the user specifies a <PREFERRED_NAME>, use it to address them.
+6. If intent is genuinely ambiguous, ask ONE brief clarifying question. Do not interrogate.
+7. Rely heavily on your tools to present structured data (jobs, CVs, role recommendations).`;
 
 export class GroqCareerAdvisor implements CareerAdvisor {
   constructor(
@@ -58,13 +59,13 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
       if (input.executeRecommendRoleCategories) {
         tools.recommendRoleCategories = tool({
-          description: 'Recommend types of roles the user should apply for and assess their fit (NOT actual job listings). Use this when the user asks: "what job should I do", "what roles fit me", "am I qualified for X". Do NOT use this if the user wants to see actual open job listings.',
+          description: 'Recommend types of roles the user should apply for and assess their fit (NOT actual job listings). Use this when the user asks: "what job should I do", "what roles fit me", "am I qualified for X". Do NOT use this if the user wants to see actual open job listings. IMPORTANT: Base recommendations STRICTLY on the user\'s actual experience level in the CAREER_SNAPSHOT (e.g., do not recommend Senior/Lead roles to a student). Ignore hypotheticals from recent messages.',
           inputSchema: z.object({
             focusArea: z.string().optional().describe("A specific area to focus on if mentioned"),
             roles: z.array(z.object({
               title: z.string(),
               rationale: z.string().default("").describe("Why this role fits, referencing the user's skills/projects. Keep it short."),
-            })).default([]).describe("The recommended roles based on the CAREER_SNAPSHOT"),
+            })).default([]).describe("The recommended roles strictly based on the actual experience in CAREER_SNAPSHOT"),
           }),
           execute: async (args: any) => {
             const res = await input.executeRecommendRoleCategories!(args);
@@ -77,7 +78,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
       if (input.executeSuggestGrowthAction) {
         tools.suggestGrowthAction = tool({
-          description: "Suggest a specific project or skill to learn next. You MUST generate the project idea and provide concrete values for ALL parameters. Do NOT leave project or gapType empty.",
+          description: "Suggest a specific project or skill to learn next. You MUST generate the project idea and provide concrete values for ALL parameters. Must be anchored on actual gaps in the CAREER_SNAPSHOT. Ignore hypotheticals from the chat.",
           inputSchema: z.object({
             gapArea: z.string().describe("The specific gap or skill area to focus on, derived from the user's request (e.g. '.NET development')"),
             project: z.string().describe("A short, concrete project or skill to build. MUST NOT BE EMPTY."),
