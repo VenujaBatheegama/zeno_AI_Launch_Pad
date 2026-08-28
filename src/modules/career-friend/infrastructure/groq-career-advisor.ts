@@ -114,7 +114,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         tools.generateCv = tool({
           description: "Tailor or generate a CV for a specific job",
           inputSchema: z.object({
-            jobTitle: z.string().describe("Target role title"),
+            jobTitle: z.string().describe("Target role title. Clean and normalize this to a standard professional title (e.g. 'Junior .NET Developer' instead of 'backend .net junior role')"),
             organizationName: z.string().optional().describe("Company name"),
             jobDescription: z.string().optional().describe("Job description or user's instructions for the CV"),
             context: z.string().optional().describe("Summary of the user's instructions from the chat context (at least last 3 messages)"),

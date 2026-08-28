@@ -200,26 +200,24 @@ export function buildDeterministicSummary(input: {
 
   const parts = [
     educationBit
-      ? `${educationBit} candidate targeting ${input.plan.targetTitle} roles that value practical software delivery`
-      : `Candidate targeting ${input.plan.targetTitle} roles that value practical software delivery`,
+      ? `Software professional with a ${educationBit} background, targeting ${input.plan.targetTitle} roles.`
+      : `Software professional targeting ${input.plan.targetTitle} roles.`,
     skillBit
-      ? skillBit.replace(/^with skills in /u, "Strongest verified technical direction spans ")
+      ? `Brings strong foundational expertise in ${skills.join(", ")}.`
       : null,
     projectBit
-      ? projectBit.replace(
-          /^including work on /u,
-          "Recent build focus includes ",
-        )
+      ? `Demonstrated ability to deliver functional solutions, highlighted by recent work on ${projects.map(p => p.name).join(" and ")}.`
       : null,
     input.plan.jobAlignment === "low" || input.plan.jobAlignment === "very_low"
-      ? "focused on transferable software-engineering foundations while building domain-specific depth"
-      : "Combines verified experience and project delivery into a clear, job-ready engineering foundation",
+      ? "Highly adaptable with a focus on transferable engineering principles and rapid learning."
+      : "Combines technical rigor with practical project delivery to build scalable, reliable software.",
   ].filter(Boolean);
 
-  let text = `${parts.join(", ")}.`;
-  if (text.length > input.plan.summaryMaxChars) {
-    // Drop optional trailing clauses rather than mid-sentence character cuts.
-    text = `${parts.slice(0, Math.max(1, parts.length - 1)).join(", ")}.`;
+  let text = parts.join(" ");
+  let sliceCount = 1;
+  while (text.length > input.plan.summaryMaxChars && sliceCount < parts.length) {
+    text = parts.slice(0, parts.length - sliceCount).join(" ");
+    sliceCount++;
   }
 
   const evidence_refs: NonNullable<TailoredCvContent["summary"]>["evidence_refs"] =
