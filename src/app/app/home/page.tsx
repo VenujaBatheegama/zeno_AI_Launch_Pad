@@ -220,6 +220,64 @@ export default async function HomePage() {
           </section>
         ) : null}
 
+        {dashboard?.learned && dashboard.learned.length > 0 ? (
+          <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" className="size-4 text-[var(--zeno-ink-faint)]" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              <h2 className="text-[13px] font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
+                AI Learnings
+              </h2>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {dashboard.learned.map((item, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center rounded-full bg-[var(--zeno-surface-elevated)] px-2.5 py-1 text-[12px] font-medium text-[var(--zeno-ink)]"
+                >
+                  <span className="mr-1.5 text-[var(--zeno-ink-muted)]">
+                    {item.signalType}:
+                  </span>
+                  {item.signalValue.replace(/_/g, " ")}
+                  <span className="ml-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--zeno-ink)] text-[10px] font-bold text-[var(--zeno-surface)]">
+                    {item.count}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {dashboard?.growthActions && dashboard.growthActions.length > 0 ? (
+          <section className="rounded-[var(--zeno-radius-md)] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] px-5 py-4 shadow-[var(--zeno-shadow-sm)]">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" className="size-4 text-[var(--zeno-ink-faint)]" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 20V10M12 20V4M19 20v-7" />
+                <path d="m4 8 6-5 5 4 5-4" />
+              </svg>
+              <h2 className="text-[13px] font-semibold uppercase tracking-wider text-[var(--zeno-ink-faint)]">
+                Recommended Skill Sprints
+              </h2>
+            </div>
+            <div className="mt-4 space-y-3">
+              {dashboard.growthActions.map((action) => (
+                <div key={action.id} className="rounded-[var(--zeno-radius-sm)] border border-[var(--zeno-border)] p-3">
+                  <h3 className="text-[14px] font-semibold text-[var(--zeno-ink)]">
+                    {action.gapLabel}
+                  </h3>
+                  <p className="mt-1 text-[13px] text-[var(--zeno-ink-muted)] leading-relaxed">
+                    {action.whyItMatters}
+                  </p>
+                  <div className="mt-2 inline-flex rounded bg-[var(--zeno-primary-soft)] px-2 py-1 text-[12px] font-medium text-[var(--zeno-primary-deep)]">
+                    {action.suggestedAction}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <ActivityStrip stats={activityStats} />
         <CareerFriendChat featured disabled={schemaMissing || incomplete} />
       </div>
