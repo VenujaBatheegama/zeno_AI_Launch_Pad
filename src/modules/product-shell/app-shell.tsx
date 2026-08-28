@@ -12,11 +12,11 @@ import { RibbonBackdrop } from "./ui/ribbon-backdrop";
 
 const NAV = [
   { href: "/app/home", label: "Home", icon: "home" },
-  { href: "/app/recommendations", label: "Inbox", icon: "jobs" },
   { href: "/app/jobs", label: "Jobs", icon: "jobs" },
-  { href: "/app/growth", label: "Growth", icon: "growth" },
-  { href: "/app/applications", label: "Apps", icon: "cvs" },
+  { href: "/app/recommendations", label: "Inbox", icon: "inbox" },
+  { href: "/app/applications", label: "Apps", icon: "apps" },
   { href: "/app/cvs", label: "CVs", icon: "cvs" },
+  { href: "/app/growth", label: "Growth", icon: "growth" },
   { href: "/app/career-profile", label: "Profile", icon: "profile" },
   { href: "/app/settings", label: "Settings", icon: "settings" },
 ] as const;
@@ -24,9 +24,9 @@ const NAV = [
 // 5 primary thumb-accessible items for phone bottom navigation
 const BOTTOM_NAV = [
   { href: "/app/home", label: "Home", icon: "home" },
-  { href: "/app/recommendations", label: "Inbox", icon: "jobs" },
   { href: "/app/jobs", label: "Jobs", icon: "jobs" },
-  { href: "/app/cvs", label: "CVs", icon: "cvs" },
+  { href: "/app/recommendations", label: "Inbox", icon: "inbox" },
+  { href: "/app/applications", label: "Apps", icon: "apps" },
   { href: "/app/career-profile", label: "Profile", icon: "profile" },
 ] as const;
 
@@ -376,6 +376,20 @@ function NavIcon({
         <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75">
           <rect x="3" y="7" width="18" height="13" rx="2" />
           <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      );
+    case "inbox":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75">
+          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+          <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+        </svg>
+      );
+    case "apps":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75">
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
       );
     case "cvs":

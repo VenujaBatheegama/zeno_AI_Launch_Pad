@@ -276,7 +276,7 @@ export function CvImportFlow() {
       </header>
       <div className="mx-auto max-w-xl px-4 py-12">
         <Link
-          href="/onboarding"
+          href="/onboarding?reset=1"
           className="text-sm text-[var(--zeno-ink-muted)] hover:underline"
         >
           ← Back

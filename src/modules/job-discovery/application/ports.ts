@@ -53,6 +53,13 @@ export interface JobDiscoveryRepository {
     userId: string;
     includeSaved: boolean;
   }): Promise<number>;
+  getCachedSearch?(queryHash: string): Promise<JobSourceResult | null>;
+  setCachedSearch?(input: {
+    queryHash: string;
+    criteria: JobSearchCriteria;
+    result: JobSourceResult;
+    expiresAt: string;
+  }): Promise<void>;
 }
 
 export type IdGenerator = () => string;
