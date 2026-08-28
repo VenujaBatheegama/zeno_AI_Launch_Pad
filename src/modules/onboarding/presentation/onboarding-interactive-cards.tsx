@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Target, Briefcase, Rocket, Sparkles } from "lucide-react";
 import type { CareerEvidence } from "@/modules/career-evidence/domain/evidence";
 
 const POPULAR_SKILLS = [
@@ -246,9 +247,9 @@ export function RolesAndSkillsCard(props: {
       className="mt-3 space-y-4 rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-4 shadow-[var(--zeno-shadow-md)]"
     >
       <div className="flex items-center justify-between border-b border-[var(--zeno-border)] pb-2.5">
-        <span className="text-[13px] font-semibold text-[var(--zeno-ink)]">
-          🎯 Target Roles & Core Skills
-        </span>
+        <h2 className="text-lg font-bold text-[var(--zeno-ink)] flex items-center">
+          <Target className="h-5 w-5 mr-2" /> Target Roles & Core Skills
+        </h2>
         <span className="text-[11px] font-medium text-[var(--zeno-primary)]">
           Step 2 of 5
         </span>
@@ -450,9 +451,9 @@ export function ExperienceCard(props: {
       className="mt-3 space-y-3.5 rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-4 shadow-[var(--zeno-shadow-md)]"
     >
       <div className="flex items-center justify-between border-b border-[var(--zeno-border)] pb-2.5">
-        <span className="text-[13px] font-semibold text-[var(--zeno-ink)]">
-          💼 Recent Work Experience
-        </span>
+        <h2 className="text-lg font-bold text-[var(--zeno-ink)] flex items-center">
+          <Briefcase className="h-5 w-5 mr-2" /> Recent Work Experience
+        </h2>
         <span className="text-[11px] font-medium text-[var(--zeno-primary)]">
           Step 3 of 5
         </span>
@@ -618,9 +619,9 @@ export function ProjectsEducationCard(props: {
       className="mt-3 space-y-4 rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-4 shadow-[var(--zeno-shadow-md)]"
     >
       <div className="flex items-center justify-between border-b border-[var(--zeno-border)] pb-2.5">
-        <span className="text-[13px] font-semibold text-[var(--zeno-ink)]">
-          🚀 Featured Project & Education
-        </span>
+        <h2 className="text-lg font-bold text-[var(--zeno-ink)] flex items-center">
+          <Rocket className="h-5 w-5 mr-2" /> Featured Project & Education
+        </h2>
         <span className="text-[11px] font-medium text-[var(--zeno-primary)]">
           Step 4 of 5
         </span>
@@ -744,9 +745,9 @@ export function ReviewVerificationCard(props: {
   return (
     <div className="mt-3 space-y-4 rounded-[16px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-4 shadow-[var(--zeno-shadow-md)]">
       <div className="flex items-center justify-between border-b border-[var(--zeno-border)] pb-2.5">
-        <span className="text-[13px] font-semibold text-[var(--zeno-ink)]">
-          ✨ Ready to Verify Your Profile
-        </span>
+        <h2 className="text-lg font-bold text-[var(--zeno-ink)] flex items-center">
+          <Sparkles className="h-5 w-5 mr-2 text-amber-500" /> Ready to Verify Your Profile
+        </h2>
         <span className="text-[11px] font-medium text-[var(--zeno-success)]">
           {props.progress}% Complete
         </span>
@@ -790,7 +791,7 @@ export function ReviewVerificationCard(props: {
         onClick={props.onVerify}
         className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--zeno-primary)] px-4 py-3 text-sm font-semibold text-white shadow-[var(--zeno-shadow-md)] transition hover:opacity-90 disabled:opacity-50"
       >
-        <span>Verify Profile & Launch Zeno 🚀</span>
+        <span className="flex items-center gap-2">Verify Profile & Launch Zeno <Rocket className="h-4 w-4" /></span>
       </button>
     </div>
   );

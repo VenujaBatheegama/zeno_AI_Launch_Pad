@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Briefcase, FileText, Rocket, Lightbulb } from "lucide-react";
 import { Glowing3dOrb } from "./glowing-3d-orb";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -18,10 +19,10 @@ const ACTION_LINKS: Record<string, { href: string; label: string }> = {
 };
 
 const QUICK_PILLS = [
-  { label: "Find Opportunities", icon: "💼", prompt: "Find recent senior and mid software engineering opportunities matching my verified skills" },
-  { label: "Tailor CV", icon: "📄", prompt: "How do I tailor my CV and cover letter for my highest scored job match?" },
-  { label: "Growth Sprint", icon: "🚀", prompt: "What is the single most valuable technical project I should build to close my market gaps?" },
-  { label: "Explore Paths", icon: "💡", prompt: "Analyze my verified career profile and outline high-growth career trajectories for me" },
+  { label: "Find Opportunities", icon: <Briefcase className="h-4 w-4" />, prompt: "Find recent senior and mid software engineering opportunities matching my verified skills" },
+  { label: "Tailor CV", icon: <FileText className="h-4 w-4" />, prompt: "How do I tailor my CV and cover letter for my highest scored job match?" },
+  { label: "Growth Sprint", icon: <Rocket className="h-4 w-4" />, prompt: "What is the single most valuable technical project I should build to close my market gaps?" },
+  { label: "Explore Paths", icon: <Lightbulb className="h-4 w-4" />, prompt: "Analyze my verified career profile and outline high-growth career trajectories for me" },
 ];
 
 export function ZyriconHomeExperience(props: {
@@ -341,7 +342,7 @@ export function ZyriconHomeExperience(props: {
         >
           <div className="flex items-center justify-between">
             <span className="flex size-9 items-center justify-center rounded-xl bg-purple-500/20 text-purple-300">
-              💼
+              <Briefcase className="h-4 w-4" />
             </span>
             <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-300 group-hover:bg-purple-500/20 group-hover:border-purple-400/40 transition">
               Find Jobs
@@ -362,7 +363,7 @@ export function ZyriconHomeExperience(props: {
         >
           <div className="flex items-center justify-between">
             <span className="flex size-9 items-center justify-center rounded-xl bg-fuchsia-500/20 text-fuchsia-300">
-              📄
+              <FileText className="h-4 w-4" />
             </span>
             <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[11px] font-medium text-fuchsia-300 group-hover:bg-fuchsia-500/20 group-hover:border-fuchsia-400/40 transition">
               Tailor Materials
@@ -383,7 +384,7 @@ export function ZyriconHomeExperience(props: {
         >
           <div className="flex items-center justify-between">
             <span className="flex size-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-300">
-              🚀
+              <Rocket className="h-4 w-4" />
             </span>
             <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[11px] font-medium text-cyan-300 group-hover:bg-cyan-500/20 group-hover:border-cyan-400/40 transition">
               Start Sprint

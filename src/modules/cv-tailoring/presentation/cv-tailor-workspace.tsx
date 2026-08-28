@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Target, AlertTriangle, Lightbulb, ShieldCheck } from "lucide-react";
+
 import type { RankedJobMatchCard } from "@/modules/career-intelligence/application/ports";
 import type { DiscoveredJob } from "@/modules/job-discovery/domain/job";
 import { ProgressStepper } from "@/modules/product-shell/progress-stepper";
@@ -1216,7 +1218,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
               </p>
               {match ? (
                 <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zeno-success)]">
-                  <span>🎯</span> {Math.round(match.evidenceFitScore)}% Evidence Match
+                  <Target className="h-3.5 w-3.5" /> {Math.round(match.evidenceFitScore)}% Evidence Match
                 </div>
               ) : null}
             </div>
@@ -1240,7 +1242,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
             {match?.primaryGaps && match.primaryGaps.length > 0 ? (
               <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[var(--zeno-warning)]">
-                  ⚠️ Handled Gaps
+                  <AlertTriangle className="h-3.5 w-3.5 inline-block mr-1.5" /> Handled Gaps
                 </p>
                 <p className="mt-1 text-[11px] text-[var(--zeno-ink-muted)]">
                   Addressed truthfully without pretending experience you do not have.
@@ -1341,7 +1343,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
           <aside className="border-l border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-4 overflow-y-auto space-y-4">
             <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3.5">
               <p className="text-xs font-bold text-[var(--zeno-ink)]">
-                🛡 Grounded in Evidence
+                <ShieldCheck className="h-3.5 w-3.5 inline-block mr-1.5" /> Grounded in Evidence
               </p>
               <p className="mt-1 text-[11px] text-[var(--zeno-ink-muted)] leading-relaxed">
                 Zeno only references projects, achievements, and metrics that exist in your verified profile. Never fake credentials or invent experiences.
@@ -1350,7 +1352,7 @@ export function CvTailorWorkspace({ listingId }: Props) {
 
             <div className="rounded-[8px] border border-[var(--zeno-border)] bg-[var(--zeno-surface)] p-3.5 shadow-sm">
               <p className="text-xs font-bold text-[var(--zeno-ink)]">
-                💡 Application Tips
+                <Lightbulb className="h-3.5 w-3.5 inline-block mr-1.5 text-amber-500" /> Application Tips
               </p>
               <ul className="mt-2 space-y-2 text-xs text-[var(--zeno-ink-muted)] leading-relaxed">
                 <li>• <strong>Target 250–320 words</strong>: Keep your cover letter punchy, specific, and easy to scan.</li>
