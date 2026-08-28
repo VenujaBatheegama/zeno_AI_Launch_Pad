@@ -50,6 +50,27 @@ export function isRelevantMatch(
     }
   }
 
+  if (criteria.experience_levels && criteria.experience_levels.length > 0) {
+    if (job.experience_level && !criteria.experience_levels.includes(job.experience_level)) {
+      return false;
+    }
+    
+    // Fallback title check if the API didn't normalize the experience level
+    const combinedTitle = job.title.toLowerCase();
+    const wantsEntry = criteria.experience_levels.includes("entry") || criteria.experience_levels.includes("internship");
+    const wantsSenior = criteria.experience_levels.includes("senior") || criteria.experience_levels.includes("lead") || criteria.experience_levels.includes("executive");
+    
+    const isSeniorTitle = combinedTitle.includes("senior") || combinedTitle.includes("lead") || combinedTitle.includes("principal") || combinedTitle.includes("manager") || combinedTitle.includes("head");
+    const isEntryTitle = combinedTitle.includes("junior") || combinedTitle.includes("intern") || combinedTitle.includes("entry") || combinedTitle.includes("graduate");
+
+    if (wantsEntry && !wantsSenior && isSeniorTitle) {
+      return false; // User wants entry level, but job title says Senior/Lead
+    }
+    if (wantsSenior && !wantsEntry && isEntryTitle) {
+      return false; // User wants senior level, but job title says Junior/Intern
+    }
+  }
+
   return true;
 }
 
