@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Rocket } from "lucide-react";
 
 import type { ApplicationPacket, JobRecommendation } from "../domain/schemas";
 
@@ -73,7 +74,8 @@ export function ApplicationPacketView(props: {
     <div className="space-y-6">
       <header>
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--zeno-primary-deep)]">
-          <span>🚀 Ready-to-Apply Kit</span>
+          <Rocket className="h-4 w-4" />
+          <span>Ready-to-Apply Kit</span>
         </div>
         <h1 className="font-[family-name:var(--zeno-font-display)] text-3xl tracking-[-0.02em] text-[var(--zeno-ink)] mt-1">
           {fit?.title ?? "Application Kit"}

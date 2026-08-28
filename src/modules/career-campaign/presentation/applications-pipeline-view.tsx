@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Send, Mic, PartyPopper, XCircle, Rocket, Inbox } from "lucide-react";
 import { ManualApplicationModal } from "./manual-application-modal";
 
 type ReadyKitItem = {
@@ -33,13 +34,13 @@ export function ApplicationsPipelineView(props: {
   );
   const [modalOpen, setModalOpen] = useState(false);
 
-  const STATUS_BADGES: Record<string, { label: string; bg: string; text: string }> = {
-    ready: { label: "Ready to Submit", bg: "bg-blue-500/10 border-blue-500/30", text: "text-blue-400" },
-    applied: { label: "✉️ Applied", bg: "bg-amber-500/10 border-amber-500/30", text: "text-amber-400" },
-    interview: { label: "🎙️ Interviewing", bg: "bg-purple-500/10 border-purple-500/30", text: "text-purple-400" },
-    offer: { label: "🎉 Offer Received", bg: "bg-emerald-500/10 border-emerald-500/30", text: "text-emerald-400" },
-    rejected: { label: "❌ Closed", bg: "bg-zinc-500/10 border-zinc-500/30", text: "text-zinc-400" },
-    withdrawn: { label: "Withdrawn", bg: "bg-zinc-500/10 border-zinc-500/30", text: "text-zinc-400" },
+  const STATUS_BADGES: Record<string, { label: string; bg: string; text: string; icon: React.ReactNode }> = {
+    ready: { label: "Ready to Submit", bg: "bg-blue-500/10 border-blue-500/30", text: "text-blue-400", icon: null },
+    applied: { label: "Applied", bg: "bg-amber-500/10 border-amber-500/30", text: "text-amber-400", icon: <Send className="w-3.5 h-3.5" /> },
+    interview: { label: "Interviewing", bg: "bg-purple-500/10 border-purple-500/30", text: "text-purple-400", icon: <Mic className="w-3.5 h-3.5" /> },
+    offer: { label: "Offer Received", bg: "bg-emerald-500/10 border-emerald-500/30", text: "text-emerald-400", icon: <PartyPopper className="w-3.5 h-3.5" /> },
+    rejected: { label: "Closed", bg: "bg-zinc-500/10 border-zinc-500/30", text: "text-zinc-400", icon: <XCircle className="w-3.5 h-3.5" /> },
+    withdrawn: { label: "Withdrawn", bg: "bg-zinc-500/10 border-zinc-500/30", text: "text-zinc-400", icon: <XCircle className="w-3.5 h-3.5" /> },
   };
 
   return (
@@ -80,7 +81,8 @@ export function ApplicationsPipelineView(props: {
               : "border-transparent text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
           }`}
         >
-          <span>🚀 Ready to Apply</span>
+          <Rocket className="w-4 h-4" />
+          <span>Ready to Apply</span>
           <span className="rounded-full bg-[var(--zeno-violet-soft)] px-2 py-0.5 text-xs font-bold text-[var(--zeno-primary)]">
             {props.readyKits.length}
           </span>
@@ -95,7 +97,8 @@ export function ApplicationsPipelineView(props: {
               : "border-transparent text-[var(--zeno-ink-muted)] hover:text-[var(--zeno-ink)]"
           }`}
         >
-          <span>📬 Active Pipeline</span>
+          <Inbox className="w-4 h-4" />
+          <span>Active Pipeline</span>
           <span className="rounded-full bg-[var(--zeno-surface-elevated)] px-2 py-0.5 text-xs font-bold text-[var(--zeno-ink)]">
             {props.applications.length}
           </span>
@@ -194,8 +197,9 @@ export function ApplicationsPipelineView(props: {
 
                       <div className="flex items-center gap-3">
                         <span
-                          className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${badge.bg} ${badge.text}`}
+                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold ${badge.bg} ${badge.text}`}
                         >
+                          {badge.icon && <span className="mr-1.5 flex-shrink-0">{badge.icon}</span>}
                           {badge.label}
                         </span>
                       </div>

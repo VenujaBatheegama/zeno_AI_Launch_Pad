@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { Target, PartyPopper } from "lucide-react";
 
 import type { GrowthMilestone, GrowthProject } from "../domain/schemas";
 
@@ -171,7 +172,8 @@ function FocusProjectCard(props: {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--zeno-violet-soft)] px-3 py-0.5 text-xs font-bold text-[var(--zeno-primary)] mb-1.5">
-            <span>🎯 Current Focus</span>
+            <Target className="h-3.5 w-3.5" />
+            <span>Current Focus</span>
           </div>
           <h2 className="text-xl font-bold text-[var(--zeno-ink)]">
             {props.current.project.title}
@@ -281,7 +283,7 @@ function FocusProjectCard(props: {
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-base">🎉</span>
+              <PartyPopper className="h-4 w-4 text-emerald-400" />
               <p className="text-xs font-bold text-emerald-400">
                 All Milestones Complete! Project automatically added to your Verified Profile.
               </p>
@@ -776,7 +778,7 @@ function InstantSprintLauncher(props: { initialTargetRole?: string }) {
 
                       <div className="rounded-xl bg-[var(--zeno-surface)]/60 border border-[var(--zeno-border)]/50 p-2.5 space-y-1">
                         <p className="text-[11px] font-semibold text-[var(--zeno-ink)]">
-                          🎯 Why this stands out:
+                          <Target className="h-3.5 w-3.5 inline-block mr-1" /> Why this stands out:
                         </p>
                         <p className="text-[11px] text-[var(--zeno-ink-muted)] leading-normal">
                           {idea.marketAdvantage}

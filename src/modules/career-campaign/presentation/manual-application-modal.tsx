@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Wand2, Sparkles, Send, Mic, PartyPopper, XCircle } from "lucide-react";
 
 export function ManualApplicationModal(props: {
   isOpen: boolean;
@@ -167,12 +168,12 @@ export function ManualApplicationModal(props: {
               onClick={() => void handleExtractUrl()}
               className="rounded-xl bg-[var(--zeno-primary)] hover:bg-[var(--zeno-primary-deep)] px-3.5 py-2 text-xs font-semibold text-white transition disabled:opacity-60 shadow-sm whitespace-nowrap"
             >
-              {extracting ? "Extracting…" : "Auto-Fill 🪄"}
+              {extracting ? "Extracting…" : <><span className="mr-1.5">Auto-Fill</span><Wand2 className="h-3 w-3 inline" /></>}
             </button>
           </div>
           {autoFilled ? (
             <p className="text-[11px] font-medium text-emerald-400">
-              ✨ Auto-filled job title and company from link!
+              <Sparkles className="h-3.5 w-3.5 inline mr-1" /> Auto-filled job title and company from link!
             </p>
           ) : null}
         </div>
@@ -214,21 +215,22 @@ export function ManualApplicationModal(props: {
             </label>
             <div className="grid grid-cols-4 gap-2">
               {[
-                { key: "applied", label: "✉️ Applied" },
-                { key: "interview", label: "🎙️ Interview" },
-                { key: "offer", label: "🎉 Offer" },
-                { key: "rejected", label: "❌ Rejected" },
+                { key: "applied", label: "Applied", icon: <Send className="w-3.5 h-3.5 mr-1 inline-block" /> },
+                { key: "interview", label: "Interview", icon: <Mic className="w-3.5 h-3.5 mr-1 inline-block" /> },
+                { key: "offer", label: "Offer", icon: <PartyPopper className="w-3.5 h-3.5 mr-1 inline-block" /> },
+                { key: "rejected", label: "Rejected", icon: <XCircle className="w-3.5 h-3.5 mr-1 inline-block" /> },
               ].map((item) => (
                 <button
                   key={item.key}
                   type="button"
                   onClick={() => setStatus(item.key as typeof status)}
-                  className={`rounded-xl border py-2 text-xs font-medium transition ${
+                  className={`rounded-xl border py-2 text-xs font-medium transition flex items-center justify-center ${
                     status === item.key
                       ? "border-[var(--zeno-primary)] bg-[var(--zeno-violet-soft)] text-[var(--zeno-primary-deep)] font-semibold shadow-sm"
                       : "border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] text-[var(--zeno-ink-muted)] hover:border-[var(--zeno-border-hover)]"
                   }`}
                 >
+                  {item.icon}
                   {item.label}
                 </button>
               ))}
