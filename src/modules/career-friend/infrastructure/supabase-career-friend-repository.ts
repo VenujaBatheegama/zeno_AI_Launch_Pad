@@ -209,18 +209,12 @@ export class SupabaseCareerFriendRepository implements CareerFriendRepository {
   }
 
   async addMessage(input: CareerConversationMessage & { userId: string }) {
-    // Ensure parent conversation exists before adding message to satisfy foreign key
+    // Bump the parent conversation's updated_at timestamp so it floats to the top
     await this.client
       .from("career_conversations")
-      .upsert(
-        {
-          id: input.conversationId,
-          user_id: input.userId,
-          title: input.content.slice(0, 80) || "Career conversation",
-          updated_at: input.createdAt,
-        },
-        { onConflict: "id" },
-      );
+      .update({ updated_at: input.createdAt })
+      .eq("id", input.conversationId)
+      .eq("user_id", input.userId);
 
     const safeMetadata =
       typeof input.metadata === "object" && input.metadata !== null
