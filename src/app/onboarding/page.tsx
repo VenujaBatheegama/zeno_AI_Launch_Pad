@@ -7,9 +7,23 @@ import { requireProfile, updateProfileOnboarding } from "@/server/identity";
 
 export const dynamic = "force-dynamic";
 
-export default async function OnboardingWelcomePage() {
+export default async function OnboardingWelcomePage(props: {
+  searchParams?: Promise<{ reset?: string }>;
+}) {
+  const searchParams = props.searchParams ? await props.searchParams : {};
   const userId = await requireUserId();
   const profile = await requireProfile();
+
+  if (searchParams.reset === "1") {
+    await updateProfileOnboarding(userId, {
+      onboardingMethod: null,
+      onboardingStatus: "in_progress",
+      onboardingCurrentStep: "welcome",
+      onboardingProgress: 5,
+    });
+    profile.onboardingMethod = null;
+    profile.onboardingProgress = 5;
+  }
 
   if (profile.onboardingStatus === "completed") {
     redirect("/app/home");

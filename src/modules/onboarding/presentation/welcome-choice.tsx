@@ -36,12 +36,13 @@ function ChatBuildIcon() {
 export function WelcomeChoice() {
   const router = useRouter();
   const [selected, setSelected] = useState<"import" | "chat" | null>(null);
+  const [isPending, startTransition] = useState(false); // Using a simple boolean since we're just waiting for router.push to complete rendering the next page
 
   function choose(path: "import" | "chat", href: string) {
+    if (isPending) return;
     setSelected(path);
-    window.setTimeout(() => {
-      router.push(href);
-    }, 180);
+    startTransition(true);
+    router.push(href);
   }
 
   return (
@@ -135,7 +136,10 @@ function ChoiceCard(props: {
     >
       {props.selected ? (
         <span className="absolute right-4 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--zeno-primary)] text-[11px] text-white">
-          ✓
+          <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
         </span>
       ) : null}
       <div className="mb-6 flex h-[88px] w-[88px] items-center justify-center rounded-[var(--zeno-radius-md)] bg-[var(--zeno-violet-wash)] transition group-hover:bg-[var(--zeno-violet-soft)] sm:h-[120px] sm:w-[120px]">
