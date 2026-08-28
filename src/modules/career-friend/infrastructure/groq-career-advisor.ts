@@ -40,7 +40,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
       
       if (input.executeSearchJobListings) {
         tools.searchJobListings = tool({
-          description: "Search for specific job listings based on criteria.",
+          description: 'Search for specific open job listings based on criteria. Use this when the user asks: "find me jobs", "show me open roles", "what jobs should I apply to right now". Do NOT use this if the user is asking for career advice on what career paths/roles fit them.',
           inputSchema: z.object({
             roles: z.array(z.string()).default([]).describe("Target job titles (e.g. ['React Developer'])"),
             locations: z.array(z.string()).default([]).describe("Target locations (e.g. ['London']). Do not include 'remote' here."),
@@ -58,7 +58,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
 
       if (input.executeRecommendRoleCategories) {
         tools.recommendRoleCategories = tool({
-          description: "Recommend types of roles the user should apply for and assess their fit (NOT job listings). You MUST generate the role recommendations here.",
+          description: 'Recommend types of roles the user should apply for and assess their fit (NOT actual job listings). Use this when the user asks: "what job should I do", "what roles fit me", "am I qualified for X". Do NOT use this if the user wants to see actual open job listings.',
           inputSchema: z.object({
             focusArea: z.string().optional().describe("A specific area to focus on if mentioned"),
             roles: z.array(z.object({
