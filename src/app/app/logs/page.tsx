@@ -1,19 +1,10 @@
 import React from 'react';
-import fs from 'fs';
-import path from 'path';
+import { getDebugLogs } from '@/lib/debug-logger';
 
 export const dynamic = "force-dynamic";
 
-export default function LogsPage() {
-  let logs: any[] = [];
-  try {
-    const logPath = path.join(process.cwd(), 'debug-logs.json');
-    if (fs.existsSync(logPath)) {
-      logs = JSON.parse(fs.readFileSync(logPath, 'utf-8'));
-    }
-  } catch (err) {
-    console.error("Failed to parse logs for UI", err);
-  }
+export default async function LogsPage() {
+  const logs = await getDebugLogs();
 
   return (
     <div className="p-8 max-w-7xl mx-auto font-mono text-sm space-y-8">
