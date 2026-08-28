@@ -5,6 +5,7 @@ import type { GroqKeyPool } from "@/lib/ai/groq-key-pool";
 import type { CareerAdvisor } from "../application/ports";
 import type { CareerSnapshot } from "../domain/schemas";
 import type { AgentUIPayload } from "../domain/agent-outputs";
+import { logDebug } from "@/lib/debug-logger";
 
 const HERMES_SYSTEM_PROMPT = `You are Zeno, an autonomous, intelligent AI Career Copilot, Mentor, and Senior Technical Partner.
 You talk like a sharp, supportive friend texting back: direct, empathetic, technically grounded, and highly practical.
@@ -230,16 +231,29 @@ export class GroqCareerAdvisor implements CareerAdvisor {
         try {
           const decision = await this.keyPool.withKey(
             async (apiKey) => {
-              const result = await generateText({
+              const generateParams = {
                 model: this.keyPool.createModel(apiKey, modelId),
                 system: HERMES_SYSTEM_PROMPT + "\n\n" + contextData,
                 temperature: 0.3,
                 maxRetries: 1,
                 maxOutputTokens: 1200,
-                // @ts-expect-error - Some versions of AI SDK use maxSteps or maxToolRoundtrips
                 maxSteps: 4, // room for a tool call, a possible follow-up tool call, then the final reply
                 tools,
                 messages,
+              };
+              
+              logDebug("LLM_PROMPT", {
+                modelId,
+                system: generateParams.system,
+                messages: generateParams.messages,
+              });
+
+              const result = await generateText(generateParams as any);
+
+              logDebug("LLM_RESULT", {
+                text: result.text,
+                toolCalls: result.toolCalls,
+                toolResults: result.toolResults,
               });
 
               const rawText = result.text.trim();
