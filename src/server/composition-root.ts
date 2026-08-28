@@ -1082,18 +1082,22 @@ function createCareerFriendApplication(userId: string) {
       };
 
       const executeRecommendRoleCategories = async (args: any) => {
+        const roles = args.roles || [];
+        const roleText = roles.map((r: any) => `• **${r.title}**: ${r.rationale}`).join("\n");
         return {
-          summaryText: "Role categories generated based on the snapshot.",
+          summaryText: roles.length > 0 
+            ? `Here are a few role categories that align with your profile:\n\n${roleText}`
+            : "I assessed your profile, but couldn't find a strong match for those roles. Could you share more details about your experience?",
           uiPayload: {
             type: "role_recommendations" as const,
-            roles: args.roles || [],
+            roles,
           }
         };
       };
 
       const executeSuggestGrowthAction = async (args: any) => {
         return {
-          summaryText: "Growth action generated based on the snapshot.",
+          summaryText: `I suggest focusing on building this project: **${args.project}** (Gap: ${args.gapArea}). Let me know if you want to dive into it!`,
           uiPayload: {
             type: "growth_suggestion" as const,
             project: args.project,
@@ -1325,18 +1329,22 @@ function createCareerFriendApplication(userId: string) {
       };
 
       const executeRecommendRoleCategories = async (args: any) => {
+        const roles = args.roles || [];
+        const roleText = roles.map((r: any) => `• **${r.title}**: ${r.rationale}`).join("\n");
         return {
-          summaryText: "Role categories generated based on the snapshot.",
+          summaryText: roles.length > 0 
+            ? `Here are a few role categories that align with your profile:\n\n${roleText}`
+            : "I assessed your profile, but couldn't find a strong match for those roles. Could you share more details about your experience?",
           uiPayload: {
             type: "role_recommendations" as const,
-            roles: args.roles || [],
+            roles,
           }
         };
       };
 
       const executeSuggestGrowthAction = async (args: any) => {
         return {
-          summaryText: "Growth action generated based on the snapshot.",
+          summaryText: `I suggest focusing on building this project: **${args.project}** (Gap: ${args.gapArea}). Let me know if you want to dive into it!`,
           uiPayload: {
             type: "growth_suggestion" as const,
             project: args.project,
