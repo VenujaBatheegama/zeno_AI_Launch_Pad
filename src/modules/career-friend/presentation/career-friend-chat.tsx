@@ -380,7 +380,48 @@ export function CareerFriendChat(props: {
               {safeRenderMarkdown(item.content)}
               {item.uiPayload && (
                 <div className="mt-4 border-t border-[var(--zeno-border)]/50 pt-3">
-                  <span className="text-sm italic text-[var(--zeno-ink-muted)]">Interactive element rendered below.</span>
+                  {item.uiPayload.type === "job_listings" && (
+                    <div className="space-y-3">
+                      {item.uiPayload.items.map((job) => (
+                        <div key={job.id} className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-3">
+                          <h4 className="font-semibold text-[var(--zeno-ink)] leading-tight mb-1">{job.title}</h4>
+                          <p className="text-xs text-[var(--zeno-ink-muted)] mb-2">{job.company} • {job.location}</p>
+                          {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="text-xs text-[var(--zeno-primary)] hover:underline font-medium">View Job →</a>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {item.uiPayload.type === "role_recommendations" && (
+                    <div className="space-y-3">
+                      {item.uiPayload.roles.map((role, i) => (
+                        <div key={i} className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface-elevated)] p-3">
+                          <h4 className="font-semibold text-[var(--zeno-ink)] leading-tight mb-1">{role.title}</h4>
+                          <p className="text-xs text-[var(--zeno-ink-muted)]">{role.rationale}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {item.uiPayload.type === "growth_suggestion" && (
+                    <div className="rounded-lg border border-[var(--zeno-border)] bg-[var(--zeno-surface-sunken)] p-3">
+                      <h4 className="font-semibold text-[var(--zeno-ink)] text-sm mb-1">{item.uiPayload.project}</h4>
+                      <p className="text-xs text-[var(--zeno-ink-muted)] mb-3">Gap: {item.uiPayload.gapType}</p>
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md bg-[var(--zeno-primary)] px-3 py-1.5 text-xs font-semibold text-white">Start Project</Link>
+                    </div>
+                  )}
+                  {item.uiPayload.type === "cv_ready" && (
+                    item.uiPayload.deepLink.startsWith("data:") ? (
+                      <a href={item.uiPayload.deepLink} download="Tailored_CV.pdf" className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">Download CV PDF</a>
+                    ) : (
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Tailored CV</Link>
+                    )
+                  )}
+                  {item.uiPayload.type === "cover_letter_ready" && (
+                    item.uiPayload.deepLink.startsWith("data:") ? (
+                      <a href={item.uiPayload.deepLink} download="Cover_Letter.pdf" className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">Download Cover Letter</a>
+                    ) : (
+                      <Link href={item.uiPayload.deepLink} className="inline-flex rounded-md border border-[var(--zeno-primary)] text-[var(--zeno-primary)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--zeno-primary)] hover:text-white transition">View Cover Letter</Link>
+                    )
+                  )}
                 </div>
               )}
             </div>
