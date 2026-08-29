@@ -1564,9 +1564,25 @@ function createCareerFriendApplication(userId: string) {
         { repository, advisor, createId: randomUUID, now },
       );
 
+      let finalAnswer = reply.answer;
+
+      if (reply.uiPayload) {
+        if (reply.uiPayload.type === "job_listings" && reply.uiPayload.items) {
+          finalAnswer += "\n\n" + reply.uiPayload.items.map((job: any) => 
+            `💼 <b>${job.title}</b>\n🏢 ${job.company}\n📍 ${job.location || "Remote"}\n🔗 ${job.url ? `<a href="${job.url}">Apply Here</a>` : "No link available"}`
+          ).join("\n\n");
+        } else if (reply.uiPayload.type === "role_recommendations" && reply.uiPayload.roles) {
+          finalAnswer += "\n\n" + reply.uiPayload.roles.map((role: any) =>
+            `🎯 <b>${role.title}</b>\n${role.rationale}`
+          ).join("\n\n");
+        } else if (reply.uiPayload.type === "growth_suggestion") {
+          finalAnswer += `\n\n🌱 <b>Suggested Project:</b> ${reply.uiPayload.project}\n<b>Gap:</b> ${reply.uiPayload.gapType}\n<a href="${config.PUBLIC_APP_BASE_URL}${reply.uiPayload.deepLink}">Start Project</a>`;
+        }
+      }
+
       return {
         ...reply,
-        answer: reply.answer,
+        answer: finalAnswer,
         attachment,
       };
     },
