@@ -30,6 +30,7 @@ export class GroqCareerAdvisor implements CareerAdvisor {
     const suggestedActions = inferSuggestedActions(input.message, input.snapshot);
     let capturedUiPayload: AgentUIPayload | undefined = undefined;
     let capturedSummaryText: string | undefined = undefined;
+    let jobSearchFailed = false;
 
     const candidateModels = [
       this.model,
@@ -50,9 +51,16 @@ export class GroqCareerAdvisor implements CareerAdvisor {
           }),
           execute: async (args: any) => {
             const res = await input.executeSearchJobListings!(args);
-            if (res.uiPayload) capturedUiPayload = res.uiPayload;
-            capturedSummaryText = res.summaryText;
-            return res.summaryText;
+            if (res.uiPayload) {
+              capturedUiPayload = res.uiPayload;
+              capturedSummaryText = res.summaryText;
+              return res.summaryText;
+            } else {
+              // Search failed — set a flag and return a clean, neutral string
+              // so this text does NOT get stored in history as an instruction.
+              jobSearchFailed = true;
+              return "job_search_unavailable";
+            }
           },
         });
       }
@@ -197,6 +205,13 @@ export class GroqCareerAdvisor implements CareerAdvisor {
               const { thinking, answer } = parseHermesThinking(rawText);
 
               let finalAnswer = answer || rawText;
+
+              // If the job search failed, override any LLM response (which may have
+              // tried to use recommendRoleCategories as a fallback) with a clear error.
+              if (jobSearchFailed && !capturedUiPayload) {
+                finalAnswer = "Sorry, I can't reach the live job board right now. Give it a minute and try again! 🙏";
+                return { answer: finalAnswer, thinking, uiPayload: undefined, summaryText: undefined, suggestedActions: [] };
+              }
 
               if (!finalAnswer && capturedUiPayload) {
                 if (capturedUiPayload.type === "job_listings") {
