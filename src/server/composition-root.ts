@@ -1570,14 +1570,14 @@ function createCareerFriendApplication(userId: string) {
         const payload: any = reply.uiPayload;
         if (payload.type === "job_listings" && payload.items) {
           finalAnswer += "\n\n" + payload.items.map((job: any) => 
-            `💼 <b>${job.title}</b>\n🏢 ${job.company}\n📍 ${job.location || "Remote"}\n🔗 ${job.url ? `<a href="${job.url}">Apply Here</a>` : "No link available"}`
+            `💼 **${job.title}**\n🏢 ${job.company}\n📍 ${job.location || "Remote"}\n🔗 ${job.url ? `[Apply Here](${job.url})` : "No link available"}`
           ).join("\n\n");
         } else if (payload.type === "role_recommendations" && payload.roles) {
           finalAnswer += "\n\n" + payload.roles.map((role: any) =>
-            `🎯 <b>${role.title}</b>\n${role.rationale}`
+            `🎯 **${role.title}**\n${role.rationale}`
           ).join("\n\n");
         } else if (payload.type === "growth_suggestion") {
-          finalAnswer += `\n\n🌱 <b>Suggested Project:</b> ${payload.project}\n<b>Gap:</b> ${payload.gapType}\n<a href="${config.PUBLIC_APP_BASE_URL}${payload.deepLink}">Start Project</a>`;
+          finalAnswer += `\n\n🌱 **Suggested Project:** ${payload.project}\n**Gap:** ${payload.gapType}\n[Start Project](${config.PUBLIC_APP_BASE_URL}${payload.deepLink})`;
         }
       }
 
