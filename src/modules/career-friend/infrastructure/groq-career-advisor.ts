@@ -196,8 +196,29 @@ export class GroqCareerAdvisor implements CareerAdvisor {
               const rawText = result.text.trim();
               const { thinking, answer } = parseHermesThinking(rawText);
 
+              let finalAnswer = answer || rawText;
+
+              if (!finalAnswer && capturedUiPayload) {
+                if (capturedUiPayload.type === "job_listings") {
+                  finalAnswer = "Here are some open roles that match your search.";
+                } else if (capturedUiPayload.type === "role_recommendations") {
+                  finalAnswer = "Here are some role categories that align with your profile.";
+                } else {
+                  finalAnswer = "I've presented the information for you below.";
+                }
+              }
+
+              if (!finalAnswer && capturedSummaryText) {
+                try {
+                  JSON.parse(capturedSummaryText);
+                  finalAnswer = "I found the requested data.";
+                } catch {
+                  finalAnswer = capturedSummaryText;
+                }
+              }
+
               return {
-                answer: answer || rawText || capturedSummaryText || deterministicReply(input.message, input.snapshot),
+                answer: finalAnswer || deterministicReply(input.message, input.snapshot),
                 thinking,
               };
             },
