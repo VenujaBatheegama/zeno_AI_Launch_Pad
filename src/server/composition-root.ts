@@ -1319,9 +1319,7 @@ function createCareerFriendApplication(userId: string) {
           };
         } catch (e) {
           console.error("[executeSearchJobListings] live job search failed:", e);
-          return {
-            summaryText: "I'm currently having trouble connecting to the live job board. Please let the user know and ask them to try again later.",
-          };
+          return { summaryText: "search_failed" };
         }
       };
 
