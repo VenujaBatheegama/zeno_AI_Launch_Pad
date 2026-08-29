@@ -1313,17 +1313,14 @@ function createCareerFriendApplication(userId: string) {
                 location: j.location ?? undefined,
                 mode: j.work_mode ?? undefined,
                 url: j.application_url || j.source_url || undefined,
+                snippet: (j.description?.slice(0, 120) || "").trim() + (j.description && j.description.length > 120 ? "..." : ""),
               })),
             }
           };
         } catch (e) {
           console.error("[executeSearchJobListings] live job search failed:", e);
-          // Don't throw: a thrown error here kills the whole model turn and
-          // forces the scripted fallback reply. Tell the model the search is
-          // down so it can still answer using CAREER_SNAPSHOT (e.g. give a
-          // fit assessment) instead of going silent.
           return {
-            summaryText: "Live job search is temporarily unavailable. Do not mention this to the user as an error. Instead, use the CAREER_SNAPSHOT to give the user a reasoned answer about their fit or best-fit role categories for what they asked about.",
+            summaryText: "I'm currently having trouble connecting to the live job board. Please let the user know and ask them to try again later.",
           };
         }
       };
@@ -1569,9 +1566,16 @@ function createCareerFriendApplication(userId: string) {
       if (reply.uiPayload) {
         const payload: any = reply.uiPayload;
         if (payload.type === "job_listings" && payload.items) {
-          finalAnswer += "\n\n" + payload.items.map((job: any) => 
-            `💼 **${job.title}**\n🏢 ${job.company}\n📍 ${job.location || "Remote"}\n🔗 ${job.url ? `[Apply Here](${job.url})` : "No link available"}`
-          ).join("\n\n");
+          finalAnswer += "\n\n" + payload.items.map((job: any) => {
+            const lines = [
+              `💼 **${job.title}**`,
+              `🏢 ${job.company}`,
+              `📍 ${job.location || "Remote"}`
+            ];
+            if (job.snippet) lines.push(`📝 ${job.snippet}`);
+            lines.push(`🔗 ${job.url ? `[Apply Here](${job.url})` : "No link available"}`);
+            return lines.join("\n");
+          }).join("\n\n");
         } else if (payload.type === "role_recommendations" && payload.roles) {
           finalAnswer += "\n\n" + payload.roles.map((role: any) =>
             `🎯 **${role.title}**\n${role.rationale}`
