@@ -213,7 +213,11 @@ export class GroqCareerAdvisor implements CareerAdvisor {
                   JSON.parse(capturedSummaryText);
                   finalAnswer = "I found the requested data.";
                 } catch {
-                  finalAnswer = capturedSummaryText;
+                  if (capturedSummaryText.includes("Please let the user know") || capturedSummaryText.includes("Do not mention this")) {
+                    finalAnswer = "I couldn't complete that right now. Could we try again in a bit?";
+                  } else {
+                    finalAnswer = capturedSummaryText;
+                  }
                 }
               }
 
