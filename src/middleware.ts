@@ -12,7 +12,7 @@ const AUTH_PATHS = [
   "/auth/verify",
 ];
 
-const PUBLIC_PREFIXES = ["/auth", "/_next", "/favicon", "/api/health"];
+const PUBLIC_PREFIXES = ["/auth", "/_next", "/favicon", "/api/health", "/landing"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(
